@@ -1,0 +1,58 @@
+{
+  "name": "tab",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.13.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "guard": "pnpm guard:solidity && pnpm guard:sdk && pnpm guard:boundaries && pnpm guard:money",
+    "guard:solidity": "node tools/guards/no-solidity.mjs",
+    "guard:sdk": "node tools/guards/single-hedera-sdk.mjs",
+    "guard:boundaries": "node tools/guards/check-boundaries.mjs",
+    "guard:money": "node tools/guards/no-float-money.mjs",
+    "probe": "pnpm --filter @tab/probes start",
+    "bootstrap": "pnpm --filter @tab/bootstrap start",
+    "verify-tab": "pnpm --filter @tab/verify verify:tab",
+    "verify-ceiling": "pnpm --filter @tab/verify verify:ceiling",
+    "dev": "turbo run dev --parallel",
+    "dev:gateway": "pnpm --filter @tab/gateway dev",
+    "dev:engine": "pnpm --filter @tab/engine dev",
+    "dev:settlement": "pnpm --filter @tab/settlement dev",
+    "dev:dashboard": "pnpm --filter @tab/dashboard dev",
+    "demo:honest": "pnpm --filter @tab/honest-agent start",
+    "demo:attack": "pnpm --filter @tab/loop-attacker start",
+    "db:generate": "pnpm --filter @tab/db generate",
+    "db:migrate": "pnpm --filter @tab/db migrate",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "turbo run build --filter='./packages/*' && changeset publish"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.0",
+    "@changesets/cli": "^2.29.0",
+    "@types/node": "^22.15.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@hiero-ledger/sdk": "2.87.0"
+    },
+    "peerDependencyRules": {
+      "allowAny": []
+    }
+  }
+}

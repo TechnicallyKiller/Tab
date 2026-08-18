@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "globalDependencies": ["tsconfig.base.json", ".env"],
+  "globalEnv": ["NODE_ENV", "TAB_ENV"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "typecheck": { "dependsOn": ["^build"], "outputs": ["*.tsbuildinfo"] },
+    "test:unit": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["DATABASE_URL", "REDIS_URL"]
+    },
+    "test": { "dependsOn": ["test:unit", "test:integration"] },
+    "dev": { "cache": false, "persistent": true },
+    "start": { "dependsOn": ["build"], "cache": false, "persistent": false },
+    "generate": { "cache": false },
+    "migrate": { "cache": false },
+    "clean": { "cache": false }
+  }
+}

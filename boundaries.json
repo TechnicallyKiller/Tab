@@ -1,0 +1,143 @@
+{
+  "$comment": [
+    "This file IS the architecture. `pnpm guard:boundaries` fails CI when a package.json",
+    "declares a workspace dependency not listed in its `allow` array.",
+    "A rule you cannot break by accident is worth more than a rule in a README.",
+    "Layers: lower tiers may never depend on higher tiers. See docs/PACKAGE_MAP.md."
+  ],
+  "scope": "@tab",
+  "tiers": {
+    "0-pure": ["money", "protocol", "params"],
+    "1-domain": ["ledger", "scoring", "graph"],
+    "2-adapters": ["hedera", "mirror", "cache", "db", "x402", "observability"],
+    "3-composed": ["fastpath", "sdk", "agentkit-plugin", "mcp", "testkit"],
+    "4-apps": ["gateway", "engine", "settlement", "cli", "dashboard"],
+    "5-leaf": ["honest-agent", "loop-attacker", "probes", "bootstrap", "verify"]
+  },
+  "packages": {
+    "money": {
+      "allow": [],
+      "externalDenyList": ["*"],
+      "why": "Fixed-point USDC arithmetic. Zero dependencies, zero I/O, zero floating point. Every other package's correctness rests on this one, so it must be trivially auditable."
+    },
+    "protocol": {
+      "allow": ["money"],
+      "externalAllowList": ["zod"],
+      "why": "HCS message schemas, version tags, and the canonical serializer used for the ceiling input hash. Schema-only: if this package could do I/O, the wire format could drift from what we publish."
+    },
+    "params": {
+      "allow": ["money"],
+      "externalAllowList": ["zod"],
+      "why": "Versioned credit parameters (tier multiples, APRs, ramp steps, caps, AGE_FULL_DAYS). Published as a pinned MODEL_VERSION because verify-ceiling must recompute with byte-identical inputs."
+    },
+    "ledger": {
+      "allow": ["money", "protocol"],
+      "why": "Pure double-entry accounting: holds, debits, credits, netting, interest accrual, invariant assertions. No database. The money math is tested as functions, not as a service."
+    },
+    "scoring": {
+      "allow": ["money", "protocol", "params"],
+      "why": "effective revenue -> tier -> ceiling, as pure functions over already-fetched inputs. Purity is the product requirement, not a preference: a stranger running verify-ceiling has only HCS + Mirror Node, so scoring must not reach for our Postgres."
+    },
+    "graph": {
+      "allow": ["money", "protocol", "params"],
+      "why": "Funding ancestry, control clusters, counterparty weights as pure functions over edge lists. Same purity reason as scoring; the caller supplies the edges."
+    },
+    "hedera": {
+      "allow": ["money", "protocol", "observability"],
+      "externalAllowList": ["@hiero-ledger/sdk", "zod"],
+      "why": "The only package allowed to import the Hedera SDK. Wraps client construction, HTS transfers, HCS submit/read, and the HIP-423 schedule builder."
+    },
+    "mirror": {
+      "allow": ["money", "protocol", "observability"],
+      "externalDenyList": ["@hiero-ledger/sdk", "@hashgraph/sdk"],
+      "why": "Mirror Node REST client: typed, paginated, timestamp-ranged. Deliberately separate from `hedera` so the fast path can depend on consensus-side code without inheriting the ability to make a history call."
+    },
+    "cache": {
+      "allow": ["money", "protocol", "observability"],
+      "externalAllowList": ["ioredis", "zod"],
+      "why": "Redis: hold reservations, ceiling snapshot, circuit breaker. Fails closed by contract - a cache miss is a refusal, never an allow."
+    },
+    "db": {
+      "allow": ["money", "protocol", "observability"],
+      "externalAllowList": ["drizzle-orm", "postgres", "drizzle-kit", "zod"],
+      "why": "Drizzle schema + migrations for the counterparty graph and read models. HCS is the source of truth; this is a rebuildable projection."
+    },
+    "x402": {
+      "allow": ["money", "protocol", "hedera", "observability"],
+      "externalAllowList": ["@x402/core", "@x402/hedera", "@x402/fetch", "@x402/extensions", "zod"],
+      "why": "Adapter over the @x402 v2 packages for all three roles we play: client (spend leg), resource server (earn leg), self-hosted facilitator (earn leg settlement). Isolated because @x402 is a fast-moving dependency."
+    },
+    "observability": {
+      "allow": [],
+      "externalAllowList": ["pino", "pino-pretty", "@opentelemetry/api", "prom-client"],
+      "why": "Logger, trace context, metrics. Depends on nothing so every layer may depend on it."
+    },
+    "fastpath": {
+      "allow": ["money", "protocol", "params", "ledger", "cache", "observability"],
+      "denyExplicit": ["mirror", "db", "hedera", "x402", "graph", "scoring"],
+      "why": "THE HOT PATH. Target under 50ms, cache and memory only. The README calls the no-Mirror-Node rule an architectural ban; this deny list is that ban made mechanical. It also cannot reach Postgres, the SDK, or the scoring code - it reads a precomputed snapshot and decides."
+    },
+    "sdk": {
+      "allow": ["money", "protocol", "params"],
+      "externalDenyList": ["@hiero-ledger/sdk", "ioredis", "drizzle-orm"],
+      "why": "Public TypeScript client an agent installs. Must stay thin and browser-safe: no Hedera SDK, no Redis, no database driver. It speaks HTTP to the gateway."
+    },
+    "agentkit-plugin": {
+      "allow": ["money", "protocol", "sdk"],
+      "externalAllowList": ["@hashgraph/hedera-agent-kit", "@hiero-ledger/sdk", "zod"],
+      "why": "Hedera Agent Kit v4 Plugin (spend/quote/balance/ceiling tools) plus an AbstractPolicy subclass that blocks at the tool boundary. Built on the SDK, not on internals, so it stays publishable."
+    },
+    "mcp": {
+      "allow": ["money", "protocol", "sdk"],
+      "externalAllowList": ["@modelcontextprotocol/sdk", "zod"],
+      "why": "MCP server exposing the same verbs to any MCP-capable runtime. Same rule as the plugin: SDK only."
+    },
+    "testkit": {
+      "allow": ["money", "protocol", "params", "ledger", "hedera", "mirror", "db", "cache"],
+      "why": "Fixtures, a fake unmodified x402 seller, a fake payer, deterministic clocks, and testcontainers helpers. Dev-only; never a runtime dependency of an app."
+    },
+    "gateway": {
+      "allow": ["money", "protocol", "params", "ledger", "fastpath", "cache", "hedera", "x402", "observability", "db"],
+      "why": "Deployable. Fastify: spend leg (x402 client), earn leg (x402 resource server), self-hosted facilitator, HCS receipt writer, hold manager."
+    },
+    "engine": {
+      "allow": ["money", "protocol", "params", "ledger", "graph", "scoring", "mirror", "db", "cache", "hedera", "observability"],
+      "why": "Deployable worker. The slow path: Mirror indexer -> graph -> scoring -> publish ceiling to HCS -> write cache snapshot. May shrink a ceiling mid-window; may never grow one."
+    },
+    "settlement": {
+      "allow": ["money", "protocol", "params", "ledger", "hedera", "mirror", "db", "cache", "observability"],
+      "why": "Deployable worker. Window tick, HIP-423 schedule construction, and the reconciler that diffs Mirror outbound transfers against the receipt topic."
+    },
+    "cli": {
+      "allow": ["money", "protocol", "params", "sdk", "hedera", "mirror", "observability"],
+      "why": "Deployable. Operator surface: register, inspect, dump receipts, force a settlement in demo mode."
+    },
+    "dashboard": {
+      "allow": ["money", "protocol", "params", "sdk"],
+      "externalDenyList": ["@hiero-ledger/sdk", "ioredis", "drizzle-orm", "bullmq"],
+      "why": "Deployable Next.js app. Reads through the SDK only. A browser bundle must never be able to import a signing key path or a database driver."
+    },
+    "verify": {
+      "allow": ["money", "protocol", "params", "scoring", "graph", "ledger", "mirror", "hedera"],
+      "denyExplicit": ["db", "cache", "fastpath", "sdk"],
+      "why": "THE TRUST ARTIFACT. verify-tab and verify-ceiling must be runnable by a stranger who has our repo and nothing else - no Postgres, no Redis, no gateway. This deny list is what makes that claim true instead of aspirational."
+    },
+    "probes": {
+      "allow": ["money", "protocol", "hedera", "mirror", "x402", "observability"],
+      "why": "Phase 0. Writes docs/probes.md. Runs before any other code exists, so it depends only on adapters."
+    },
+    "bootstrap": {
+      "allow": ["money", "protocol", "params", "hedera", "mirror", "db", "observability"],
+      "why": "One-time environment setup: create HCS topics, associate the USDC token, fund the hot float, register demo sellers."
+    },
+    "honest-agent": {
+      "allow": ["sdk", "agentkit-plugin", "money", "protocol"],
+      "externalDenyList": ["@hiero-ledger/sdk"],
+      "why": "Demo agent. The SDK-only rule is the demo's central claim: this agent holds no key and signs nothing, so it must not even be able to import the Hedera SDK."
+    },
+    "loop-attacker": {
+      "allow": ["sdk", "money", "protocol", "hedera"],
+      "why": "Demo adversary, operated by a second party. It DOES get the Hedera SDK, because standing up a seller it controls is the whole point of the attack."
+    }
+  }
+}
