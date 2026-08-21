@@ -13,7 +13,7 @@ three packages we publish to npm. See [ADR-0001](../docs/adr/0001-monorepo-tiers
 | [`engine`](engine/) | BullMQ worker. The slow path | throughput, one leader for ceiling publication |
 | [`settlement`](settlement/) | BullMQ worker. Window tick + reconciler | one instance. Never two |
 | [`cli`](cli/) | `npx @tab/cli`. Operator surface | n/a |
-| [`dashboard`](dashboard/) | Next.js 15 | static-ish, read-only |
+| [`web`](web/) | Next.js 16. **All three surfaces** — landing, console, docs | static-ish, read-only |
 
 ## Fast path and slow path never converge
 

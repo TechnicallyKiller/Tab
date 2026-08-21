@@ -24,7 +24,7 @@ Built for ETHOnline 2026 · Hedera Testnet · **Zero Solidity**
 ## Layout
 
 ```
-apps/          deployable processes — gateway, engine, settlement, cli, dashboard
+apps/          deployable processes — gateway, engine, settlement, cli, web
 packages/      libraries, in dependency tiers. Three are published to npm
 agents/        demo actors — honest-agent, loop-attacker
 tools/         probes, bootstrap, verify, guards
@@ -63,7 +63,8 @@ pnpm probe          # Phase 0 — run FIRST. Nothing else starts until it is gre
 pnpm db:migrate     # Supabase schema
 pnpm bootstrap      # create HCS topics + float accounts, associate USDC
 
-pnpm dev            # gateway + engine + settlement + dashboard
+pnpm dev:web        # the three surfaces on :3000 — works today, no backend needed
+pnpm dev            # gateway + engine + settlement + web
 pnpm guard          # the architectural bans
 pnpm test
 
@@ -85,12 +86,19 @@ why each choice, and which of them corrects [README-TAB.md](README-TAB.md).
 | Payments | **`@x402/core` + `@x402/hedera` 2.22.0** on `hedera:testnet` |
 | Agent surface | **`@hashgraph/hedera-agent-kit` 4.1.0** — plugin + policy |
 | Backend | Node 22, TypeScript strict, Fastify, BullMQ, Drizzle |
-| Frontend | Next.js 15, Tailwind, shadcn/ui, TanStack Query, SSE |
+| Frontend | **Next.js 16.3.1**, React 19, Tailwind v4, three.js. All three surfaces in `apps/web` |
 | Infra | Supabase (Postgres) + Upstash (Redis). **No Docker** |
 | Tooling | pnpm workspaces, Turborepo, Biome, Vitest, changesets |
 | Not used | Solidity, Foundry, Hardhat, any EVM tooling |
 
 ## Status
 
-**Structure and design complete. No implementation yet.** Phase 0 probes are the next action —
-see [docs/probes.md](docs/probes.md).
+**Frontend built. Backend not started.**
+
+- **`apps/web` runs** — landing, operator console (8 views) and docs, all three surfaces, every
+  figure from `apps/web/src/lib/mock/`. `pnpm dev:web` → http://localhost:3000
+- **Everything else is structure and READMEs.** Phase 0 probes are the next action for the backend —
+  see [docs/probes.md](docs/probes.md). The frontend does not wait on them.
+
+Design direction and the reasoning behind it: [docs/DESIGN_PROMPT.md](docs/DESIGN_PROMPT.md).
+Current state and who is on what: **[HANDOFF.md](HANDOFF.md)**.

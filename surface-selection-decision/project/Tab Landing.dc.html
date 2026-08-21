@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&amp;family=Public+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --paper:#E7EBE0; --surface:#FBFCF8; --sunk:#DDE3D4;
+  --ink:#14180F; --ink-2:#3D4636; --ink-3:#6B7462; --rule-soft:#B9C2AC;
+  --pen:#1F3A93; --pen-soft:#DDE3F5;
+  --credit:#17703F; --debit:#9E2B18; --caution:#F2C230;
+  --shadow:6px 6px 0 var(--ink); --shadow-sm:3px 3px 0 var(--ink); --bw:2.5px;
+  --on-caution:#14180F;
+}
+[data-theme="dark"]{
+  --paper:#12150E; --surface:#1B1F16; --sunk:#252A1E;
+  --ink:#E8EDE0; --ink-2:#B7C0AC; --ink-3:#8A9480; --rule-soft:#3E4636;
+  --pen:#9DB4F7; --pen-soft:#232C48;
+  --credit:#5FCB8B; --debit:#F0846C; --caution:#F2C230;
+  --on-caution:#14180F;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Public Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--pen);text-underline-offset:3px}
+a:hover{color:var(--ink);text-decoration-thickness:2px}
+:focus-visible{outline:3px solid var(--pen);outline-offset:3px}
+table{border-collapse:collapse}
+@keyframes flash-credit{from{background-color:color-mix(in srgb,var(--credit) 18%,transparent)}to{background-color:transparent}}
+@keyframes flash-debit{from{background-color:color-mix(in srgb,var(--debit) 18%,transparent)}to{background-color:transparent}}
+@keyframes stamp-down{from{transform:scale(1.4) rotate(2deg);opacity:0}60%{opacity:1}to{transform:scale(1) rotate(-8deg);opacity:1}}
+@keyframes hold-hatch{from{background-position:0 0}to{background-position:28px 0}}
+@keyframes tape-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+[data-flash^="credit"]{animation:flash-credit 1500ms ease-out}
+[data-flash^="debit"]{animation:flash-debit 1500ms ease-out}
+[data-stamp^="on"]{animation:stamp-down 420ms cubic-bezier(.3,1.5,.4,1) both}
+[data-hatch]{animation:hold-hatch 3s linear infinite}
+[data-tape]{animation:tape-scroll 40s linear infinite}
+[data-tape]:hover{animation-play-state:paused}
+[data-reveal="0"]{opacity:0;transform:translateY(12px)}
+[data-reveal="1"]{opacity:1;transform:none;transition:opacity 420ms cubic-bezier(.2,.7,.3,1),transform 420ms cubic-bezier(.2,.7,.3,1)}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:1ms !important;animation-iteration-count:1 !important;transition-duration:1ms !important}
+  [data-reveal]{opacity:1 !important;transform:none !important}
+}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--paper)">
+
+  <header style="position:sticky;top:0;z-index:60;background:var(--paper);border-bottom:var(--bw) solid var(--ink);display:flex;align-items:center;gap:20px;padding:0 28px;height:56px">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:-0.03em">Tab</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">tab.xyz</span>
+    <nav style="display:flex;gap:16px;margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">
+      <a href="#problem" style="color:var(--ink-2);text-decoration:none">Problem</a>
+      <a href="#flows" style="color:var(--ink-2);text-decoration:none">How</a>
+      <a href="#engine" style="color:var(--ink-2);text-decoration:none">Ceiling</a>
+      <a href="#attack" style="color:var(--ink-2);text-decoration:none">Attack</a>
+      <a href="Tab App.dc.html" style="color:var(--ink-2);text-decoration:none">App</a>
+      <a href="Tab Docs.dc.html" style="color:var(--ink-2);text-decoration:none">Docs</a>
+      <a href="Tab Components.dc.html" style="color:var(--ink-3);text-decoration:none">Components</a>
+    </nav>
+    <button type="button" onClick="{{ toggleTheme }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;background:var(--surface);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 11px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">{{ themeLabel }}</button>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <section style="position:relative;border-bottom:var(--bw) solid var(--ink);min-height:clamp(560px,86vh,860px);display:flex;align-items:center;overflow:hidden">
+    <div ref="{{ heroMount }}" style="position:absolute;inset:0;z-index:0" aria-hidden="true">
+      <svg viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+        <g stroke="var(--rule-soft)" stroke-width="1" opacity="0.7">
+          <path d="M0 470 L1200 470" /><path d="M0 510 L1200 510" /><path d="M0 560 L1200 560" /><path d="M0 620 L1200 620" /><path d="M0 692 L1200 692" />
+          <path d="M120 470 L40 692" /><path d="M300 470 L280 692" /><path d="M480 470 L520 692" /><path d="M660 470 L760 692" /><path d="M840 470 L1000 692" /><path d="M1020 470 L1240 692" />
+        </g>
+        <line x1="60" y1="330" x2="1140" y2="330" stroke="var(--ink)" stroke-width="2.5" />
+        <text x="60" y="320" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--ink-3)">ZERO</text>
+        <rect x="60" y="512" width="1080" height="8" fill="var(--pen)" opacity="0.12" />
+        <line x1="60" y1="516" x2="1140" y2="516" stroke="var(--pen)" stroke-width="2.5" />
+        <text x="1140" y="506" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--pen)">CEILING 1.0000</text>
+        <path d="M60 330 C 200 330 250 470 380 486 C 470 497 520 440 610 388 C 700 336 760 268 860 262 C 960 256 1010 300 1080 330 L1140 330" fill="none" stroke="var(--debit)" stroke-width="9" stroke-linecap="round" />
+        <path d="M610 388 C 700 336 760 268 860 262 C 960 256 1010 300 1080 330 L1140 330" fill="none" stroke="var(--credit)" stroke-width="9" stroke-linecap="round" opacity="0" />
+      </svg>
+    </div>
+
+    <div style="position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:64px 28px;width:100%">
+      <div style="max-width:60%;min-width:min(100%,540px)">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2);margin-bottom:20px">CREDIT RAIL FOR AUTONOMOUS AGENTS · HEDERA</div>
+        <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(40px,7vw,104px);line-height:0.94;letter-spacing:-0.03em;margin:0 0 24px;max-width:18ch;text-wrap:balance">Agents shouldn't need a wallet to do business.</h1>
+        <p style="font-size:19px;line-height:1.6;color:var(--ink-2);max-width:58ch;margin:0 0 32px">Tab is a running balance for autonomous agents. It goes negative when the agent spends, positive when it earns, and settles once per window in a single transfer. The agent never holds USDC and never signs a payment.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:28px">
+          <a href="Tab Docs.dc.html" style="font-family:'Public Sans',sans-serif;font-weight:700;font-size:16px;text-decoration:none;background:var(--caution);color:var(--on-caution);border:var(--bw) solid var(--ink);border-radius:2px;padding:13px 24px;box-shadow:var(--shadow);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">Read the docs</a>
+          <a href="Tab App.dc.html" style="font-family:'Public Sans',sans-serif;font-weight:700;font-size:16px;text-decoration:none;background:var(--surface);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:2px;padding:13px 24px;box-shadow:var(--shadow);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">Open the app</a>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:8px 18px">
+          <span>ZERO SMART CONTRACTS</span><span style="color:var(--rule-soft)">·</span><span>4 NATIVE HEDERA SERVICES</span><span style="color:var(--rule-soft)">·</span><span>x402 ON BOTH LEGS</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROBLEM ============ -->
+  <section id="problem" style="background:var(--ink);color:var(--paper);padding:88px 28px;border-bottom:var(--bw) solid var(--ink)">
+    <div style="max-width:1240px;margin:0 auto">
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(32px,4.6vw,68px);line-height:1;letter-spacing:-0.03em;margin:0 0 20px;max-width:20ch;text-wrap:balance">x402 solved how an agent pays. Nobody solved when.</h2>
+      <p style="font-size:19px;line-height:1.6;color:var(--rule-soft);max-width:62ch;margin:0 0 52px">An agent pays for inference, data and APIs before anyone has paid it. Its balance is structurally behind its earning capacity, and the only fix on offer is to fund a wallet first.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
+        <sc-for list="{{ problems }}" as="p" hint-placeholder-count="4">
+          <div data-reveal="1" ref="{{ p.ref }}" style="border:var(--bw) solid var(--paper);border-radius:2px;padding:22px;display:flex;flex-direction:column;gap:18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--caution)">{{ p.idx }}</div>
+            <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:24px;letter-spacing:-0.03em;margin:0">{{ p.title }}</h3>
+            <p style="font-size:14px;line-height:1.7;color:var(--rule-soft);margin:0">{{ p.body }}</p>
+            <div style="margin-top:auto;padding-top:12px">{{ p.svg }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FLOWS ============ -->
+  <section id="flows" ref="{{ flowsMount }}" style="position:relative;border-bottom:var(--bw) solid var(--ink)">
+    <div style="max-width:1240px;margin:0 auto;padding:80px 28px 0">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px">The mechanism · three flows</div>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(32px,4.4vw,68px);line-height:1;letter-spacing:-0.03em;margin:0;max-width:20ch;text-wrap:balance">A gateway on both legs of the agent's economic life.</h2>
+    </div>
+
+    <div style="position:sticky;top:56px;z-index:10;background:var(--paper)">
+      <div style="max-width:1240px;margin:0 auto;padding:36px 28px 40px;display:grid;grid-template-columns:1.25fr 1fr;gap:40px;align-items:center;min-height:64vh">
+        <div style="position:relative;border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);padding:20px;min-height:340px">
+          <div style="position:absolute;top:14px;left:20px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);z-index:2">{{ flowLabel }}</div>
+          <div style="position:relative;height:300px;margin-top:18px">
+            <div style="position:absolute;inset:0;opacity:{{ op1 }};transition:opacity 220ms cubic-bezier(.2,.7,.3,1)">
+              <svg viewBox="0 0 620 300" style="width:100%;height:100%;display:block" role="img" aria-label="Spend leg diagram">
+                <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)" /></marker></defs>
+                <rect x="14" y="112" width="130" height="76" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="79" y="144" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" fill="var(--ink)">agent</text>
+                <text x="79" y="164" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">no wallet</text>
+                <rect x="238" y="92" width="146" height="116" fill="var(--pen-soft)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="311" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" fill="var(--ink)">gateway</text>
+                <text x="311" y="154" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">pays from float</text>
+                <text x="311" y="172" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">debits the tab</text>
+                <rect x="476" y="112" width="130" height="76" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="541" y="144" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" fill="var(--ink)">seller</text>
+                <text x="541" y="164" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">plain x402</text>
+                <line x1="144" y1="150" x2="232" y2="150" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#a1)" />
+                <line x1="384" y1="150" x2="470" y2="150" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#a1)" />
+                <circle cx="{{ dotX }}" cy="150" r="7" fill="var(--debit)" stroke="var(--ink)" stroke-width="2" />
+                <rect x="476" y="212" width="130" height="30" fill="var(--credit)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="541" y="232" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#FBFCF8">402 → paid</text>
+                <text x="14" y="42" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">TAB BALANCE</text>
+                <text x="14" y="76" font-family="IBM Plex Mono, monospace" font-size="30" font-weight="600" fill="var(--debit)">{{ flowBalance }}</text>
+              </svg>
+            </div>
+            <div style="position:absolute;inset:0;opacity:{{ op2 }};transition:opacity 220ms cubic-bezier(.2,.7,.3,1)">
+              <svg viewBox="0 0 620 300" style="width:100%;height:100%;display:block" role="img" aria-label="Earn leg diagram">
+                <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)" /></marker></defs>
+                <rect x="476" y="112" width="130" height="76" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="541" y="144" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" fill="var(--ink)">payer</text>
+                <rect x="238" y="92" width="146" height="116" fill="var(--pen-soft)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="311" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" fill="var(--ink)">gateway</text>
+                <text x="311" y="154" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">fronts endpoint</text>
+                <text x="311" y="172" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">credits the tab</text>
+                <rect x="14" y="112" width="130" height="76" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="79" y="144" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" fill="var(--ink)">agent</text>
+                <text x="79" y="164" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">endpoint</text>
+                <line x1="470" y1="150" x2="390" y2="150" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#a2)" />
+                <line x1="232" y1="150" x2="150" y2="150" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#a2)" />
+                <circle cx="{{ dotX2 }}" cy="150" r="7" fill="var(--credit)" stroke="var(--ink)" stroke-width="2" />
+                <rect x="238" y="228" width="146" height="34" fill="var(--credit)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="311" y="250" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#FBFCF8">ATTESTED RECEIPT</text>
+                <text x="14" y="42" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">TAB BALANCE</text>
+                <text x="14" y="76" font-family="IBM Plex Mono, monospace" font-size="30" font-weight="600" fill="var(--credit)">{{ flowBalance2 }}</text>
+              </svg>
+            </div>
+            <div style="position:absolute;inset:0;opacity:{{ op3 }};transition:opacity 220ms cubic-bezier(.2,.7,.3,1)">
+              <svg viewBox="0 0 620 300" style="width:100%;height:100%;display:block" role="img" aria-label="Settlement diagram">
+                <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)" /></marker></defs>
+                <g>
+                  <sc-for list="{{ collapseRows }}" as="c" hint-placeholder-count="8">
+                    <rect x="20" y="{{ c.y }}" width="200" height="10" fill="{{ c.fill }}" stroke="var(--ink)" stroke-width="1.5" opacity="{{ c.op }}" />
+                  </sc-for>
+                </g>
+                <text x="20" y="34" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">{{ callCount }} CALLS</text>
+                <line x1="250" y1="150" x2="330" y2="150" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#a3)" />
+                <rect x="352" y="118" width="248" height="64" fill="var(--pen-soft)" stroke="var(--ink)" stroke-width="2.5" />
+                <text x="476" y="144" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--ink)">1 TRANSFER</text>
+                <text x="476" y="166" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="16" font-weight="600" fill="var(--ink)">net −0.2160</text>
+                <text x="352" y="212" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">scheduled tx · consensus tick</text>
+                <text x="352" y="232" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--credit)">CLEAN · ramp 30% → 45%</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;gap:8px;margin-bottom:22px">
+            <sc-for list="{{ flowDots }}" as="d" hint-placeholder-count="3">
+              <span style="width:34px;height:6px;background:{{ d.bg }};border:2px solid var(--ink);border-radius:1px"></span>
+            </sc-for>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--pen);margin-bottom:10px">{{ flowKicker }}</div>
+          <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(28px,3.2vw,44px);line-height:1.04;letter-spacing:-0.03em;margin:0 0 18px;text-wrap:balance">{{ flowTitle }}</h3>
+          <p style="font-size:19px;line-height:1.6;color:var(--ink-2);max-width:46ch;margin:0 0 20px">{{ flowBody }}</p>
+          <div style="border-left:var(--bw) solid var(--pen);padding-left:16px;font-size:16px;line-height:1.65;color:var(--ink);max-width:46ch;font-style:italic">{{ flowCaption }}</div>
+        </div>
+      </div>
+    </div>
+    <div ref="{{ st1 }}" style="height:80vh"></div>
+    <div ref="{{ st2 }}" style="height:80vh"></div>
+    <div ref="{{ st3 }}" style="height:80vh"></div>
+  </section>
+
+  <!-- ============ CEILING ENGINE ============ -->
+  <section id="engine" style="border-bottom:var(--bw) solid var(--ink);padding:88px 28px;background:var(--paper)">
+    <div style="max-width:1240px;margin:0 auto">
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(32px,4.4vw,68px);line-height:1;letter-spacing:-0.03em;margin:0 0 44px;max-width:22ch;text-wrap:balance">The ceiling is arithmetic, not a credit committee.</h2>
+      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:28px;align-items:start">
+        <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);padding:26px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:2.2;color:var(--ink)">
+            <div style="margin-bottom:14px"><span style="color:var(--pen);font-weight:600">ceiling</span> =</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+              <span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:6px 10px;background:var(--sunk)">trailing_attested_revenue_per_window</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+              <span style="color:var(--ink-3);width:14px">×</span>
+              <span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:6px 10px;background:var(--sunk)">tier_multiple</span>
+              <span style="color:var(--ink-3);font-size:11px">A 3.0 · B 2.0 · C 1.0 · Unrated 0</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+              <span style="color:var(--ink-3);width:14px">×</span>
+              <span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:6px 10px;background:var(--sunk)">ramp_factor</span>
+              <span style="color:var(--ink-3);font-size:11px">starts 15%, +15% clean, −30% missed</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+              <span style="color:var(--ink-3);width:14px">,</span>
+              <span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:6px 10px;background:var(--sunk)">clamped by hard_cap[tier]</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow)">
+          <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 16px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">Drive it yourself</div>
+          <div style="padding:22px 20px">
+            <div style="display:grid;gap:18px">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px"><span>trailing revenue</span><span style="color:var(--ink);font-size:12.5px;letter-spacing:0">{{ revLabel }}</span></div>
+                <input type="range" min="0" max="2" step="0.001" value="{{ rev }}" onInput="{{ setRev }}" onChange="{{ setRev }}" style="width:100%;accent-color:var(--pen)" />
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px"><span>tier</span><span style="color:var(--ink);font-size:12.5px;letter-spacing:0">{{ tierLabel }}</span></div>
+                <div style="display:flex;border:var(--bw) solid var(--ink);border-radius:2px;overflow:hidden">
+                  <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="4">
+                    <button type="button" onClick="{{ t.onPick }}" style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:8px 4px;border:0;border-right:2px solid var(--ink);cursor:pointer;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px"><span>ramp</span><span style="color:var(--ink);font-size:12.5px;letter-spacing:0">{{ rampLabel }}</span></div>
+                <input type="range" min="15" max="100" step="5" value="{{ ramp }}" onInput="{{ setRamp }}" onChange="{{ setRamp }}" style="width:100%;accent-color:var(--pen)" />
+              </div>
+            </div>
+          </div>
+          <div data-flash="{{ ceilFlash }}" style="border-top:var(--bw) solid var(--ink);padding:20px;background:transparent">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Ceiling in force · USDC</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:600;font-size:clamp(36px,5vw,68px);line-height:1;color:{{ ceilColor }}">{{ ceilText }}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-2);margin-top:10px">{{ ceilNote }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0;border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);margin-top:28px">
+        <div style="padding:26px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px">Fast path · every spend · under 50ms · cache only</div>
+          <ol style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:2;color:var(--ink-2);margin:0;padding-left:24px">
+            <li>tab exists and is not frozen</li>
+            <li>amount ≤ per-call cap</li>
+            <li>window spend + amount ≤ window cap</li>
+            <li>outstanding + holds + amount ≤ ceiling</li>
+            <li>counterparty weight &gt; 0</li>
+            <li>write hold, then call</li>
+          </ol>
+        </div>
+        <div style="width:var(--bw);background:var(--ink)"></div>
+        <div style="padding:26px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px">Slow path · background</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);margin-bottom:22px">
+            <span style="border:2px solid var(--ink);padding:5px 9px;border-radius:2px">Mirror Node</span><span style="color:var(--ink-3)">→</span>
+            <span style="border:2px solid var(--ink);padding:5px 9px;border-radius:2px">graph</span><span style="color:var(--ink-3)">→</span>
+            <span style="border:2px solid var(--ink);padding:5px 9px;border-radius:2px">score</span><span style="color:var(--ink-3)">→</span>
+            <span style="border:2px solid var(--ink);padding:5px 9px;border-radius:2px">ceiling</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;margin-bottom:10px">
+            <span style="flex:1;height:0;border-top:2.5px solid var(--pen)"></span><span style="color:var(--pen);font-weight:600">writes cache</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;opacity:0.55">
+            <span style="flex:1;height:0;border-top:2.5px dashed var(--ink-3)"></span><span style="color:var(--ink-3);text-decoration:line-through">never calls Mirror Node</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ATTACK ============ -->
+  <section id="attack" ref="{{ attackMount }}" style="background:var(--ink);color:var(--paper);border-bottom:var(--bw) solid var(--ink);padding:88px 28px">
+    <div style="max-width:1240px;margin:0 auto">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--caution);margin-bottom:14px">We broke it on purpose</div>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(32px,4.6vw,68px);line-height:1;letter-spacing:-0.03em;margin:0 0 40px;max-width:20ch;text-wrap:balance">The agent bought from a seller it controls.</h2>
+
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:28px;align-items:start">
+        <div style="border:var(--bw) solid var(--paper);border-radius:2px;padding:22px;background:#0C0F08">
+          <svg viewBox="0 0 620 320" style="width:100%;height:auto;display:block" role="img" aria-label="Ceiling collapse">
+            <g stroke="#3A422F" stroke-width="1">
+              <path d="M0 250 L620 250" /><path d="M0 274 L620 274" /><path d="M0 302 L620 302" />
+            </g>
+            <line x1="24" y1="120" x2="596" y2="120" stroke="#E7EBE0" stroke-width="2.5" />
+            <text x="24" y="112" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8A9480">ZERO</text>
+            <path d="M24 120 C 120 120 150 176 232 190 C 300 202 340 176 392 150" fill="none" stroke="#F0846C" stroke-width="7" stroke-linecap="round" />
+            <path d="M392 150 L440 150" fill="none" stroke="#F0846C" stroke-width="7" stroke-linecap="round" stroke-dasharray="4 10" opacity="0.5" />
+            <rect x="24" y="{{ ceilY }}" width="572" height="7" fill="#9DB4F7" opacity="0.18" style="transition:y 220ms cubic-bezier(.2,.7,.3,1)" />
+            <line x1="24" y1="{{ ceilLineY }}" x2="596" y2="{{ ceilLineY }}" stroke="#9DB4F7" stroke-width="2.5" style="transition:y1 220ms cubic-bezier(.2,.7,.3,1),y2 220ms cubic-bezier(.2,.7,.3,1)" />
+            <text x="596" y="{{ ceilTextY }}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="12" fill="#9DB4F7">{{ ceilingCaption }}</text>
+            <circle cx="440" cy="150" r="9" fill="none" stroke="#F2C230" stroke-width="3" />
+            <text x="452" y="146" font-family="IBM Plex Mono, monospace" font-size="11" fill="#F2C230">next spend stops dead</text>
+          </svg>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-top:20px">
+            <sc-for list="{{ attackHops }}" as="h" hint-placeholder-count="3">
+              <span style="display:inline-flex;align-items:center">
+                <span style="border:var(--bw) solid {{ h.border }};background:{{ h.bg }};color:{{ h.fg }};border-radius:2px;padding:7px 11px;font-weight:{{ h.weight }}">{{ h.label }}</span>
+                <span style="color:var(--ink-3);padding:0 8px">{{ h.arrow }}</span>
+              </span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="position:relative;border:var(--bw) solid var(--paper);border-radius:2px;background:var(--surface);color:var(--ink);overflow:hidden;box-shadow:8px 8px 0 var(--caution)">
+          <div style="height:12px;background-image:repeating-linear-gradient(45deg,var(--caution) 0 10px,var(--ink) 10px 20px);border-bottom:var(--bw) solid var(--ink)"></div>
+          <div style="padding:20px 22px 26px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:0.06em;padding:5px 12px;border:var(--bw) solid var(--ink);background:var(--caution);color:var(--on-caution);border-radius:2px;font-weight:600;display:inline-block;margin-bottom:16px">CONTROL_CLUSTER · funding ancestry ≤ 3 hops</span>
+            <p style="font-size:16px;line-height:1.65;margin:0 0 18px;max-width:52ch">Spend of <span style="font-family:'IBM Plex Mono',monospace;font-weight:600">$0.0400</span> to <span style="font-family:'IBM Plex Mono',monospace;font-weight:600">0.0.5591204</span> refused. The agent funded this seller two hops back, so the purchase would be self-dealing and the revenue would not be real.</p>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:14px">
+              <span>1755738201.446920113</span><span>seq 41 894</span><span style="color:var(--credit);font-weight:600">float untouched</span>
+            </div>
+          </div>
+          <div data-stamp="{{ attackStamp }}" style="position:absolute;right:22px;bottom:20px;transform:rotate(-8deg);border:4px solid var(--debit);color:var(--debit);border-radius:3px;padding:4px 14px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:0.06em;pointer-events:none">REFUSED</div>
+        </div>
+      </div>
+
+      <p style="font-size:19px;line-height:1.6;color:var(--rule-soft);max-width:62ch;margin:36px 0 56px">The graph caught a seller the agent controls. The ceiling collapsed mid-window and the next spend was refused. The float was never touched.</p>
+
+      <div style="border-top:var(--bw) solid var(--paper);padding-top:32px">
+        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:32px;letter-spacing:-0.03em;margin:0 0 8px">What still gets through</h3>
+        <p style="font-size:16px;color:var(--rule-soft);margin:0 0 24px;max-width:60ch">Publishing the gaps is what makes the caught attacks credible.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+          <sc-for list="{{ openGaps }}" as="g" hint-placeholder-count="3">
+            <div style="border:var(--bw) solid var(--caution);border-radius:2px;padding:20px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:19px;letter-spacing:-0.02em">{{ g.title }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;padding:3px 9px;border:2px solid var(--caution);color:var(--caution);border-radius:2px;font-weight:600;white-space:nowrap">{{ g.status }}</span>
+              </div>
+              <p style="font-size:14px;line-height:1.7;color:var(--rule-soft);margin:0">{{ g.body }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HEDERA ============ -->
+  <section style="padding:88px 28px;border-bottom:var(--bw) solid var(--ink)">
+    <div style="max-width:1240px;margin:0 auto">
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(32px,4.4vw,68px);line-height:1;letter-spacing:-0.03em;margin:0 0 40px;max-width:18ch;text-wrap:balance">Why Hedera, in four numbers.</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px">
+        <sc-for list="{{ hedera }}" as="h" hint-placeholder-count="4">
+          <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);padding:22px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:600;font-size:32px;color:var(--pen)">{{ h.figure }}</div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:19px;letter-spacing:-0.02em;text-wrap:balance">{{ h.title }}</div>
+            <p style="font-size:14px;line-height:1.7;color:var(--ink-2);margin:0">{{ h.body }}</p>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);margin-top:20px;overflow:hidden">
+        <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:14px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:baseline">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:-0.03em">No Solidity.</span>
+          <span style="font-size:16px;color:var(--ink-2)">Contracts replaced by native primitives.</span>
+        </div>
+        <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12.5px">
+          <thead>
+            <tr style="border-bottom:var(--bw) solid var(--ink)">
+              <th scope="col" style="text-align:left;padding:9px 20px;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">Would normally be a contract</th>
+              <th scope="col" style="text-align:left;padding:9px 20px;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">Replaced by</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ primitives }}" as="p" hint-placeholder-count="5">
+              <tr style="background:{{ p.stripe }};border-bottom:1px solid var(--rule-soft)">
+                <td style="padding:9px 20px;color:var(--ink-2)">{{ p.a }}</td>
+                <td style="padding:9px 20px;font-weight:500">{{ p.b }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="border-top:var(--bw) solid var(--ink);padding:16px 20px;display:flex;flex-wrap:wrap;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:var(--ink-3)">
+          <span style="color:var(--ink-2);font-weight:600">ATTACK SURFACE REMOVED:</span>
+          <span style="text-decoration:line-through">reentrancy</span><span style="text-decoration:line-through">delegatecall</span><span style="text-decoration:line-through">proxy storage collision</span><span style="text-decoration:line-through">upgrade key</span><span style="text-decoration:line-through">liquidation MEV</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAPE ============ -->
+  <section style="background:var(--ink);border-bottom:var(--bw) solid var(--ink);overflow:hidden;padding:16px 0">
+    <div data-tape="1" style="display:flex;width:max-content;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px;color:var(--paper)">
+      <sc-for list="{{ tape }}" as="t" hint-placeholder-count="16">
+        <span style="display:inline-flex;gap:18px;padding:0 24px;border-right:1px solid #3A422F;white-space:nowrap">
+          <span style="color:#8A9480">{{ t.ts }}</span>
+          <span style="color:{{ t.color }};font-weight:600">{{ t.leg }}</span>
+          <span>{{ t.cp }}</span>
+          <span style="color:{{ t.color }};font-weight:600">{{ t.amt }}</span>
+          <span style="color:#8A9480">{{ t.att }}</span>
+        </span>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- ============ CLOSE ============ -->
+  <section style="background:var(--ink);color:var(--paper);padding:88px 28px 40px">
+    <div style="max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1.1fr 1fr;gap:40px">
+      <div>
+        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.02;letter-spacing:-0.03em;margin:0 0 24px;text-wrap:balance">Five verbs is the whole agent surface.</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:26px">
+          <sc-for list="{{ verbs }}" as="v" hint-placeholder-count="5">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;padding:7px 14px;border:var(--bw) solid var(--paper);border-radius:2px">{{ v }}</span>
+          </sc-for>
+        </div>
+        <div style="border:var(--bw) solid var(--paper);border-radius:2px;overflow:hidden;max-width:520px">
+          <div style="background:#0C0F08;border-bottom:var(--bw) solid var(--paper);padding:7px 14px;display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:#8A9480">
+            <span>install</span>
+            <button type="button" onClick="{{ copyInstall }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;background:transparent;border:2px solid var(--paper);border-radius:2px;padding:2px 10px;cursor:pointer;color:var(--paper)">{{ copyLabel }}</button>
+          </div>
+          <pre style="margin:0;padding:14px;font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--paper)"><code>npm i @tab/sdk</code></pre>
+        </div>
+        <p style="font-size:16px;line-height:1.7;color:var(--rule-soft);margin:20px 0 0;max-width:56ch">Ships as a Hedera Agent Kit v4 plugin, an MCP server, a TypeScript SDK, and a CLI.</p>
+      </div>
+      <div>
+        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:24px;letter-spacing:-0.03em;margin:0 0 18px">What we deliberately did not build</h3>
+        <ul style="list-style:none;margin:0;padding:0;display:grid;gap:0;font-family:'IBM Plex Mono',monospace;font-size:14px">
+          <sc-for list="{{ notBuilt }}" as="n" hint-placeholder-count="6">
+            <li style="padding:11px 0;border-bottom:1px solid #3A422F;display:flex;gap:12px;align-items:baseline"><span style="color:var(--caution)">—</span><span style="color:var(--rule-soft)">{{ n }}</span></li>
+          </sc-for>
+        </ul>
+      </div>
+    </div>
+    <div style="max-width:1240px;margin:56px auto 0;border-top:var(--bw) solid var(--paper);padding-top:20px;display:flex;flex-wrap:wrap;gap:20px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#8A9480">
+      <a href="#" style="color:var(--rule-soft)">repo</a>
+      <a href="#" style="color:var(--rule-soft)">receipt topic 0.0.4881203</a>
+      <a href="#" style="color:var(--rule-soft)">ceiling topic 0.0.4881204</a>
+      <a href="#" style="color:var(--rule-soft)">float account 0.0.4881190</a>
+      <span style="margin-left:auto">Built for ETHOnline 2026 · Hedera Testnet · No Solidity was deployed at any point.</span>
+    </div>
+  </section>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = {
+    theme: 'light', flow: 0, rev: 0.334, tier: 'C', ramp: 30,
+    ceilFlash: 'none', copied: false, attacked: false, dotT: 0, callCount: 43, collapsed: false,
+  };
+
+  componentDidMount() {
+    this.applyTheme('light');
+    this.setupFlows();
+    this.setupReveals();
+    this.setupAttack();
+    this.tick = setInterval(() => this.setState((s) => ({ dotT: (s.dotT + 1) % 60 })), 60);
+    setTimeout(() => this.initThree(), 60);
+  }
+  componentWillUnmount() {
+    clearInterval(this.tick);
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.observers && this.observers.forEach((o) => o.disconnect());
+  }
+
+  applyTheme(t) {
+    const el = document.documentElement;
+    if (t === 'dark') el.setAttribute('data-theme', 'dark'); else el.removeAttribute('data-theme');
+  }
+
+  reduced() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  setupReveals() {
+    this.observers = this.observers || [];
+    const nodes = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]'));
+    if (!nodes.length || this.reduced()) return;
+    nodes.forEach((n, i) => { n.setAttribute('data-reveal', '0'); n.style.transitionDelay = (i * 60) + 'ms'; });
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.setAttribute('data-reveal', '1'); io.unobserve(e.target); } });
+    }, { threshold: 0.25 });
+    nodes.forEach((n) => io.observe(n));
+    this.observers.push(io);
+  }
+
+  setupFlows() {
+    this.observers = this.observers || [];
+    const els = [this.s1, this.s2, this.s3].filter(Boolean);
+    if (els.length < 3) return;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const i = els.indexOf(e.target);
+        if (i >= 0 && i !== this.state.flow) this.setState({ flow: i, collapsed: i === 2 });
+      });
+    }, { rootMargin: '-45% 0px -45% 0px' });
+    els.forEach((el) => io.observe(el));
+    this.observers.push(io);
+  }
+
+  setupAttack() {
+    this.observers = this.observers || [];
+    if (!this.attackEl) return;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting && !this.state.attacked) {
+          this.setState({ attacked: true });
+          setTimeout(() => this.setState({ attackStamp: 'on' + Date.now() }), 420);
+        }
+      });
+    }, { threshold: 0.3 });
+    io.observe(this.attackEl);
+    this.observers.push(io);
+  }
+
+  initThree() {
+    const host = this.heroEl;
+    if (!host || !window.THREE || this.reduced()) return;
+    const T = window.THREE;
+    const cs = getComputedStyle(document.documentElement);
+    const tok = (n, f) => (cs.getPropertyValue(n) || f).trim() || f;
+
+    const w = host.clientWidth, h = host.clientHeight;
+    if (!w || !h) return;
+    let renderer;
+    try {
+      renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (err) { return; }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h);
+    renderer.domElement.style.display = 'block';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+
+    const scene = new T.Scene();
+    const camera = new T.PerspectiveCamera(34, w / h, 0.1, 100);
+    camera.position.set(0.6, 1.9, 11.4);
+    camera.lookAt(0, -0.55, 0);
+
+    const inkC = new T.Color(tok('--ink', '#14180F'));
+    const debitC = new T.Color(tok('--debit', '#9E2B18'));
+    const creditC = new T.Color(tok('--credit', '#17703F'));
+    const penC = new T.Color(tok('--pen', '#1F3A93'));
+    const softC = new T.Color(tok('--rule-soft', '#B9C2AC'));
+
+    // recessed greenbar grid
+    const grid = new T.GridHelper(34, 34, softC, softC);
+    grid.position.set(0, -3.1, -4);
+    grid.material.opacity = 0; grid.material.transparent = true;
+    scene.add(grid);
+
+    // zero line
+    const zeroGeo = new T.BufferGeometry().setFromPoints([new T.Vector3(-6.4, 0, 0), new T.Vector3(6.4, 0, 0)]);
+    const zeroLine = new T.Line(zeroGeo, new T.LineBasicMaterial({ color: inkC, transparent: true, opacity: 0 }));
+    scene.add(zeroLine);
+
+    // the balance wire
+    const pts = [
+      [-6.2, 0], [-4.9, -0.55], [-3.6, -1.35], [-2.3, -1.72], [-1.0, -1.24],
+      [0.35, -0.35], [1.7, 0.42], [3.0, 0.74], [4.4, 0.46], [5.5, 0.12], [6.2, 0],
+    ].map((p) => new T.Vector3(p[0], p[1], 0));
+    const curve = new T.CatmullRomCurve3(pts, false, 'catmullrom', 0.4);
+    const tube = new T.TubeGeometry(curve, 220, 0.06, 12, false);
+    const pos = tube.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const c = pos.getY(i) < 0 ? debitC : creditC;
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    }
+    tube.setAttribute('color', new T.BufferAttribute(colors, 3));
+    const wire = new T.Mesh(tube, new T.MeshLambertMaterial({ vertexColors: true }));
+    tube.setDrawRange(0, 0);
+    scene.add(wire);
+
+    // the ceiling — hard limit the dip approaches
+    const ceilGroup = new T.Group();
+    const plane = new T.Mesh(
+      new T.PlaneGeometry(12.8, 7),
+      new T.MeshBasicMaterial({ color: penC, transparent: true, opacity: 0.12, side: T.DoubleSide, depthWrite: false })
+    );
+    plane.rotation.x = -Math.PI / 2;
+    ceilGroup.add(plane);
+    const edge = new T.Line(
+      new T.BufferGeometry().setFromPoints([new T.Vector3(-6.4, 0, 0), new T.Vector3(6.4, 0, 0)]),
+      new T.LineBasicMaterial({ color: penC })
+    );
+    ceilGroup.add(edge);
+    ceilGroup.position.y = 3.2;
+    scene.add(ceilGroup);
+
+    scene.add(new T.AmbientLight(0xffffff, 0.62));
+    const key = new T.DirectionalLight(0xffffff, 0.85);
+    key.position.set(-5, 7, 6);
+    scene.add(key);
+
+    host.appendChild(renderer.domElement);
+    const svg = host.querySelector('svg');
+    if (svg) svg.style.display = 'none';
+
+    const total = tube.index ? tube.index.count : pos.count;
+    const t0 = performance.now();
+    const ease = (x) => 1 - Math.pow(1 - x, 3);
+
+    const onResize = () => {
+      const W = host.clientWidth, H = host.clientHeight;
+      if (!W || !H) return;
+      camera.aspect = W / H; camera.updateProjectionMatrix(); renderer.setSize(W, H);
+    };
+    window.addEventListener('resize', onResize);
+    this.cleanupResize = () => window.removeEventListener('resize', onResize);
+
+    const loop = () => {
+      const el = performance.now() - t0;
+      grid.material.opacity = Math.min(1, el / 300) * 0.5;
+      zeroLine.material.opacity = Math.min(1, Math.max(0, (el - 200) / 700));
+      const wp = Math.min(1, Math.max(0, (el - 320) / 900));
+      tube.setDrawRange(0, Math.floor(total * ease(wp)));
+      const cp = Math.min(1, Math.max(0, (el - 640) / 700));
+      ceilGroup.position.y = 3.2 + (-2.35 - 3.2) * ease(cp);
+      const drift = Math.sin(el / 20000 * Math.PI * 2) * (3 * Math.PI / 180);
+      camera.position.x = 0.6 + Math.sin(drift) * 11;
+      camera.position.z = 11.4 * Math.cos(drift);
+      camera.lookAt(0, -0.55, 0);
+      renderer.render(scene, camera);
+      this.raf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  renderVals() {
+    const st = this.state;
+    const stripe = (i) => (i % 2 ? 'var(--sunk)' : 'transparent');
+
+    const flows = [
+      { kicker: 'State 1 · spend leg', title: 'The gateway pays the seller before the agent has any money.',
+        body: 'A spend request arrives. The gateway checks six things against cache, writes a hold, pays the seller from house float, and debits the running balance.',
+        caption: 'The seller sees an ordinary x402 customer. It does not know Tab exists. Nothing on the seller side changes.', label: 'Spend leg · agent → gateway → seller' },
+      { kicker: 'State 2 · earn leg', title: 'The gateway fronts the agent\u2019s own endpoint and collects.',
+        body: 'A payer hits the agent\u2019s endpoint. The gateway serves the 402, collects the payment, and credits the balance with an attested receipt.',
+        caption: 'Because Tab served the request, it can prove the payment corresponds to real work. Chain history alone can\u2019t.', label: 'Earn leg · payer → gateway → agent' },
+      { kicker: 'State 3 · settlement', title: 'Once per window, everything nets to one movement.',
+        body: 'At the tick, a scheduled transaction executes by consensus. Debits and credits net. One transfer touches the float account.',
+        caption: 'Ten thousand calls become one transfer.', label: 'Settlement · window 0148 close' },
+    ];
+    const f = flows[st.flow] || flows[0];
+
+    const dotT = st.dotT / 60;
+    const collapseRows = [];
+    for (let i = 0; i < 8; i++) {
+      const collapsedY = 145;
+      const spreadY = 62 + i * 24;
+      const k = st.collapsed ? 1 : 0;
+      collapseRows.push({
+        y: spreadY + (collapsedY - spreadY) * k,
+        op: st.collapsed ? 0.25 : 1,
+        fill: i % 2 ? 'var(--credit)' : 'var(--debit)',
+      });
+    }
+
+    const tierMap = { A: 3.0, B: 2.0, C: 1.0, Unrated: 0 };
+    const hardCap = { A: 20, B: 6, C: 2, Unrated: 0 };
+    const mult = tierMap[st.tier];
+    const raw = st.rev * mult * (st.ramp / 100);
+    const clamped = Math.min(raw, hardCap[st.tier]);
+    const floorApplied = st.tier !== 'Unrated' && clamped < 1 ? 1 : clamped;
+    const bound = st.tier === 'Unrated' ? 'tier multiple 0 — no ceiling at all'
+      : (raw > hardCap[st.tier] ? 'hard cap, tier ' + st.tier + ' — binding'
+        : (clamped < 1 ? 'starter floor 1.0000 — binding' : 'computed value — binding'));
+
+    const tapeRow = [
+      ['\u2026214.883', 'DEBIT', '0.0.5591204', '\u22120.0400', 'attested', '#F0846C'],
+      ['\u2026211.117', 'CREDIT', '0.0.4410877', '+0.0250', 'attested', '#5FCB8B'],
+      ['\u2026208.402', 'DEBIT', '0.0.5120033', '\u22120.0180', 'attested', '#F0846C'],
+      ['\u2026205.771', 'CREDIT', '0.0.4410877', '+0.0250', 'attested', '#5FCB8B'],
+      ['\u2026201.446', 'REFUSED', '0.0.5591204', '0.0400', 'control_cluster', '#F2C230'],
+      ['\u2026197.905', 'DEBIT', '0.0.5120033', '\u22120.0180', 'attested', '#F0846C'],
+      ['\u2026193.220', 'CREDIT', '0.0.6002911', '+0.0120', 'unattested', '#5FCB8B'],
+      ['\u2026188.664', 'DEBIT', '0.0.4899120', '\u22120.0090', 'attested', '#F0846C'],
+    ];
+
+    const svgP = (kind) => {
+      const S = (children) => React.createElement('svg', { viewBox: '0 0 200 90', style: { width: '100%', height: 'auto', display: 'block' }, 'aria-hidden': 'true' }, children);
+      const e = React.createElement;
+      const stroke = '#E7EBE0', muted = '#8A9480', caution = '#F2C230';
+      if (kind === 'cold') return S([
+        e('circle', { key: 'c', cx: 42, cy: 45, r: 24, fill: 'none', stroke: stroke, strokeWidth: 2.5, strokeDasharray: '5 6' }),
+        e('text', { key: 't', x: 42, y: 50, textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fill: muted }, '0.00'),
+        e('line', { key: 'l', x1: 70, y1: 45, x2: 138, y2: 45, stroke: stroke, strokeWidth: 2.5 }),
+        e('line', { key: 'x1', x1: 146, y1: 36, x2: 168, y2: 54, stroke: caution, strokeWidth: 3.5 }),
+        e('line', { key: 'x2', x1: 168, y1: 36, x2: 146, y2: 54, stroke: caution, strokeWidth: 3.5 }),
+      ]);
+      if (kind === 'reject') return S([
+        e('rect', { key: 'r1', x: 16, y: 14, width: 168, height: 28, fill: 'none', stroke: muted, strokeWidth: 2.5 }),
+        e('text', { key: 't1', x: 26, y: 33, fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fill: muted }, 'job +0.18 profitable'),
+        e('line', { key: 'sl', x1: 20, y1: 28, x2: 180, y2: 28, stroke: caution, strokeWidth: 2.5 }),
+        e('rect', { key: 'r2', x: 16, y: 52, width: 168, height: 28, fill: 'none', stroke: stroke, strokeWidth: 2.5 }),
+        e('text', { key: 't2', x: 26, y: 71, fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fill: stroke }, 'job +0.01 taken'),
+      ]);
+      if (kind === 'human') return S([
+        e('rect', { key: 'p', x: 12, y: 30, width: 46, height: 34, fill: 'none', stroke: stroke, strokeWidth: 2.5 }),
+        e('text', { key: 'pt', x: 35, y: 51, textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, fill: stroke }, 'human'),
+        e('line', { key: 'd', x1: 60, y1: 47, x2: 136, y2: 47, stroke: caution, strokeWidth: 2.5, strokeDasharray: '6 6' }),
+        e('text', { key: 'dl', x: 98, y: 38, textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, fill: caution }, 'manual'),
+        e('rect', { key: 'a', x: 140, y: 30, width: 46, height: 34, fill: 'none', stroke: stroke, strokeWidth: 2.5 }),
+        e('text', { key: 'at', x: 163, y: 51, textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, fill: stroke }, 'agent'),
+      ]);
+      return S([
+        e('circle', { key: 'c', cx: 100, cy: 45, r: 36, fill: 'none', stroke: caution, strokeWidth: 4 }),
+        e('text', { key: 't', x: 100, y: 42, textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fill: stroke }, '500.00'),
+        e('rect', { key: 'k', x: 86, y: 52, width: 28, height: 14, fill: 'none', stroke: stroke, strokeWidth: 2 }),
+        e('text', { key: 'kt', x: 100, y: 63, textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, fill: muted }, 'key'),
+      ]);
+    };
+
+    return {
+      heroMount: (el) => { this.heroEl = el; },
+      flowsMount: () => {},
+      attackMount: (el) => { this.attackEl = el; },
+      st1: (el) => { this.s1 = el; },
+      st2: (el) => { this.s2 = el; },
+      st3: (el) => { this.s3 = el; },
+
+      themeLabel: st.theme === 'dark' ? 'Carbon' : 'Ledger',
+      toggleTheme: () => { const t = st.theme === 'dark' ? 'light' : 'dark'; this.applyTheme(t); this.setState({ theme: t }); },
+
+      problems: [
+        { idx: '01', title: 'Cold start', body: 'A freshly deployed agent cannot transact at all until a human funds it. Its first act is to fail.', svg: svgP('cold'), ref: () => {} },
+        { idx: '02', title: 'Job rejection', body: 'The agent declines profitable work because it can\u2019t fund the input cost right now.', svg: svgP('reject'), ref: () => {} },
+        { idx: '03', title: 'Human bottleneck', body: 'An operator tops up the wallet by hand — which defeats the point of autonomy.', svg: svgP('human'), ref: () => {} },
+        { idx: '04', title: 'Hot float', body: 'The operator over-funds "just in case," leaving a large balance in a key an agent controls.', svg: svgP('hot'), ref: () => {} },
+      ],
+
+      flowLabel: f.label, flowKicker: f.kicker, flowTitle: f.title, flowBody: f.body, flowCaption: f.caption,
+      op1: st.flow === 0 ? 1 : 0, op2: st.flow === 1 ? 1 : 0, op3: st.flow === 2 ? 1 : 0,
+      dotX: 150 + dotT * 314,
+      dotX2: 464 - dotT * 314,
+      flowBalance: '\u22120.4821',
+      flowBalance2: '+0.0250',
+      flowDots: [0, 1, 2].map((i) => ({ bg: st.flow === i ? 'var(--ink)' : 'var(--surface)' })),
+      collapseRows,
+      callCount: st.collapsed ? '43 → 1' : '43',
+
+      rev: st.rev,
+      revLabel: st.rev.toFixed(4) + ' USDC',
+      setRev: (e) => this.setState({ rev: parseFloat(e.target.value), ceilFlash: 'credit' + Date.now() }),
+      ramp: st.ramp,
+      rampLabel: st.ramp + '%',
+      setRamp: (e) => this.setState({ ramp: parseInt(e.target.value, 10), ceilFlash: 'credit' + Date.now() }),
+      tierLabel: st.tier + ' · ' + mult.toFixed(1) + '\u00d7',
+      tiers: ['A', 'B', 'C', 'Unrated'].map((t) => ({
+        label: t,
+        bg: st.tier === t ? 'var(--ink)' : 'var(--surface)',
+        fg: st.tier === t ? 'var(--paper)' : 'var(--ink)',
+        onPick: () => this.setState({ tier: t, ceilFlash: (tierMap[t] < mult ? 'debit' : 'credit') + Date.now() }),
+      })),
+      ceilFlash: st.ceilFlash,
+      ceilText: floorApplied.toFixed(4),
+      ceilColor: floorApplied === 0 ? 'var(--debit)' : 'var(--pen)',
+      ceilNote: bound,
+
+      attackStamp: st.attackStamp || 'off',
+      ceilY: st.attacked ? 146 : 214,
+      ceilLineY: st.attacked ? 149.5 : 217.5,
+      ceilTextY: st.attacked ? 140 : 208,
+      ceilingCaption: st.attacked ? 'CEILING 0.0000 — COLLAPSED' : 'CEILING 1.0000',
+      attackHops: [
+        { label: 'agent 0.0.4482091', border: 'var(--paper)', bg: 'transparent', fg: 'var(--paper)', weight: '500', arrow: '\u2192' },
+        { label: '0.0.5300118', border: 'var(--paper)', bg: 'transparent', fg: 'var(--paper)', weight: '400', arrow: '\u2192' },
+        { label: 'seller 0.0.5591204', border: 'var(--debit)', bg: 'var(--debit)', fg: '#12150E', weight: '600', arrow: '' },
+      ],
+      openGaps: [
+        { title: 'Non-reciprocal collusion rings', status: 'OPEN', body: 'A ring where value never flows back and funding roots are genuinely separate defeats the graph.' },
+        { title: 'Gateway operator misbehaviour', status: 'OPEN BY DESIGN', body: 'The float is custodial. Detectable via published receipts; not preventable in v1.' },
+        { title: 'Seller takes payment, no delivery', status: 'OPEN', body: 'v1 records the dispute and does not arbitrate.' },
+      ],
+
+      hedera: [
+        { figure: '$0.0001', title: 'HCS is a clearing ledger you don\u2019t have to write', body: 'Append-only, consensus-ordered, per message. This is why Tab ships with zero smart contracts.' },
+        { figure: '< $0.01', title: 'Sub-cent USD-denominated fees', body: 'Per-request payouts become a product rather than arithmetic that loses money.' },
+        { figure: '3s', title: 'Finality matches the settlement tick', body: 'Window close to settled transfer inside one agent reasoning cycle.' },
+        { figure: 'HIP-423', title: 'Scheduled Transactions execute the tick', body: 'By consensus, with no keeper process to run, fund or trust.' },
+      ],
+      primitives: [
+        ['Credit registry contract', 'HCS topic — ceiling messages, consensus-ordered'],
+        ['Receipt storage contract', 'HCS topic — one message per leg'],
+        ['Settlement executor contract', 'Scheduled Transaction (HIP-423)'],
+        ['Treasury / vault contract', 'Plain Hedera account holding the float'],
+        ['Access control contract', 'Account keys and topic submit keys'],
+      ].map((p, i) => ({ a: p[0], b: p[1], stripe: stripe(i) })),
+
+      tape: tapeRow.concat(tapeRow).map((t) => ({ ts: t[0], leg: t[1], cp: t[2], amt: t[3], att: t[4], color: t[5] })),
+      verbs: ['spend', 'quote', 'balance', 'ceiling', 'receipts'],
+      notBuilt: ['no smart contracts', 'no seller-side credential', 'no cross-chain messaging', 'no price oracles', 'no LP vaults', 'no agent deployment platform'],
+      copyLabel: st.copied ? 'Copied' : 'Copy',
+      copyInstall: () => { this.setState({ copied: true }); setTimeout(() => this.setState({ copied: false }), 1400); },
+    };
+  }
+}
+</script>
+</body>
+</html>

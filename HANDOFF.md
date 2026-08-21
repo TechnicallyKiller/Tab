@@ -21,10 +21,11 @@ written.
 
 ## Current State
 
-**Phase:** 0 — structure and design complete, no implementation yet
-**Next action:** run `pnpm probe`. Nothing in `packages/` or `apps/` starts until all five probes are
-green. See [docs/probes.md](docs/probes.md).
-**Last updated:** 2026-08-18 by Claude (initial scaffold)
+**Phase:** 0 for the backend · frontend built against mocks
+**Next action:** run `pnpm probe`. Nothing in `packages/` or the backend apps starts until all five
+probes are green. See [docs/probes.md](docs/probes.md). The frontend does not wait on them — it runs
+entirely on `apps/web/src/lib/mock/`.
+**Last updated:** 2026-08-21 by Claude (frontend: three surfaces, mocked)
 
 ### Track board
 
@@ -51,7 +52,7 @@ exist yet.
 | **SLOW** | `apps/engine` · `apps/settlement` | 3 | — | open |
 | **S1** | `sdk` · `apps/cli` | 4 | — | open |
 | **S2** | `agentkit-plugin` | 4 | — | open |
-| **S3** | `apps/dashboard` | 4 | — | open |
+| **S3** | `apps/web` | 4 | — | open |
 | **S4** | `mcp` — scope it before building | 4 | — | open |
 | **D1** | `tools/verify` | 5 — pull earlier if you can | — | open |
 | **D2** | `agents/honest-agent` | 5 | — | open |
@@ -80,6 +81,8 @@ downstream reads and writes them, and changing them on day four touches every pa
 | Standalone MCP server, or load our plugin into the official Agent Kit MCP server? | `mcp` scope | — |
 | Settlement schedule: provisional-amount-at-open, or short-expiry-near-close? | `apps/settlement` | — |
 | `AGE_FULL_DAYS` testnet value | `graph`, `params`, the config dump | — |
+| Refusal reason enum — the UI already renders 6 codes, `@tab/protocol` must match exactly | `protocol`, `fastpath`, `web` | — |
+| Ceiling input record shape — the CEILING view renders 9 rows and a canonical hash | `scoring`, `protocol`, `web` | — |
 
 ### Contract changes — read this before you assume a doc is current
 
@@ -94,6 +97,9 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | SDK is **`@hiero-ledger/sdk`**, never `@hashgraph/sdk`. Mixing them breaks signing at request time. [ADR-0002](docs/adr/0002-single-hedera-sdk.md) | everyone |
 | 2026-08-18 | x402 is the **scoped `@x402/*` 2.22.0** family, not unscoped `x402@1.2.0` | `x402` |
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
+| 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
+| 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-08-21 | **The UI already fixes two shapes**: the refusal reason enum (6 codes) and the ceiling input record (9 rows + canonical hash). `@tab/protocol` must match what the screens render | `protocol`, `scoring`, `fastpath` |
 
 ---
 
@@ -114,6 +120,37 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-08-21 — Claude — apps/web, all three surfaces
+
+**Did:** Built the frontend from the Claude Design bundle in `surface-selection-decision/`. One
+Next.js 16 app, three route groups: landing (`/`), operator console (`/app/*`, eight views), docs
+(`/docs`). Token layer, primitives and motion system in `src/app/globals.css`; every figure comes
+from `src/lib/mock/`. Builds clean, 13 routes, all verified serving. `apps/dashboard` became
+`apps/web` and the structure docs followed.
+
+**Learned:** Three things worth the next person's time.
+
+1. **pnpm 11 no longer reads the `pnpm` field in package.json.** Our `@hiero-ledger/sdk` override
+   was silently doing nothing. Moved to `pnpm-workspace.yaml`, and added an alias so
+   `@hashgraph/sdk` resolves to the Hiero package even if something pulls it in. ADR-0002 was
+   unenforced until now.
+2. **The branded `MicroUsdc` type earned its keep immediately.** It failed the build twice on
+   places where I'd let a raw `bigint` through from a subtraction. That is exactly the class of slip
+   that produces a balance a few micro-USDC off the ledger, so `sub()` and `atLeastZero()` now
+   exist rather than inline arithmetic. The prototype used floats throughout; this does not.
+3. **The design prototype is decided on two schemas we have not written yet** — the refusal reason
+   enum and the ceiling input record. Whoever takes `protocol` should read
+   `apps/web/src/lib/mock/types.ts` first; the screens are the spec.
+
+**Contract change:** three, in the table above.
+
+**Next:** `@tab/sdk` (track S1) is now the critical path for the frontend — swapping the mock
+modules for real calls is mechanical once its surface exists. Backend still gated on Phase 0 probes.
+
+**Blocked:** nothing.
 
 ---
 

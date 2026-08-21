@@ -107,7 +107,7 @@ Two more we add:
 | `engine` | slow path worker: index → graph → score → publish ceiling → write cache snapshot |
 | `settlement` | window tick, HIP-423 schedule construction, reconciler |
 | `cli` | operator surface |
-| `dashboard` | Next.js. Reads through `sdk` only |
+| `web` | Next.js. Reads through `sdk` only |
 
 ### Tier 5 — leaf
 

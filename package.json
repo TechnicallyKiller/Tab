@@ -28,14 +28,15 @@
     "dev:gateway": "pnpm --filter @tab/gateway dev",
     "dev:engine": "pnpm --filter @tab/engine dev",
     "dev:settlement": "pnpm --filter @tab/settlement dev",
-    "dev:dashboard": "pnpm --filter @tab/dashboard dev",
     "demo:honest": "pnpm --filter @tab/honest-agent start",
     "demo:attack": "pnpm --filter @tab/loop-attacker start",
     "db:generate": "pnpm --filter @tab/db generate",
     "db:migrate": "pnpm --filter @tab/db migrate",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build --filter='./packages/*' && changeset publish"
+    "release": "turbo run build --filter='./packages/*' && changeset publish",
+    "dev:web": "pnpm --filter @tab/web dev",
+    "build:web": "pnpm --filter @tab/web build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
@@ -46,13 +47,5 @@
     "turbo": "^2.5.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@hiero-ledger/sdk": "2.87.0"
-    },
-    "peerDependencyRules": {
-      "allowAny": []
-    }
   }
 }

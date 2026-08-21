@@ -81,7 +81,7 @@ first moment the product exists, and it should happen well before the demo is du
 |---|---|
 | **S1** | `sdk` → `apps/cli` |
 | **S2** | `agentkit-plugin` — the distribution play for the primary track |
-| **S3** | `apps/dashboard` — **start with the Refusals view** |
+| **S3** | `apps/web` — **start with the Refusals view** |
 | **S4** | `mcp` — but **read [packages/mcp/README.md](../packages/mcp/README.md) first.** An official Agent Kit MCP server exists; loading our plugin into it may be the better answer and costs an hour to find out |
 
 `S4` depends on `S1`, so whoever finishes the SDK is best placed to pick it up — or hand it off.

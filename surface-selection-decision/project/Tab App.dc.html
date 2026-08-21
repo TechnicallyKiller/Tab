@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&amp;family=Public+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<style>
+:root{
+  --paper:#E7EBE0; --surface:#FBFCF8; --sunk:#DDE3D4;
+  --ink:#14180F; --ink-2:#3D4636; --ink-3:#6B7462; --rule-soft:#B9C2AC;
+  --pen:#1F3A93; --pen-soft:#DDE3F5;
+  --credit:#17703F; --debit:#9E2B18; --caution:#F2C230;
+  --shadow:6px 6px 0 var(--ink); --shadow-sm:3px 3px 0 var(--ink); --bw:2.5px;
+  --on-caution:#14180F;
+}
+[data-theme="dark"]{
+  --paper:#12150E; --surface:#1B1F16; --sunk:#252A1E;
+  --ink:#E8EDE0; --ink-2:#B7C0AC; --ink-3:#8A9480; --rule-soft:#3E4636;
+  --pen:#9DB4F7; --pen-soft:#232C48;
+  --credit:#5FCB8B; --debit:#F0846C; --caution:#F2C230;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Public Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--pen);text-underline-offset:3px}
+a:hover{color:var(--ink);text-decoration-thickness:2px}
+:focus-visible{outline:3px solid var(--pen);outline-offset:3px}
+table{border-collapse:collapse}
+@keyframes flash-credit{from{background-color:color-mix(in srgb,var(--credit) 18%,transparent)}to{background-color:transparent}}
+@keyframes flash-debit{from{background-color:color-mix(in srgb,var(--debit) 18%,transparent)}to{background-color:transparent}}
+@keyframes stamp-down{from{transform:scale(1.4) rotate(2deg);opacity:0}60%{opacity:1}to{transform:scale(1) rotate(-8deg);opacity:1}}
+@keyframes hold-hatch{from{background-position:0 0}to{background-position:28px 0}}
+[data-flash^="credit"]{animation:flash-credit 1500ms ease-out}
+[data-flash^="debit"]{animation:flash-debit 1500ms ease-out}
+[data-stamp^="on"]{animation:stamp-down 420ms cubic-bezier(.3,1.5,.4,1) both}
+[data-hatch]{animation:hold-hatch 3s linear infinite}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:1ms !important;animation-iteration-count:1 !important;transition-duration:1ms !important}
+}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:grid;grid-template-columns:232px minmax(0,1fr);background:var(--paper)">
+
+  <aside style="background:var(--ink);color:#E7EBE0;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column">
+    <div style="padding:14px 18px;border-bottom:2px solid #3A422F">
+      <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:-0.03em">Tab</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:#8A9480;margin-top:2px">operator console</div>
+    </div>
+    <nav style="padding:10px 0;display:flex;flex-direction:column;flex:1">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <button type="button" onClick="{{ n.onPick }}" style="text-align:left;background:{{ n.bg }};color:{{ n.fg }};border:0;border-left:4px solid {{ n.mark }};padding:9px 14px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:0.1em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>{{ n.label }}</span>
+          <span style="font-size:11px;color:{{ n.countFg }};font-variant-numeric:tabular-nums">{{ n.count }}</span>
+        </button>
+      </sc-for>
+      <div style="margin-top:auto;padding:14px 16px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A9480;line-height:1.9;border-top:2px solid #3A422F">
+        <div>MODEL_VERSION</div>
+        <div style="color:#E7EBE0">ceiling-v0.4.1</div>
+        <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px">
+          <a href="Tab Landing.dc.html" style="color:#B9C2AC;text-decoration:none">← landing</a>
+          <a href="Tab Docs.dc.html" style="color:#B9C2AC;text-decoration:none">docs</a>
+          <a href="Tab Components.dc.html" style="color:#8A9480;text-decoration:none">components</a>
+        </div>
+      </div>
+    </nav>
+  </aside>
+
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <header style="position:sticky;top:0;z-index:30;height:56px;background:var(--surface);border-bottom:var(--bw) solid var(--ink);display:flex;align-items:center;gap:16px;padding:0 20px">
+      <div style="display:flex;align-items:center;gap:8px;border:var(--bw) solid var(--ink);border-radius:2px;padding:4px 10px;background:var(--paper)">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">agent</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600">0.0.4482091</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;font-family:'IBM Plex Mono',monospace">
+        <span style="font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">window 0148 closes in</span>
+        <span style="font-size:19px;font-weight:600;font-variant-numeric:tabular-nums">{{ countdown }}</span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <button type="button" onClick="{{ toggleStale }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;padding:4px 12px;border-radius:999px;border:var(--bw) solid var(--ink);background:{{ connBg }};color:{{ connFg }};font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px">
+          <span style="width:7px;height:7px;border-radius:999px;background:{{ connDot }};display:inline-block"></span>{{ connLabel }}
+        </button>
+        <button type="button" onClick="{{ toggleTheme }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;background:var(--surface);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 11px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">{{ themeLabel }}</button>
+      </div>
+    </header>
+
+    <main style="padding:22px;min-width:0">
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:18px">
+        <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:32px;letter-spacing:-0.03em;margin:0">{{ viewTitle }}</h1>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-3)">{{ viewSub }}</span>
+      </div>
+
+      <!-- TAB -->
+      <sc-if value="{{ isTab }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;gap:20px">
+          <div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:20px;align-items:start">
+            <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow)">
+              <div data-flash="{{ flashKey }}" style="padding:22px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">Running balance · USDC</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:600;font-size:68px;line-height:1;letter-spacing:-0.02em;color:{{ balColor }};border-bottom:{{ staleRule }};display:inline-block">{{ balText }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-3);margin-top:10px">{{ balNote }}</div>
+              </div>
+              <div style="border-top:var(--bw) solid var(--ink);padding:18px 22px 20px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px">Capacity against the ceiling</div>
+                <div style="display:flex;height:22px;border:var(--bw) solid var(--ink);border-radius:2px;overflow:hidden;background:var(--sunk)">
+                  <div style="width:{{ pctOut }};background:var(--debit);transition:width 220ms cubic-bezier(.2,.7,.3,1)"></div>
+                  <div data-hatch="1" style="width:{{ pctHold }};border-left:var(--bw) solid var(--ink);background-color:var(--caution);background-image:repeating-linear-gradient(45deg,transparent 0 6px,var(--ink) 6px 8px,transparent 8px 14px);background-size:28px 28px;transition:width 220ms cubic-bezier(.2,.7,.3,1)"></div>
+                  <div style="flex:1;border-left:var(--bw) solid var(--ink)"></div>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-2);margin-top:10px;display:flex;flex-wrap:wrap;gap:4px 16px">
+                  <span>outstanding <b style="color:var(--debit)">{{ outstanding }}</b></span>
+                  <span>held <b>{{ held }}</b></span>
+                  <span>available <b style="color:var(--credit)">{{ available }}</b></span>
+                  <span>ceiling <b style="color:var(--pen)">1.0000</b></span>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="4">
+                <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow-sm);padding:14px;position:relative;min-height:104px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">{{ t.label }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:600;font-size:24px;color:{{ t.color }}">{{ t.value }}</div>
+                  <div style="position:absolute;left:0;bottom:0;height:3px;background:var(--pen);width:{{ t.pct }}"></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden">
+            <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;display:flex;align-items:center;gap:14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">
+              <span>This window's receipts</span>
+              <span style="color:var(--ink-3)">{{ receiptCount }} rows</span>
+              <span style="margin-left:auto;display:flex;gap:8px;letter-spacing:0;text-transform:none">
+                <button type="button" onClick="{{ toggleStream }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--surface);border:2px solid var(--ink);border-radius:2px;padding:3px 11px;cursor:pointer;color:var(--ink)">{{ streamLabel }}</button>
+                <button type="button" onClick="{{ forceSettle }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--caution);border:2px solid var(--ink);border-radius:2px;padding:3px 11px;cursor:pointer;color:var(--on-caution);font-weight:600">Force settlement · demo mode</button>
+              </span>
+            </div>
+            <div style="max-height:400px;overflow-y:auto">
+              <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px">
+                <thead>
+                  <tr style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink)">
+                    <sc-for list="{{ receiptCols }}" as="c" hint-placeholder-count="7">
+                      <th scope="col" style="text-align:{{ c.align }};padding:8px 12px;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap">{{ c.label }}</th>
+                    </sc-for>
+                  </tr>
+                </thead>
+                <tbody aria-live="polite">
+                  <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="10">
+                    <tr data-flash="{{ r.flash }}" style="background:{{ r.stripe }};border-bottom:1px solid var(--rule-soft)">
+                      <td style="padding:7px 12px;color:var(--ink-2);white-space:nowrap">{{ r.ts }}</td>
+                      <td style="padding:7px 12px"><span style="font-size:11px;letter-spacing:0.13em;padding:2px 10px;border-radius:999px;border:2px solid {{ r.legBorder }};color:{{ r.legFg }};background:{{ r.legBg }};font-weight:600">{{ r.leg }}</span></td>
+                      <td style="padding:7px 12px">{{ r.cp }}</td>
+                      <td style="padding:7px 12px;text-align:right;font-weight:600;color:{{ r.amtColor }}">{{ r.amt }}</td>
+                      <td style="padding:7px 12px;color:var(--ink-2)">{{ r.att }}</td>
+                      <td style="padding:7px 12px;color:var(--ink-3)">{{ r.hash }}</td>
+                      <td style="padding:7px 12px;text-align:right"><a href="#" style="color:var(--pen)">{{ r.seq }}</a></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);padding:20px 22px;max-width:600px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px">Empty state · agent registered 4 seconds ago</div>
+            <div style="display:inline-block;transform:rotate(-2deg);border:4px solid var(--ink);border-radius:3px;padding:5px 15px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:19px;letter-spacing:0.06em;margin-bottom:16px">STARTER TAB ISSUED</div>
+            <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px;margin-bottom:16px">
+              <tbody>
+                <sc-for list="{{ starter }}" as="s" hint-placeholder-count="4">
+                  <tr style="border-bottom:1px solid var(--rule-soft)">
+                    <th scope="row" style="text-align:left;padding:7px 0;font-weight:400;color:var(--ink-2)">{{ s.k }}</th>
+                    <td style="text-align:right;font-weight:600">{{ s.v }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <button type="button" style="font-family:'Public Sans',sans-serif;font-weight:700;font-size:16px;background:var(--caution);color:var(--on-caution);border:var(--bw) solid var(--ink);border-radius:2px;padding:11px 20px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">Make the first spend</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CEILING -->
+      <sc-if value="{{ isCeiling }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start">
+          <div style="display:grid;gap:20px">
+            <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden">
+              <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">Inputs in force</div>
+              <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px">
+                <tbody>
+                  <sc-for list="{{ ceilingRows }}" as="c" hint-placeholder-count="9">
+                    <tr style="border-bottom:{{ c.rule }}">
+                      <th scope="row" style="text-align:left;padding:9px 16px;font-weight:{{ c.weight }};color:{{ c.fg }}">{{ c.label }}</th>
+                      <td style="padding:9px 16px;text-align:right;font-weight:{{ c.weight }};color:{{ c.fg }};white-space:nowrap">{{ c.value }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+              <div style="border-top:var(--bw) solid var(--ink);padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;padding:4px 10px;border:2px solid var(--ink);background:var(--caution);color:var(--on-caution);border-radius:2px;font-weight:600">BINDING</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-2)">the starter floor, not the computed value, is what the agent spends against</span>
+              </div>
+            </div>
+
+            <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow)">
+              <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">Ceiling history · stepped, because a ceiling changes discretely</div>
+              <div style="padding:20px 16px">
+                <svg viewBox="0 0 720 250" style="width:100%;height:auto;display:block" role="img" aria-label="Stepped ceiling history for the last twelve windows">
+                  <g stroke="var(--rule-soft)" stroke-width="1">
+                    <line x1="66" y1="30" x2="706" y2="30" /><line x1="66" y1="75" x2="706" y2="75" /><line x1="66" y1="120" x2="706" y2="120" /><line x1="66" y1="165" x2="706" y2="165" /><line x1="66" y1="210" x2="706" y2="210" />
+                  </g>
+                  <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">
+                    <text x="8" y="34">2.0000</text><text x="8" y="79">1.5000</text><text x="8" y="124">1.0000</text><text x="8" y="169">0.5000</text><text x="8" y="214">0.0000</text>
+                  </g>
+                  <path d="M66 120 L172 120 L172 120 L278 120 L278 106 L384 106 L384 78 L490 78 L490 210 L544 210 L544 120 L650 120 L650 92 L706 92" fill="none" stroke="var(--ink)" stroke-width="2.5" />
+                  <circle cx="706" cy="92" r="5" fill="var(--pen)" stroke="var(--ink)" stroke-width="2.5" />
+                  <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">
+                    <text x="284" y="100">clean +15%</text>
+                    <text x="390" y="72">clean +15%</text>
+                    <text x="496" y="228" fill="var(--debit)">control cluster → 0</text>
+                    <text x="550" y="114">starter floor restored</text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow)">
+            <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">Verify · no contract required</div>
+            <div style="padding:18px;display:grid;gap:14px">
+              <div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">MODEL_VERSION</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600">ceiling-v0.4.1</div>
+              </div>
+              <div style="border:var(--bw) solid {{ verifyBorder }};border-radius:2px;padding:12px;background:var(--sunk);position:relative;overflow:hidden">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">Canonical input hash</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;word-break:break-all;line-height:1.6">9f2c41b0d7e8a35c1146bb90ee2d7a04c8f31d5b6e07a9224fbb1c0d3e5a7788</div>
+                <div data-stamp="{{ verifyStamp }}" style="position:absolute;right:12px;bottom:10px;transform:rotate(-6deg);border:3px solid var(--credit);color:var(--credit);border-radius:3px;padding:2px 10px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:19px;letter-spacing:0.06em;opacity:{{ verifyOpacity }};pointer-events:none">VERIFIED</div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-2);display:flex;justify-content:space-between">
+                <span>HCS sequence</span><a href="#" style="color:var(--pen)">41 862 ↗</a>
+              </div>
+              <button type="button" onClick="{{ recompute }}" style="font-family:'Public Sans',sans-serif;font-weight:700;font-size:16px;background:var(--caution);color:var(--on-caution);border:var(--bw) solid var(--ink);border-radius:2px;padding:12px 18px;cursor:pointer;box-shadow:var(--shadow);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">{{ verifyLabel }}</button>
+              <p style="font-size:14px;line-height:1.7;color:var(--ink-2);margin:0">Recompute the ceiling from the published inputs and compare against the hash on HCS. This is the no-smart-contract argument made operable.</p>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- COUNTERPARTIES -->
+      <sc-if value="{{ isParties }}" hint-placeholder-val="{{ true }}">
+        <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden">
+          <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;display:flex;gap:12px">
+            <span>Weights and reasons</span>
+            <span style="margin-left:auto;color:var(--ink-3);text-transform:none;letter-spacing:0">AGE_FULL_DAYS = 3 · tuned down from 30 for testnet, where every account is young</span>
+          </div>
+          <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px">
+            <thead>
+              <tr style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink)">
+                <sc-for list="{{ partyCols }}" as="c" hint-placeholder-count="8">
+                  <th scope="col" style="text-align:{{ c.align }};padding:8px 12px;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap">{{ c.label }}</th>
+                </sc-for>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ parties }}" as="p" hint-placeholder-count="6">
+                <tr onClick="{{ p.onToggle }}" style="background:{{ p.stripe }};border-bottom:1px solid var(--rule-soft);cursor:pointer">
+                  <td style="padding:8px 12px;font-weight:500">{{ p.id }}</td>
+                  <td style="padding:8px 12px;color:var(--ink-3)">{{ p.seen }}</td>
+                  <td style="padding:8px 12px;text-align:right;color:var(--ink-2)">{{ p.age }}</td>
+                  <td style="padding:8px 12px;color:var(--ink-2)">{{ p.dir }}</td>
+                  <td style="padding:8px 12px;text-align:right">{{ p.vol }}</td>
+                  <td style="padding:8px 12px;text-align:right;color:{{ p.shareColor }}">{{ p.share }}</td>
+                  <td style="padding:8px 12px">
+                    <span style="display:inline-flex;align-items:center;gap:8px">
+                      <span style="display:inline-block;width:86px;height:11px;border:2px solid var(--ink);border-radius:1px;background:var(--sunk);position:relative;overflow:hidden"><span style="position:absolute;inset:0 auto 0 0;width:{{ p.wPct }};background:var(--pen)"></span></span>
+                      <span style="font-weight:600">{{ p.weight }}</span>
+                    </span>
+                  </td>
+                  <td style="padding:8px 12px"><span style="font-size:11px;letter-spacing:0.06em;padding:3px 8px;border:2px solid {{ p.chipBorder }};background:{{ p.chipBg }};color:{{ p.chipFg }};border-radius:2px;font-weight:600">{{ p.reason }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+            <div style="border-top:var(--bw) solid var(--ink);background:var(--sunk);padding:20px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px">Evidence · funding ancestry for {{ expanded }}</div>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:12.5px">
+                <sc-for list="{{ hops }}" as="h" hint-placeholder-count="3">
+                  <span style="display:inline-flex;align-items:center">
+                    <span style="border:var(--bw) solid {{ h.border }};background:{{ h.bg }};color:{{ h.fg }};border-radius:2px;padding:8px 12px;font-weight:{{ h.weight }}">{{ h.label }}</span>
+                    <span style="color:var(--ink-3);padding:0 8px">{{ h.arrow }}</span>
+                  </span>
+                </sc-for>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-2);margin-top:14px;line-height:1.9">
+                <div>{{ evidenceHops }}</div>
+                <div>{{ evidenceShare }}</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- RECEIPTS -->
+      <sc-if value="{{ isReceipts }}" hint-placeholder-val="{{ true }}">
+        <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden">
+          <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">Filter</span>
+            <div style="display:flex;border:2px solid var(--ink);border-radius:2px;overflow:hidden">
+              <sc-for list="{{ legFilters }}" as="l" hint-placeholder-count="4">
+                <button type="button" onClick="{{ l.onPick }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;padding:5px 12px;border:0;border-right:2px solid var(--ink);cursor:pointer;background:{{ l.bg }};color:{{ l.fg }}">{{ l.label }}</button>
+              </sc-for>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;cursor:pointer">
+              <input type="checkbox" checked="{{ attestedOnly }}" onChange="{{ toggleAttested }}" style="width:18px;height:18px;accent-color:var(--pen);cursor:pointer" />attested only
+            </label>
+            <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-3)">{{ receiptCount }} of {{ totalCount }}</span>
+              <button type="button" onClick="{{ toggleStream }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--surface);border:2px solid var(--ink);border-radius:2px;padding:3px 11px;cursor:pointer;color:var(--ink)">{{ streamLabel }}</button>
+            </span>
+          </div>
+          <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px">
+            <thead>
+              <tr style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink)">
+                <sc-for list="{{ receiptCols }}" as="c" hint-placeholder-count="7">
+                  <th scope="col" style="text-align:{{ c.align }};padding:8px 12px;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap">{{ c.label }}</th>
+                </sc-for>
+              </tr>
+            </thead>
+            <tbody aria-live="polite">
+              <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="14">
+                <tr data-flash="{{ r.flash }}" style="background:{{ r.stripe }};border-bottom:1px solid var(--rule-soft)">
+                  <td style="padding:7px 12px;color:var(--ink-2);white-space:nowrap">{{ r.ts }}</td>
+                  <td style="padding:7px 12px"><span style="font-size:11px;letter-spacing:0.13em;padding:2px 10px;border-radius:999px;border:2px solid {{ r.legBorder }};color:{{ r.legFg }};background:{{ r.legBg }};font-weight:600">{{ r.leg }}</span></td>
+                  <td style="padding:7px 12px">{{ r.cp }}</td>
+                  <td style="padding:7px 12px;text-align:right;font-weight:600;color:{{ r.amtColor }}">{{ r.amt }}</td>
+                  <td style="padding:7px 12px;color:var(--ink-2)">{{ r.att }}</td>
+                  <td style="padding:7px 12px;color:var(--ink-3)">{{ r.hash }}</td>
+                  <td style="padding:7px 12px;text-align:right"><a href="#" style="color:var(--pen)">{{ r.seq }}</a></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </sc-if>
+
+      <!-- SETTLEMENTS -->
+      <sc-if value="{{ isSettlements }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;gap:20px">
+          <div style="border:var(--bw) solid var(--credit);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);padding:16px 18px;display:flex;flex-wrap:wrap;gap:18px;align-items:center">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">Reconciliation · Mirror Node vs receipt topic</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600">checked 43 · matched 43 · repaired 0</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;padding:3px 10px;border:2px solid var(--credit);color:var(--credit);border-radius:2px;font-weight:600">CLEAN</span>
+          </div>
+          <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden">
+            <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px">
+              <thead>
+                <tr style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink)">
+                  <sc-for list="{{ settleCols }}" as="c" hint-placeholder-count="8">
+                    <th scope="col" style="text-align:{{ c.align }};padding:8px 12px;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap">{{ c.label }}</th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ settlements }}" as="s" hint-placeholder-count="6">
+                  <tr onClick="{{ s.onToggle }}" style="background:{{ s.stripe }};border-bottom:1px solid var(--rule-soft);cursor:pointer">
+                    <td style="padding:8px 12px;font-weight:600">{{ s.win }}</td>
+                    <td style="padding:8px 12px;color:var(--ink-3)">{{ s.range }}</td>
+                    <td style="padding:8px 12px;text-align:right;color:var(--credit)">{{ s.credits }}</td>
+                    <td style="padding:8px 12px;text-align:right;color:var(--debit)">{{ s.debits }}</td>
+                    <td style="padding:8px 12px;text-align:right;color:var(--ink-2)">{{ s.interest }}</td>
+                    <td style="padding:8px 12px;text-align:right;font-weight:600;color:{{ s.netColor }}">{{ s.net }}</td>
+                    <td style="padding:8px 12px;color:var(--ink-2)">{{ s.ramp }}</td>
+                    <td style="padding:8px 12px"><span style="font-size:11px;letter-spacing:0.06em;padding:3px 8px;border:2px solid {{ s.outBorder }};color:{{ s.outFg }};background:{{ s.outBg }};border-radius:2px;font-weight:600">{{ s.outcome }}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <sc-if value="{{ settleOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="border-top:var(--bw) solid var(--ink);background:var(--sunk);padding:20px;display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+                <div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px">Netting · window {{ settleOpen }}</div>
+                  <table style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;min-width:280px">
+                    <tbody>
+                      <sc-for list="{{ netting }}" as="n" hint-placeholder-count="5">
+                        <tr style="border-bottom:{{ n.rule }}">
+                          <th scope="row" style="text-align:left;padding:6px 20px 6px 0;font-weight:{{ n.weight }};color:{{ n.fg }}">{{ n.k }}</th>
+                          <td style="text-align:right;padding:6px 0;font-weight:{{ n.weight }};color:{{ n.fg }}">{{ n.v }}</td>
+                        </tr>
+                      </sc-for>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:14px;line-height:2;color:var(--ink-2)">
+                  <div style="font-size:24px;font-weight:600;color:var(--ink)">43 receipts → 1 transfer</div>
+                  <div>transfer id <a href="#" style="color:var(--pen)">0.0.4881190@1755738300.114 ↗</a></div>
+                  <div>float account touched once</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- REFUSALS -->
+      <sc-if value="{{ isRefusals }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;gap:18px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ ruleFilters }}" as="f" hint-placeholder-count="5">
+              <button type="button" onClick="{{ f.onPick }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;padding:6px 12px;border:var(--bw) solid var(--ink);border-radius:2px;cursor:pointer;background:{{ f.bg }};color:{{ f.fg }};display:inline-flex;gap:8px;align-items:center">
+                <span>{{ f.label }}</span><span style="font-variant-numeric:tabular-nums;color:{{ f.countFg }}">{{ f.count }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-for list="{{ refusals }}" as="r" hint-placeholder-count="3">
+            <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);position:relative;overflow:hidden">
+              <div style="height:12px;background-image:repeating-linear-gradient(45deg,var(--caution) 0 10px,var(--ink) 10px 20px);border-bottom:var(--bw) solid var(--ink)"></div>
+              <div style="padding:18px 22px 20px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:0.06em;padding:5px 12px;border:var(--bw) solid var(--ink);background:var(--caution);color:var(--on-caution);border-radius:2px;font-weight:600;display:inline-block;margin-bottom:14px">{{ r.rule }}</span>
+                <p style="font-size:16px;line-height:1.65;margin:0 0 16px;max-width:64ch">{{ r.sentence }}</p>
+                <div style="background:var(--sunk);border:var(--bw) solid var(--ink);border-radius:2px;padding:14px;display:flex;flex-wrap:wrap;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:12.5px">
+                  <sc-for list="{{ r.evidence }}" as="h" hint-placeholder-count="3">
+                    <span style="display:inline-flex;align-items:center">
+                      <span style="border:var(--bw) solid {{ h.border }};background:{{ h.bg }};color:{{ h.fg }};border-radius:2px;padding:7px 11px;font-weight:{{ h.weight }}">{{ h.label }}</span>
+                      <span style="color:var(--ink-3);padding:0 8px">{{ h.arrow }}</span>
+                    </span>
+                  </sc-for>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:var(--ink-3);margin-top:14px;display:flex;flex-wrap:wrap;gap:16px">
+                  <span>{{ r.ts }}</span><span>seq {{ r.seq }}</span><span style="color:var(--credit);font-weight:600">float untouched</span>
+                </div>
+              </div>
+              <div data-stamp="{{ r.stamp }}" style="position:absolute;right:24px;bottom:22px;transform:rotate(-8deg);border:4px solid var(--debit);color:var(--debit);border-radius:3px;padding:4px 14px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:0.06em;pointer-events:none">REFUSED</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- CONFIG -->
+      <sc-if value="{{ isConfig }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;gap:20px;max-width:900px">
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600">MODEL_VERSION ceiling-v0.4.1</span>
+            <button type="button" onClick="{{ copyConfig }}" style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:var(--surface);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:2px;padding:7px 14px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">{{ copyLabel }}</button>
+          </div>
+          <sc-for list="{{ configGroups }}" as="g" hint-placeholder-count="3">
+            <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden">
+              <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">{{ g.name }}</div>
+              <table style="width:100%;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12.5px">
+                <tbody>
+                  <sc-for list="{{ g.rows }}" as="row" hint-placeholder-count="4">
+                    <tr style="background:{{ row.stripe }};border-bottom:1px solid var(--rule-soft)">
+                      <th scope="row" style="text-align:left;padding:8px 14px;font-weight:400;color:var(--ink-2)">{{ row.k }}</th>
+                      <td style="padding:8px 14px;text-align:right;font-weight:600">{{ row.v }}</td>
+                      <td style="padding:8px 14px;width:1%;white-space:nowrap"><span style="font-size:11px;letter-spacing:0.06em;padding:{{ row.flagPad }};border:{{ row.flagBorder }};background:{{ row.flagBg }};color:{{ row.flagFg }};border-radius:2px;font-weight:600">{{ row.flag }}</span></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1360,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = {
+    view: 'TAB', theme: 'light', stale: false, streaming: true,
+    balance: -0.4821, holds: 0.09, flashKey: 'none', seconds: 214,
+    expanded: null, settleOpen: null, legFilter: 'ALL', attested: false,
+    verify: 'idle', copied: false, rows: null, seq: 41898, refusalStamp: 'off',
+  };
+
+  componentDidMount() {
+    this.applyTheme('light');
+    this.setState({ rows: this.seed() });
+    this.timer = setInterval(() => {
+      this.setState((s) => ({ seconds: s.seconds > 0 ? s.seconds - 1 : 300 }));
+    }, 1000);
+    this.stream = setInterval(() => this.emit(), 3400);
+  }
+  componentWillUnmount() { clearInterval(this.timer); clearInterval(this.stream); }
+
+  applyTheme(t) {
+    const el = document.documentElement;
+    if (t === 'dark') el.setAttribute('data-theme', 'dark'); else el.removeAttribute('data-theme');
+  }
+
+  seed() {
+    const base = [
+      ['1755738214.883104227', 'DEBIT', '0.0.5591204', -0.04, true],
+      ['1755738211.117640882', 'CREDIT', '0.0.4410877', 0.025, true],
+      ['1755738208.402911005', 'DEBIT', '0.0.5120033', -0.018, true],
+      ['1755738205.771002944', 'CREDIT', '0.0.4410877', 0.025, true],
+      ['1755738201.446920113', 'REFUSED', '0.0.5591204', 0.04, false],
+      ['1755738197.905331276', 'DEBIT', '0.0.5120033', -0.018, true],
+      ['1755738193.220884610', 'CREDIT', '0.0.6002911', 0.012, false],
+      ['1755738188.664201773', 'DEBIT', '0.0.4899120', -0.009, true],
+      ['1755738184.019773450', 'CREDIT', '0.0.4410877', 0.025, true],
+      ['1755738180.552118307', 'DEBIT', '0.0.5120033', -0.018, true],
+      ['1755738175.884301226', 'DEBIT', '0.0.7710455', -0.031, true],
+      ['1755738171.330098871', 'CREDIT', '0.0.6002911', 0.012, true],
+    ];
+    return base.map((r, i) => ({
+      ts: r[0], leg: r[1], cp: r[2], amt: r[3], att: r[4], seq: 41898 - i,
+      hash: ['b91c…e40a', '77df…3c19', '0ac4…918b', 'e2b8…41f7', '5d10…cc72', '3f6a…aa01', 'c48e…0d55', '19ab…7712', 'd034…5f8e', '8b52…c1a0', 'f77e…2d63', '4c19…90bb'][i],
+      flash: 'none',
+    }));
+  }
+
+  emit() {
+    if (!this.state.streaming || this.state.stale) return;
+    const roll = Math.random();
+    const seq = this.state.seq + 1;
+    const stamp = Date.now();
+    let leg, cp, amt, att;
+    if (roll < 0.18) { leg = 'REFUSED'; cp = '0.0.5591204'; amt = 0.04; att = false; }
+    else if (roll < 0.58) { leg = 'DEBIT'; cp = ['0.0.5120033', '0.0.7710455', '0.0.4899120'][Math.floor(Math.random() * 3)]; amt = -(Math.floor(Math.random() * 32 + 8) / 1000); att = true; }
+    else { leg = 'CREDIT'; cp = ['0.0.4410877', '0.0.6002911'][Math.floor(Math.random() * 2)]; amt = Math.floor(Math.random() * 22 + 8) / 1000; att = Math.random() > 0.2; }
+    const base = 1755738214.883104227 + (seq - 41898) * 3.4;
+    const row = {
+      ts: base.toFixed(9), leg, cp, amt, att, seq,
+      hash: Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 6),
+      flash: (leg === 'CREDIT' ? 'credit' : 'debit') + stamp,
+    };
+    this.setState((s) => ({
+      rows: [row].concat(s.rows || []).slice(0, 40),
+      seq,
+      balance: leg === 'REFUSED' ? s.balance : Math.round((s.balance + amt) * 10000) / 10000,
+      flashKey: leg === 'REFUSED' ? s.flashKey : (leg === 'CREDIT' ? 'credit' : 'debit') + stamp,
+      refusalStamp: leg === 'REFUSED' ? 'on' + stamp : s.refusalStamp,
+    }));
+  }
+
+  fmt(n, sign) {
+    const s = Math.abs(n).toFixed(4);
+    if (sign) return (n < 0 ? '\u2212' : '+') + s;
+    return (n < 0 ? '\u2212' : '') + s;
+  }
+
+  renderVals() {
+    const st = this.state;
+    const stripe = (i) => (i % 2 ? 'var(--sunk)' : 'transparent');
+    const rows = st.rows || this.seed();
+    const pick = (v) => () => this.setState({ view: v, expanded: null, settleOpen: null });
+
+    const counts = { TAB: '', CEILING: '', COUNTERPARTIES: '12', RECEIPTS: String(rows.length), SETTLEMENTS: '6', REFUSALS: '3', AGENTS: '4', CONFIG: '' };
+    const nav = ['TAB', 'CEILING', 'COUNTERPARTIES', 'RECEIPTS', 'SETTLEMENTS', 'REFUSALS', 'AGENTS', 'CONFIG'].map((k) => ({
+      label: k, count: counts[k], onPick: pick(k),
+      bg: st.view === k ? '#252A1E' : 'transparent',
+      fg: st.view === k ? '#E7EBE0' : '#B9C2AC',
+      mark: st.view === k ? '#F2C230' : 'transparent',
+      countFg: st.view === k ? '#F2C230' : '#6B7462',
+    }));
+
+    const titles = {
+      TAB: ['Tab', 'balance, ceiling, available, holds'],
+      CEILING: ['Ceiling', 'inputs, tier, ramp, model version, verify'],
+      COUNTERPARTIES: ['Counterparties', 'weights and the reason behind each'],
+      RECEIPTS: ['Receipts', 'live stream, both legs'],
+      SETTLEMENTS: ['Settlements', 'window history'],
+      REFUSALS: ['Refusals', 'every refused spend, and why'],
+      AGENTS: ['Agents', 'registry and starter tabs'],
+      CONFIG: ['Config', 'every parameter in force'],
+    };
+    const t = titles[st.view] || titles.TAB;
+
+    const legStyle = {
+      DEBIT: { legBorder: 'var(--debit)', legFg: 'var(--debit)', legBg: 'transparent', amtColor: 'var(--debit)' },
+      CREDIT: { legBorder: 'var(--credit)', legFg: 'var(--credit)', legBg: 'transparent', amtColor: 'var(--credit)' },
+      REFUSED: { legBorder: 'var(--ink)', legFg: '#14180F', legBg: 'var(--caution)', amtColor: 'var(--ink-3)' },
+    };
+    let visible = rows;
+    if (st.view === 'RECEIPTS') {
+      if (st.legFilter !== 'ALL') visible = visible.filter((r) => r.leg === st.legFilter);
+      if (st.attested) visible = visible.filter((r) => r.att);
+    } else {
+      visible = rows.slice(0, 12);
+    }
+    const receipts = visible.map((r, i) => ({
+      ts: r.ts, leg: r.leg, cp: r.cp, att: r.leg === 'REFUSED' ? '\u2014' : (r.att ? 'yes' : 'no'),
+      hash: r.hash, seq: r.seq.toLocaleString('en-US').replace(/,/g, '\u2009'),
+      amt: r.leg === 'REFUSED' ? r.amt.toFixed(4) : this.fmt(r.amt, true),
+      stripe: stripe(i), flash: r.flash, ...legStyle[r.leg],
+    }));
+
+    const out = Math.abs(Math.min(st.balance, 0));
+    const avail = Math.max(0, 1 - out - st.holds);
+
+    const partyData = [
+      ['0.0.4410877', '61d ago', '61', 'buys from', '0.3340', 0.34, 1.0, 'INDEPENDENT'],
+      ['0.0.5120033', '12d ago', '12', 'sells to', '0.1980', 0.2, 0.8, 'AGE_DISCOUNT'],
+      ['0.0.6002911', '44d ago', '44', 'both', '0.1420', 0.14, 0.6, 'RECIPROCAL_FLOW'],
+      ['0.0.4899120', '38d ago', '38', 'sells to', '0.4360', 0.44, 0.5, 'CONCENTRATION'],
+      ['0.0.7710455', '9d ago', '9', 'sells to', '0.0880', 0.09, 0.8, 'SHARED_ROOT'],
+      ['0.0.5591204', '4d ago', '4', 'sells to', '0.0400', 0.04, 0.0, 'HARD_BLOCK_ANCESTRY'],
+    ];
+    const chipFor = (r) => r === 'INDEPENDENT'
+      ? { chipBorder: 'var(--rule-soft)', chipBg: 'transparent', chipFg: 'var(--ink-3)' }
+      : (r.indexOf('HARD_BLOCK') === 0
+        ? { chipBorder: 'var(--debit)', chipBg: 'var(--debit)', chipFg: '#FBFCF8' }
+        : { chipBorder: 'var(--ink)', chipBg: 'var(--caution)', chipFg: '#14180F' });
+    const parties = partyData.map((p, i) => ({
+      id: p[0], seen: p[1], age: p[2], dir: p[3], vol: p[4], share: (p[5] * 100).toFixed(2) + '%',
+      weight: p[6].toFixed(2), wPct: Math.round(p[6] * 100) + '%', reason: p[7],
+      shareColor: p[5] > 0.4 ? 'var(--debit)' : 'var(--ink)',
+      stripe: st.expanded === p[0] ? 'var(--pen-soft)' : stripe(i),
+      onToggle: () => this.setState({ expanded: st.expanded === p[0] ? null : p[0] }),
+      ...chipFor(p[7]),
+    }));
+    const expandedRow = partyData.filter((p) => p[0] === st.expanded)[0];
+
+    const hopsFor = (id) => [
+      { label: 'agent 0.0.4482091', border: 'var(--ink)', bg: 'var(--surface)', fg: 'var(--ink)', weight: '500', arrow: '\u2192' },
+      { label: '0.0.5300118', border: 'var(--ink)', bg: 'var(--surface)', fg: 'var(--ink)', weight: '400', arrow: '\u2192' },
+      { label: 'seller ' + (id || '0.0.5591204'), border: 'var(--debit)', bg: 'var(--debit)', fg: '#FBFCF8', weight: '600', arrow: '' },
+    ];
+
+    const hair = '1px solid var(--rule-soft)';
+    const ceilingRows = [
+      { label: 'Trailing attested revenue / window', value: '0.3340', rule: hair, weight: '500', fg: 'var(--ink)' },
+      { label: '\u251c attested inflows \u00d7 1.0', value: '0.3340', rule: hair, weight: '400', fg: 'var(--ink-3)' },
+      { label: '\u2514 unattested inflows \u00d7 0.6', value: '0.0000', rule: hair, weight: '400', fg: 'var(--ink-3)' },
+      { label: 'Tier multiple · C', value: '1.0\u00d7', rule: hair, weight: '400', fg: 'var(--ink-2)' },
+      { label: 'Ramp factor', value: '30%', rule: '2.5px solid var(--ink)', weight: '400', fg: 'var(--ink-2)' },
+      { label: 'Computed', value: '0.3340', rule: hair, weight: '500', fg: 'var(--ink)' },
+      { label: 'Hard cap, tier C', value: '2.0000', rule: hair, weight: '400', fg: 'var(--ink-3)' },
+      { label: 'Starter floor', value: '1.0000', rule: '4px double var(--ink)', weight: '400', fg: 'var(--ink-3)' },
+      { label: 'CEILING IN FORCE', value: '1.0000', rule: '0', weight: '600', fg: 'var(--pen)' },
+    ];
+
+    const settleData = [
+      ['0147', '13:52 – 14:02', '0.1120', '\u22120.3280', '0.0000', -0.216, '30% → 45%', 'CLEAN'],
+      ['0146', '13:42 – 13:52', '0.0870', '\u22120.2410', '0.0000', -0.154, '15% → 30%', 'CLEAN'],
+      ['0145', '13:32 – 13:42', '0.0000', '\u22120.0900', '0.0002', -0.0898, '45% → 15%', 'MISSED'],
+      ['0144', '13:22 – 13:32', '0.1440', '\u22120.1120', '0.0000', 0.032, '30% → 45%', 'CLEAN'],
+      ['0143', '13:12 – 13:22', '0.0320', '\u22120.1980', '0.0000', -0.166, '30% → 30%', 'CARRIED'],
+      ['0142', '13:02 – 13:12', '0.0910', '\u22120.0710', '0.0000', 0.02, '15% → 30%', 'CLEAN'],
+    ];
+    const outStyle = {
+      CLEAN: { outBorder: 'var(--credit)', outFg: 'var(--credit)', outBg: 'transparent' },
+      MISSED: { outBorder: 'var(--ink)', outFg: '#14180F', outBg: 'var(--caution)' },
+      CARRIED: { outBorder: 'var(--ink-3)', outFg: 'var(--ink-3)', outBg: 'transparent' },
+    };
+    const settlements = settleData.map((s, i) => ({
+      win: s[0], range: s[1], credits: s[2], debits: s[3], interest: s[4],
+      net: this.fmt(s[5], true), netColor: s[5] < 0 ? 'var(--debit)' : 'var(--credit)',
+      ramp: s[6], outcome: s[7], stripe: st.settleOpen === s[0] ? 'var(--pen-soft)' : stripe(i),
+      onToggle: () => this.setState({ settleOpen: st.settleOpen === s[0] ? null : s[0] }),
+      ...outStyle[s[7]],
+    }));
+
+    const refusalData = [
+      ['CONTROL_CLUSTER · funding ancestry ≤ 3 hops', 'Spend of $0.0400 to 0.0.5591204 refused. The agent funded this seller two hops back, so the purchase would be self-dealing and the revenue would not be real.', '1755738201.446920113', '41\u2009894'],
+      ['PER_CALL_CAP · 0.0500', 'Spend of $0.0720 to 0.0.7710455 refused. The request exceeds the per-call cap in force for tier C.', '1755738166.902144037', '41\u2009881'],
+      ['CEILING_EXCEEDED · outstanding + holds + amount', 'Spend of $0.0900 to 0.0.5120033 refused. Outstanding 0.4821 plus holds 0.0900 plus the request would pass the 1.0000 ceiling.', '1755738142.771903882', '41\u2009868'],
+    ];
+    const refusals = refusalData.map((r, i) => ({
+      rule: r[0], sentence: r[1], ts: r[2], seq: r[3],
+      stamp: i === 0 ? st.refusalStamp : 'off',
+      evidence: i === 0 ? hopsFor('0.0.5591204') : [
+        { label: i === 1 ? 'request 0.0720' : 'outstanding 0.4821', border: 'var(--debit)', bg: 'transparent', fg: 'var(--debit)', weight: '600', arrow: 'vs' },
+        { label: i === 1 ? 'cap 0.0500' : 'ceiling 1.0000', border: 'var(--ink)', bg: 'var(--surface)', fg: 'var(--ink)', weight: '500', arrow: '' },
+      ],
+    }));
+
+    const ruleCounts = [['ALL', '3'], ['CONTROL_CLUSTER', '1'], ['PER_CALL_CAP', '1'], ['CEILING_EXCEEDED', '1'], ['WINDOW_CAP', '0']];
+
+    const cfg = (name, rows) => ({
+      name,
+      rows: rows.map((r, i) => ({
+        k: r[0], v: r[1], flag: r[2] || '', stripe: stripe(i),
+        flagPad: r[2] ? '3px 8px' : '0',
+        flagBorder: r[2] ? '2px solid var(--ink)' : '0',
+        flagBg: r[2] ? 'var(--caution)' : 'transparent',
+        flagFg: r[2] ? '#14180F' : 'transparent',
+      })),
+    });
+
+    const secs = st.seconds;
+    const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+    const ss = String(secs % 60).padStart(2, '0');
+
+    return {
+      nav,
+      viewTitle: t[0], viewSub: t[1],
+      isTab: st.view === 'TAB' || st.view === 'AGENTS',
+      isCeiling: st.view === 'CEILING',
+      isParties: st.view === 'COUNTERPARTIES',
+      isReceipts: st.view === 'RECEIPTS',
+      isSettlements: st.view === 'SETTLEMENTS',
+      isRefusals: st.view === 'REFUSALS',
+      isConfig: st.view === 'CONFIG',
+
+      countdown: mm + ':' + ss,
+      themeLabel: st.theme === 'dark' ? 'Carbon' : 'Ledger',
+      toggleTheme: () => { const th = st.theme === 'dark' ? 'light' : 'dark'; this.applyTheme(th); this.setState({ theme: th }); },
+      connLabel: st.stale ? 'STALE' : 'STREAMING',
+      connBg: st.stale ? 'var(--caution)' : 'var(--surface)',
+      connFg: st.stale ? '#14180F' : 'var(--ink)',
+      connDot: st.stale ? '#14180F' : 'var(--credit)',
+      toggleStale: () => this.setState({ stale: !st.stale }),
+
+      flashKey: st.flashKey,
+      balText: this.fmt(st.balance),
+      balColor: st.balance < 0 ? 'var(--debit)' : 'var(--credit)',
+      balNote: st.stale ? 'snapshot age 41s · max 15s · stream dropped' : 'USDC · 6 dp, shown to 4 · truncated, not rounded',
+      staleRule: st.stale ? '2px solid var(--caution)' : '0',
+      outstanding: out.toFixed(4),
+      held: st.holds.toFixed(4),
+      available: avail.toFixed(4),
+      pctOut: Math.min(100, out * 100) + '%',
+      pctHold: Math.min(100, st.holds * 100) + '%',
+      tiles: [
+        { label: 'available', value: avail.toFixed(4), color: 'var(--credit)', pct: Math.round(avail * 100) + '%' },
+        { label: 'per-call cap', value: '0.0500', color: 'var(--ink)', pct: '0%' },
+        { label: 'window spend', value: '0.62 / 1.00', color: 'var(--ink)', pct: '62%' },
+        { label: 'tier', value: 'C', color: 'var(--ink)', pct: '33%' },
+      ],
+      starter: [
+        { k: 'ceiling', v: '1.0000' }, { k: 'per-call cap', v: '0.0500' },
+        { k: 'sellers', v: 'allowlist' }, { k: 'graduates', v: 'first clean settlement' },
+      ],
+
+      receipts, receiptCount: receipts.length, totalCount: rows.length,
+      receiptCols: [
+        { label: 'Consensus', align: 'left' }, { label: 'Leg', align: 'left' }, { label: 'Counterparty', align: 'left' },
+        { label: 'Amount', align: 'right' }, { label: 'Att', align: 'left' }, { label: 'Request hash', align: 'left' }, { label: 'Seq', align: 'right' },
+      ],
+      streamLabel: st.streaming ? 'Pause stream' : 'Resume stream',
+      toggleStream: () => this.setState({ streaming: !st.streaming }),
+      forceSettle: () => this.setState({ view: 'SETTLEMENTS', settleOpen: '0147' }),
+      legFilters: ['ALL', 'DEBIT', 'CREDIT', 'REFUSED'].map((l) => ({
+        label: l, onPick: () => this.setState({ legFilter: l }),
+        bg: st.legFilter === l ? 'var(--ink)' : 'var(--surface)',
+        fg: st.legFilter === l ? 'var(--paper)' : 'var(--ink)',
+      })),
+      attestedOnly: st.attested,
+      toggleAttested: () => this.setState({ attested: !st.attested }),
+
+      ceilingRows,
+      verifyLabel: st.verify === 'ok' ? 'Recomputed · matches HCS' : 'Recompute and verify',
+      verifyBorder: st.verify === 'ok' ? 'var(--credit)' : 'var(--ink)',
+      verifyStamp: st.verify === 'ok' ? 'on1' : 'off',
+      verifyOpacity: st.verify === 'ok' ? 1 : 0,
+      recompute: () => this.setState({ verify: st.verify === 'ok' ? 'idle' : 'ok' }),
+
+      parties,
+      partyCols: [
+        { label: 'Account', align: 'left' }, { label: 'First seen', align: 'left' }, { label: 'Age d', align: 'right' },
+        { label: 'Direction', align: 'left' }, { label: 'Volume', align: 'right' }, { label: 'Share', align: 'right' },
+        { label: 'Weight', align: 'left' }, { label: 'Reason', align: 'left' },
+      ],
+      expanded: st.expanded,
+      hops: hopsFor(st.expanded),
+      evidenceHops: expandedRow ? 'hop count 2 against limit \u2264 3' : '',
+      evidenceShare: expandedRow ? 'computed share ' + (expandedRow[5] * 100).toFixed(2) + '% against cap 40.00%' : '',
+
+      settlements,
+      settleCols: [
+        { label: 'Window', align: 'left' }, { label: 'Range', align: 'left' }, { label: 'Credits', align: 'right' },
+        { label: 'Debits', align: 'right' }, { label: 'Interest', align: 'right' }, { label: 'Net', align: 'right' },
+        { label: 'Ramp', align: 'left' }, { label: 'Outcome', align: 'left' },
+      ],
+      settleOpen: st.settleOpen,
+      netting: [
+        { k: 'credits', v: '+0.1120', rule: hair, weight: '400', fg: 'var(--credit)' },
+        { k: 'debits', v: '\u22120.3280', rule: hair, weight: '400', fg: 'var(--debit)' },
+        { k: 'interest', v: '0.0000', rule: '2.5px solid var(--ink)', weight: '400', fg: 'var(--ink-2)' },
+        { k: 'net transfer', v: '\u22120.2160', rule: '4px double var(--ink)', weight: '600', fg: 'var(--ink)' },
+      ],
+
+      refusals,
+      ruleFilters: ruleCounts.map((r) => ({
+        label: r[0], count: r[1], onPick: () => {},
+        bg: r[0] === 'ALL' ? 'var(--ink)' : 'var(--surface)',
+        fg: r[0] === 'ALL' ? 'var(--paper)' : 'var(--ink)',
+        countFg: r[0] === 'ALL' ? 'var(--caution)' : 'var(--ink-3)',
+      })),
+
+      configGroups: [
+        cfg('Credit', [['CEILING_MODEL', 'ceiling-v0.4.1'], ['STARTER_CEILING', '1.0000'], ['HARD_CAP_C', '2.0000'], ['RAMP_STEP_CLEAN', '+15%'], ['RAMP_STEP_MISSED', '\u221230%']]),
+        cfg('Independence', [['MAX_FUNDING_HOPS', '3'], ['CONCENTRATION_CAP', '40.00%'], ['AGE_FULL_DAYS', '3', 'overridden'], ['UNATTESTED_WEIGHT', '0.6']]),
+        cfg('Windows', [['WINDOW_SECONDS', '600'], ['SETTLE_MODE', 'scheduled_tx'], ['MAX_SNAPSHOT_AGE_S', '15'], ['PER_CALL_CAP', '0.0500']]),
+      ],
+      copyLabel: st.copied ? 'Copied' : 'Copy as JSON',
+      copyConfig: () => { this.setState({ copied: true }); setTimeout(() => this.setState({ copied: false }), 1400); },
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -40,7 +40,7 @@ See [ADR-0007](../../docs/adr/0007-hcs-as-source-of-truth.md).
   attempted in week three does not work. This is the check that keeps ADR-0007 honest.
 - **Migrations use Supabase's direct connection on port 5432**, not the transaction pooler on
   6543 — the pooler does not handle prepared statements or DDL reliably.
-- **`apps/dashboard` does not import this package.** It reads through `@tab/sdk`. A browser
+- **`apps/web` does not import this package.** It reads through `@tab/sdk`. A browser
   bundle must not be able to reach a database driver.
 - **`tools/verify` does not import this package.** Barred in `boundaries.json`, because a
   stranger recomputing a ceiling has no Postgres.

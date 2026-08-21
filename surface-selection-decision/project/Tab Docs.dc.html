@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&amp;family=Public+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<style>
+:root{
+  --paper:#E7EBE0; --surface:#FBFCF8; --sunk:#DDE3D4;
+  --ink:#14180F; --ink-2:#3D4636; --ink-3:#6B7462; --rule-soft:#B9C2AC;
+  --pen:#1F3A93; --pen-soft:#DDE3F5;
+  --credit:#17703F; --debit:#9E2B18; --caution:#F2C230;
+  --shadow:6px 6px 0 var(--ink); --shadow-sm:3px 3px 0 var(--ink); --bw:2.5px;
+  --on-caution:#14180F;
+}
+[data-theme="dark"]{
+  --paper:#12150E; --surface:#1B1F16; --sunk:#252A1E;
+  --ink:#E8EDE0; --ink-2:#B7C0AC; --ink-3:#8A9480; --rule-soft:#3E4636;
+  --pen:#9DB4F7; --pen-soft:#232C48;
+  --credit:#5FCB8B; --debit:#F0846C; --caution:#F2C230;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Public Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--pen);text-underline-offset:3px}
+a:hover{color:var(--ink);text-decoration-thickness:2px}
+:focus-visible{outline:3px solid var(--pen);outline-offset:3px}
+table{border-collapse:collapse}
+@keyframes snap-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+[data-palette]{animation:snap-in 90ms cubic-bezier(.2,0,.4,1) both}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:1ms !important;transition-duration:1ms !important}}
+#docs-shell{display:grid;grid-template-columns:260px minmax(0,1fr) 200px;max-width:1400px;margin:0 auto}
+#docs-rail{position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+#docs-outline{display:block}
+#docs-navtrigger{display:none}
+@media (max-width:1180px){
+  #docs-shell{grid-template-columns:240px minmax(0,1fr)}
+  #docs-outline{display:none}
+}
+@media (max-width:900px){
+  #docs-shell{grid-template-columns:minmax(0,1fr)}
+  #docs-rail{position:fixed;top:56px;left:0;bottom:0;width:280px;z-index:50;background:var(--paper);box-shadow:var(--shadow);transform:translateX(-102%);transition:transform 220ms cubic-bezier(.2,.7,.3,1)}
+  #docs-rail[data-open="1"]{transform:none}
+  #docs-navtrigger{display:inline-flex}
+  #docs-search{min-width:0 !important;flex:1;margin-left:8px !important}
+  #docs-main{padding:28px 20px 96px}
+}
+@media (max-width:640px){#docs-toplinks{display:none}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--paper)">
+  <header style="position:sticky;top:0;z-index:40;background:var(--surface);border-bottom:var(--bw) solid var(--ink);height:56px;display:flex;align-items:center;gap:16px;padding:0 24px">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:-0.03em">Tab</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">docs.tab.xyz</span>
+    <button type="button" id="docs-navtrigger" onClick="{{ toggleRail }}" style="align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;background:var(--surface);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:2px;padding:6px 11px;cursor:pointer;margin-left:16px">Contents</button>
+    <button type="button" id="docs-search" onClick="{{ openPalette }}" style="margin-left:24px;display:flex;align-items:center;gap:12px;min-width:280px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:var(--paper);color:var(--ink-3);border:var(--bw) solid var(--ink);border-radius:2px;padding:6px 12px;cursor:pointer;text-align:left">
+      <span style="flex:1">Search the docs</span><span style="color:var(--ink-2)">⌘K</span>
+    </button>
+    <nav id="docs-toplinks" style="display:flex;gap:16px;margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">
+      <a href="Tab Landing.dc.html" style="color:var(--ink-2);text-decoration:none">Landing</a>
+      <a href="Tab App.dc.html" style="color:var(--ink-2);text-decoration:none">App</a>
+      <a href="Tab Components.dc.html" style="color:var(--ink-3);text-decoration:none">Components</a>
+    </nav>
+    <button type="button" onClick="{{ toggleTheme }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;background:var(--surface);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 11px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 90ms cubic-bezier(.2,0,.4,1),box-shadow 90ms cubic-bezier(.2,0,.4,1)" style-hover="transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)" style-active="transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)">{{ themeLabel }}</button>
+  </header>
+
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePalette }}" style="position:fixed;inset:0;z-index:80;background:rgba(20,24,15,0.45);display:flex;align-items:flex-start;justify-content:center;padding-top:14vh">
+      <div data-palette="1" style="width:min(620px,92vw);border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow)">
+        <input type="text" placeholder="refusal codes, ceiling, attested…" value="{{ query }}" onInput="{{ setQuery }}" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:16px;padding:14px 16px;border:0;border-bottom:var(--bw) solid var(--ink);background:var(--surface);color:var(--ink);outline:none" />
+        <div style="max-height:52vh;overflow-y:auto">
+          <sc-for list="{{ results }}" as="r" hint-placeholder-count="6">
+            <div style="padding:10px 16px;border-bottom:1px solid var(--rule-soft);display:flex;gap:14px;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);width:110px;flex:none">{{ r.section }}</span>
+              <span style="font-size:14px;color:var(--ink)">{{ r.a }}<b style="color:var(--pen)">{{ r.hit }}</b>{{ r.b }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <div id="docs-shell">
+
+    <aside id="docs-rail" data-open="{{ railOpen }}" style="border-right:var(--bw) solid var(--ink);padding:28px 20px">
+      <sc-for list="{{ sidebar }}" as="s" hint-placeholder-count="6">
+        <div style="margin-bottom:24px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px">{{ s.group }}</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ s.items }}" as="i" hint-placeholder-count="4">
+              <a href="{{ i.href }}" onClick="{{ closeRail }}" style="font-size:14px;text-decoration:none;color:{{ i.color }};padding:3px 8px;border-left:2px solid {{ i.mark }}" style-hover="color:var(--pen);border-left-color:var(--pen)">{{ i.label }}</a>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </aside>
+
+    <main id="docs-main" style="padding:44px 40px 120px;min-width:0;max-width:800px">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3)">Start here</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;padding:3px 9px;border:2px solid var(--pen);color:var(--pen);border-radius:2px;font-weight:600">ceiling-v0.4.1</span>
+      </div>
+      <h1 id="quickstart" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.04;letter-spacing:-0.03em;margin:0 0 16px;text-wrap:balance">Quickstart</h1>
+      <p style="font-size:16px;line-height:1.7;color:var(--ink-2);max-width:68ch;margin:0 0 32px">Four steps. At the end of them, an agent with no wallet, no key and no USDC has paid a seller and you can read the receipt on HCS. The numbering is a sequence — order carries information.</p>
+
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:34px minmax(0,1fr);gap:16px;margin-bottom:26px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;border:var(--bw) solid var(--ink);border-radius:2px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface)">{{ s.n }}</div>
+          <div style="min-width:0">
+            <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:19px;letter-spacing:-0.02em;margin:4px 0 6px">{{ s.title }}</h3>
+            <p style="font-size:14px;line-height:1.7;color:var(--ink-2);margin:0 0 12px;max-width:68ch">{{ s.body }}</p>
+            <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);overflow:hidden">
+              <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:6px 12px;display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">
+                <span>{{ s.lang }}</span>
+                <button type="button" onClick="{{ s.onCopy }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;background:var(--surface);border:2px solid var(--ink);border-radius:2px;padding:2px 10px;cursor:pointer;color:var(--ink)">{{ s.copyLabel }}</button>
+              </div>
+              <pre style="margin:0;padding:14px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.8;color:var(--ink);overflow-x:auto">{{ s.code }}</pre>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--sunk);box-shadow:var(--shadow);padding:22px;margin:36px 0 56px">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;letter-spacing:-0.03em;margin-bottom:6px">The agent signed nothing.</div>
+        <div style="font-size:16px;line-height:1.7;color:var(--ink-2)">It holds no USDC. No key was provisioned. The gateway paid the seller from house float and moved your running balance by 0.0400.</div>
+      </div>
+
+      <h2 id="callouts" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.03em;margin:0 0 12px;padding-top:8px">Reading the callouts</h2>
+      <p style="font-size:16px;line-height:1.7;color:var(--ink-2);max-width:68ch;margin:0 0 20px">Four kinds, distinguished by border and label. <b>REFUSES</b> is Tab-specific and appears on every endpoint that can decline.</p>
+      <div style="display:grid;gap:12px;margin-bottom:56px">
+        <sc-for list="{{ callouts }}" as="c" hint-placeholder-count="4">
+          <div style="border:var(--bw) solid {{ c.border }};border-left-width:8px;border-radius:2px;background:var(--surface);padding:14px 16px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;font-weight:600;color:{{ c.border }};margin-bottom:6px">{{ c.label }}</div>
+            <div style="font-size:14px;line-height:1.7;color:var(--ink-2);max-width:66ch">{{ c.body }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <h2 id="spend" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.03em;margin:0 0 12px">POST /v1/spend</h2>
+      <p style="font-size:16px;line-height:1.7;color:var(--ink-2);max-width:68ch;margin:0 0 20px">Requests a spend against the tab. The gateway performs the six fast-path checks, writes a hold, pays the seller over x402, and returns the seller's response body.</p>
+
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);padding:14px 16px;font-family:'IBM Plex Mono',monospace;font-size:14px;margin-bottom:22px;overflow-x:auto">
+        <span style="color:var(--pen);font-weight:600">spend</span>(url: <span style="color:var(--pen)">string</span>, max: <span style="color:var(--pen)">Usdc</span>, idempotencyKey?: <span style="color:var(--pen)">string</span>) → <span style="color:var(--pen)">SpendResult</span>
+      </div>
+
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);overflow:hidden;margin-bottom:22px">
+        <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase">Parameters</div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;min-width:520px;font-size:14px">
+          <thead>
+            <tr style="border-bottom:var(--bw) solid var(--ink);background:var(--sunk)">
+              <th scope="col" style="text-align:left;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2)">Name</th>
+              <th scope="col" style="text-align:left;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2)">Type</th>
+              <th scope="col" style="text-align:left;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2)">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ params }}" as="p" hint-placeholder-count="3">
+              <tr style="background:{{ p.stripe }};border-bottom:1px solid var(--rule-soft)">
+                <td style="padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600">{{ p.name }}</td>
+                <td style="padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--pen)">{{ p.type }}</td>
+                <td style="padding:8px 14px;color:var(--ink-2);line-height:1.6">{{ p.meaning }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div style="border:var(--bw) solid var(--caution);border-left-width:8px;border-radius:2px;background:var(--surface);padding:14px 16px;margin-bottom:18px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;font-weight:600;color:var(--caution);margin-bottom:6px">Refuses</div>
+        <div style="font-size:14px;line-height:1.7;color:var(--ink-2);max-width:66ch">Handling refusal is the agent developer's main job. Every code this endpoint can return, and the condition that fires it:</div>
+      </div>
+
+      <div id="refusal-codes" style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden;margin-bottom:56px">
+        <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;display:flex;justify-content:space-between">
+          <span>Refusal codes</span><span style="color:var(--ink-3);text-transform:none;letter-spacing:0">every row is linkable</span>
+        </div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;min-width:620px;font-size:14px">
+          <thead>
+            <tr style="border-bottom:var(--bw) solid var(--ink);background:var(--sunk)">
+              <th scope="col" style="text-align:left;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2)">Code</th>
+              <th scope="col" style="text-align:left;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2)">Fires when</th>
+              <th scope="col" style="text-align:left;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-2)">Agent should</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ codes }}" as="c" hint-placeholder-count="6">
+              <tr id="{{ c.id }}" style="background:{{ c.stripe }};border-bottom:1px solid var(--rule-soft)">
+                <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;white-space:nowrap;color:var(--debit)">{{ c.code }}</td>
+                <td style="padding:9px 14px;color:var(--ink-2);line-height:1.6">{{ c.when }}</td>
+                <td style="padding:9px 14px;color:var(--ink);line-height:1.6">{{ c.next }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <h2 id="ceiling-formula" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.03em;margin:0 0 12px">The ceiling formula</h2>
+      <p style="font-size:16px;line-height:1.7;color:var(--ink-2);max-width:68ch;margin:0 0 20px">Displayed as arithmetic, with each term labelled, because a reader has to be able to check it against the CEILING view in the console.</p>
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);box-shadow:var(--shadow);padding:22px;margin-bottom:20px;font-family:'IBM Plex Mono',monospace;font-size:14px;line-height:2.2">
+        <div style="margin-bottom:12px"><span style="color:var(--pen);font-weight:600">ceiling</span> = min(</div>
+        <div style="padding-left:22px;display:grid;gap:10px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 9px;background:var(--sunk)">trailing_attested_revenue</span><span style="color:var(--ink-3)">×</span><span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 9px;background:var(--sunk)">tier_multiple</span><span style="color:var(--ink-3)">×</span><span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 9px;background:var(--sunk)">ramp_factor</span><span style="color:var(--ink-3)">,</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="border:var(--bw) solid var(--ink);border-radius:2px;padding:5px 9px;background:var(--sunk)">hard_cap[tier]</span></div>
+        </div>
+        <div style="margin-top:12px">)</div>
+        <div style="border-top:1px solid var(--rule-soft);margin-top:16px;padding-top:12px;font-size:12.5px;color:var(--ink-3);line-height:1.9">
+          <div>tier_multiple &nbsp;A 3.0 · B 2.0 · C 1.0 · Unrated 0</div>
+          <div>ramp_factor &nbsp;&nbsp;starts 15%, +15% per clean settlement, −30% per missed</div>
+          <div>a tab below its starter floor is raised to the floor unless the tier is Unrated</div>
+        </div>
+      </div>
+
+      <h2 id="schema" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.03em;margin:44px 0 12px">HCS receipt message</h2>
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);overflow:hidden;margin-bottom:56px">
+        <div style="background:var(--sunk);border-bottom:var(--bw) solid var(--ink);padding:6px 12px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;display:flex;justify-content:space-between">
+          <span>json · schema v2</span><span style="color:var(--ink-3);text-transform:none;letter-spacing:0">topic 0.0.4881203</span>
+        </div>
+        <pre style="margin:0;padding:16px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.8;overflow-x:auto">{{ schemaSample }}</pre>
+      </div>
+
+      <h2 id="sequence" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.03em;margin:0 0 12px">Spend, as a sequence</h2>
+      <div style="border:var(--bw) solid var(--ink);border-radius:2px;background:var(--surface);padding:22px;margin-bottom:40px">
+        <svg viewBox="0 0 660 210" style="width:100%;height:auto;display:block" role="img" aria-label="Spend sequence: agent, gateway, seller">
+          <defs><marker id="dtri" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)" /></marker></defs>
+          <rect x="10" y="70" width="130" height="60" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5" />
+          <text x="75" y="96" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--ink)">agent</text>
+          <text x="75" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">no wallet</text>
+          <rect x="256" y="52" width="150" height="96" fill="var(--pen-soft)" stroke="var(--ink)" stroke-width="2.5" />
+          <text x="331" y="84" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--ink)">gateway</text>
+          <text x="331" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">6 checks · hold</text>
+          <text x="331" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">pays from float</text>
+          <rect x="520" y="70" width="130" height="60" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5" />
+          <text x="585" y="96" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--ink)">seller</text>
+          <text x="585" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">plain x402</text>
+          <line x1="140" y1="88" x2="250" y2="88" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#dtri)" />
+          <text x="195" y="78" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">spend()</text>
+          <line x1="406" y1="88" x2="514" y2="88" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#dtri)" />
+          <text x="460" y="78" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">402 → pay</text>
+          <line x1="514" y1="116" x2="410" y2="116" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#dtri)" />
+          <text x="462" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">200 body</text>
+          <line x1="250" y1="116" x2="146" y2="116" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#dtri)" />
+          <text x="198" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">result</text>
+          <line x1="10" y1="176" x2="650" y2="176" stroke="var(--rule-soft)" stroke-width="1.5" />
+          <text x="10" y="196" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">HCS receipt written after settle-of-hold · balance −0.4421 → −0.4821</text>
+        </svg>
+      </div>
+    </main>
+
+    <aside id="docs-outline" style="border-left:var(--bw) solid var(--ink);padding:44px 16px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px">On this page</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{ outline }}" as="o" hint-placeholder-count="6">
+          <a href="{{ o.href }}" style="font-size:14px;color:var(--ink-2);text-decoration:none;line-height:1.4;padding-left:{{ o.indent }}" style-hover="color:var(--pen)">{{ o.label }}</a>
+        </sc-for>
+      </div>
+    </aside>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { theme: 'light', palette: false, query: 'refus', copied: -1, rail: false };
+
+  componentDidMount() {
+    this.applyTheme('light');
+    this.onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState({ palette: true }); }
+      if (e.key === 'Escape') this.setState({ palette: false });
+    };
+    window.addEventListener('keydown', this.onKey);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); }
+
+  applyTheme(t) {
+    const el = document.documentElement;
+    if (t === 'dark') el.setAttribute('data-theme', 'dark'); else el.removeAttribute('data-theme');
+  }
+
+  renderVals() {
+    const st = this.state;
+    const stripe = (i) => (i % 2 ? 'var(--sunk)' : 'transparent');
+
+    const stepData = [
+      ['1', 'Install', 'The SDK talks to the gateway. It never touches a key, because there is no key.', 'bash', 'npm i @tab/sdk'],
+      ['2', 'Register', 'Returns a Starter Tab: a $1.0000 ceiling, a $0.0500 per-call cap, and an allowlist of sellers.', 'typescript', 'import { Tab } from "@tab/sdk";\n\nconst tab = await Tab.register({\n  network: "testnet",\n  accountId: "0.0.4482091",\n});\n\n// tab.ceiling  → "1.0000"\n// tab.balance  → "0.0000"'],
+      ['3', 'Spend', 'The agent pays for something it could not have afforded. Refusal is a normal return value, not a thrown error.', 'typescript', 'const res = await tab.spend({\n  url: "https://api.vendor.xyz/v1/rank",\n  max: "0.0400",\n});\n\nif (res.refused) {\n  // res.refused.rule → "CONTROL_CLUSTER"\n  // res.refused.reason → plain sentence\n}'],
+      ['4', 'Read the receipt', 'Every leg is a consensus-ordered message on the receipt topic. Nothing is inferred from chain history.', 'bash', 'tab receipts --last 1 --topic 0.0.4881203'],
+    ];
+    const steps = stepData.map((s, i) => ({
+      n: s[0], title: s[1], body: s[2], lang: s[3], code: s[4],
+      copyLabel: st.copied === i ? 'Copied' : 'Copy',
+      onCopy: () => { this.setState({ copied: i }); setTimeout(() => this.setState({ copied: -1 }), 1400); },
+    }));
+
+    const codeData = [
+      ['code-per-call-cap', 'PER_CALL_CAP', 'The request exceeds the per-call cap for the tab\u2019s tier.', 'Split the work, or quote first and wait for a ceiling raise.'],
+      ['code-window-cap', 'WINDOW_CAP', 'Window spend plus this request would pass the window cap.', 'Retry after the window tick. The countdown is in the response.'],
+      ['code-ceiling-exceeded', 'CEILING_EXCEEDED', 'Outstanding plus holds plus this request would pass the ceiling.', 'Earn first, or wait for settlement to clear outstanding.'],
+      ['code-control-cluster', 'CONTROL_CLUSTER', 'The seller is inside the agent\u2019s funding ancestry within the hop limit.', 'Buy from an independent seller. Do not retry the same one.'],
+      ['code-seller-blocked', 'SELLER_NOT_ALLOWLISTED', 'A Starter Tab may only buy from allowlisted sellers.', 'Graduate the tab with one clean settlement, then retry.'],
+      ['code-tab-frozen', 'TAB_FROZEN', 'The tab is frozen pending operator review.', 'Stop spending. Surface the freeze to the operator.'],
+    ];
+    const codes = codeData.map((c, i) => ({ id: c[0], code: c[1], when: c[2], next: c[3], stripe: stripe(i) }));
+
+    const searchIndex = [
+      ['Reference', 'Refusal codes', 'refus'],
+      ['Reference', 'Refusal code · CONTROL_CLUSTER', 'refus'],
+      ['Concepts', 'Attested revenue and why refusals count', 'refus'],
+      ['Agent surfaces', 'Handling a refusal in the TypeScript SDK', 'refus'],
+      ['Operating', 'Refused spends in the operator console', 'refus'],
+      ['Trust', 'Attack catalogue · what still gets refused', 'refus'],
+    ];
+    const q = (st.query || '').toLowerCase();
+    const results = searchIndex.map((r) => {
+      const idx = q ? r[1].toLowerCase().indexOf(q) : -1;
+      return idx < 0
+        ? { section: r[0], a: r[1], hit: '', b: '' }
+        : { section: r[0], a: r[1].slice(0, idx), hit: r[1].slice(idx, idx + q.length), b: r[1].slice(idx + q.length) };
+    });
+
+    return {
+      themeLabel: st.theme === 'dark' ? 'Carbon' : 'Ledger',
+      toggleTheme: () => { const t = st.theme === 'dark' ? 'light' : 'dark'; this.applyTheme(t); this.setState({ theme: t }); },
+      railOpen: st.rail ? '1' : '0',
+      toggleRail: () => this.setState({ rail: !st.rail }),
+      closeRail: () => { if (st.rail) this.setState({ rail: false }); },
+      paletteOpen: st.palette,
+      openPalette: () => this.setState({ palette: true }),
+      closePalette: () => this.setState({ palette: false }),
+      query: st.query,
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      results,
+
+      sidebar: [
+        { group: 'Start here', items: [['What Tab is', '#quickstart', 1], ['Quickstart', '#quickstart', 1], ['Core concepts', '#callouts', 0]] },
+        { group: 'Concepts', items: [['The tab and the ceiling', '#ceiling-formula', 0], ['Attested revenue', '#schema', 0], ['Independence and control clusters', '#refusal-codes', 0], ['Windows and settlement', '#sequence', 0], ['The Starter Tab', '#quickstart', 0], ['Holds and the write-ahead order', '#sequence', 0]] },
+        { group: 'Agent surfaces', items: [['TypeScript SDK', '#spend', 0], ['Hedera Agent Kit plugin', '#spend', 0], ['MCP server', '#spend', 0], ['CLI', '#quickstart', 0]] },
+        { group: 'Reference', items: [['Gateway API', '#spend', 1], ['Refusal codes', '#refusal-codes', 0], ['HCS message schemas', '#schema', 0], ['Credit parameters', '#ceiling-formula', 0]] },
+        { group: 'Operating', items: [['Environment setup', '#quickstart', 0], ['Verifying a ceiling', '#ceiling-formula', 0], ['Reconciliation', '#sequence', 0]] },
+        { group: 'Trust', items: [['Trust and security model', '#refusal-codes', 0], ['Attack catalogue', '#refusal-codes', 0], ['What we did not build', '#refusal-codes', 0]] },
+      ].map((g) => ({
+        group: g.group,
+        items: g.items.map((i) => ({
+          label: i[0], href: i[1],
+          color: i[2] ? 'var(--pen)' : 'var(--ink-2)',
+          mark: i[2] ? 'var(--pen)' : 'transparent',
+        })),
+      })),
+
+      outline: [
+        { label: 'Quickstart', href: '#quickstart', indent: '0' },
+        { label: 'Reading the callouts', href: '#callouts', indent: '0' },
+        { label: 'POST /v1/spend', href: '#spend', indent: '0' },
+        { label: 'Refusal codes', href: '#refusal-codes', indent: '12px' },
+        { label: 'The ceiling formula', href: '#ceiling-formula', indent: '0' },
+        { label: 'HCS receipt message', href: '#schema', indent: '0' },
+        { label: 'Spend, as a sequence', href: '#sequence', indent: '0' },
+      ],
+
+      steps,
+      callouts: [
+        { label: 'Note', border: 'var(--ink)', body: 'Amounts are USDC with 6 decimals. Tab displays four and truncates \u2014 the truncation is deliberate and never rounds up.' },
+        { label: 'Important', border: 'var(--pen)', body: 'The ceiling is recomputed on the slow path only. A spend request never triggers a Mirror Node call.' },
+        { label: 'Refuses', border: 'var(--caution)', body: 'This operation can be refused. A refusal is a successful HTTP response with a rule, a reason and the evidence behind it.' },
+        { label: 'Irreversible', border: 'var(--debit)', body: 'Settlement writes a single transfer against the float account. Once consensus is reached the window cannot be reopened.' },
+      ],
+      params: [
+        { name: 'url', type: 'string', meaning: 'The x402 endpoint to call. The seller needs no knowledge of Tab.', stripe: stripe(0) },
+        { name: 'max', type: 'Usdc', meaning: 'Ceiling for this single call, as a decimal string. Never a float.', stripe: stripe(1) },
+        { name: 'idempotencyKey', type: 'string?', meaning: 'Replays return the original result rather than spending twice.', stripe: stripe(2) },
+      ],
+      codes,
+      schemaSample: '{\n  "v": 2,\n  "leg": "DEBIT",\n  "tab": "0.0.4482091",\n  "counterparty": "0.0.5120033",\n  "amount": "0.018000",\n  "attested": true,\n  "request_hash": "0ac4f1…918b",\n  "window": 148,\n  "consensus": "1755738208.402911005"\n}',
+    };
+  }
+}
+</script>
+</body>
+</html>

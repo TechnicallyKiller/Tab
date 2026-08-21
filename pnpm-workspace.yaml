@@ -4,6 +4,15 @@ packages:
   - "agents/*"
   - "tools/*"
 
+allowBuilds:
+  esbuild: set this to true or false
+
+# pnpm 11 reads overrides from HERE, not from package.json's "pnpm" field.
+# Silently ignored in the wrong place, which is how a banned package sneaks back in.
+overrides:
+  "@hiero-ledger/sdk": "2.87.0"
+  "@hashgraph/sdk": "npm:@hiero-ledger/sdk@2.87.0"
+
 # One resolution for the Hedera SDK across the whole graph.
 # Two copies => two `Transaction`/`AccountId` classes => silent signing failures.
 # See docs/adr/0002-hiero-sdk-single-instance.md

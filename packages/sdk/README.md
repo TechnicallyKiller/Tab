@@ -14,7 +14,7 @@ That constraint carries the product claim. The agent holds no key and signs noth
 library it installs should not even be *able* to sign. If the SDK bundled the Hedera SDK, the
 claim would rest on us not having used it. This way it rests on a check anyone can run.
 
-Browser-safe matters too: `apps/dashboard` imports this, and a browser bundle must not be able to
+Browser-safe matters too: `apps/web` imports this, and a browser bundle must not be able to
 reach a signing path or a database driver.
 
 ## Surface

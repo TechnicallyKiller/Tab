@@ -19,3 +19,6 @@ secrets/
 *.log
 .pnpm-store/
 .vitest/
+
+# Claude Design handoff bundle — keep the source of truth for the UI
+!surface-selection-decision/
