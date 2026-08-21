@@ -4,8 +4,13 @@ packages:
   - "agents/*"
   - "tools/*"
 
+# pnpm 11 refuses to run a dependency's install scripts unless it is listed here.
+# Left unanswered it only WARNS locally but exits 1 in CI, which fails the deploy.
+# esbuild reaches us solely through root dev tooling (tsup, tsx, vitest) and its
+# postinstall links the platform binary, so it is allowed. Nothing in the shipped
+# runtime depends on it.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
 
 # pnpm 11 reads overrides from HERE, not from package.json's "pnpm" field.
 # Silently ignored in the wrong place, which is how a banned package sneaks back in.
