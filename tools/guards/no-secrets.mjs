@@ -6,6 +6,7 @@
  * hackathon repo. A Hedera private key is a DER string beginning 302e/302a;
  * an ECDSA one is 64 hex characters.
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { readWorkspace, rel, report, ROOT, walk } from './lib.mjs'
 
@@ -51,15 +52,34 @@ for (const file of files) {
   })
 }
 
-// A committed .env is the same failure by another route.
+/**
+ * A .env in the working tree is normal and expected — that is where keys belong.
+ * The failure is a .env that git is TRACKING, so ask git rather than the
+ * filesystem. Without git (a tarball, a bare CI image) there is nothing to
+ * assert, so skip rather than guess.
+ */
 for (const file of walk(ROOT, ['.env'])) {
   const path = rel(file)
   if (path.endsWith('.env.example')) continue
-  failures.push({
-    where: path,
-    what: 'a .env file is present in the working tree',
-    why: 'Only .env.example is tracked. Confirm this is gitignored before committing.',
-  })
+  let tracked = false
+  try {
+    execFileSync('git', ['ls-files', '--error-unmatch', path], {
+      cwd: ROOT,
+      stdio: 'ignore',
+    })
+    tracked = true
+  } catch {
+    tracked = false // Untracked, or git unavailable. Either way, nothing to report.
+  }
+  if (tracked) {
+    failures.push({
+      where: path,
+      what: 'this .env is tracked by git',
+      why: 'Only .env.example is tracked. Run `git rm --cached ' + path +
+        '` and confirm .gitignore covers it. If a key was already committed, rotate it — ' +
+        'it is in the history now.',
+    })
+  }
 }
 
 void readWorkspace

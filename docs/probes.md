@@ -1,9 +1,7 @@
 # Phase 0 — Probes
 
-**Status: NOT RUN.** Nothing else starts until every row is green and this file is filled in.
-
-This file is a template until `pnpm probe` overwrites it. It is committed empty on purpose — per the
-README, the probes are written before anything else exists.
+**Status: 3 of 5 answered against live Hedera testnet on 2026-08-22.**
+Operator `0.0.8812188` · topics live · Probes 1 and 2 outstanding.
 
 Each probe has a **fallback decided in hour one, not hour twenty.** A probe without a pre-decided
 fallback is just a way to discover a problem late.
@@ -14,11 +12,46 @@ fallback is just a way to discover a problem late.
 
 | # | Probe | Status | Evidence | Fallback taken |
 |---|---|---|---|---|
-| 1 | Obtain testnet USDC (`0.0.429274`) | ⬜ | | |
-| 2 | Spend-leg facilitator supports `hedera:testnet` + HTS USDC | ⬜ | | |
-| 3 | Associate USDC and receive a transfer | ⬜ | | |
-| 4 | Mirror Node history query with explicit timestamp range | ⬜ | | |
-| 5 | Fast-path latency to Upstash Redis, in-region | ⬜ | | |
+| 1 | Obtain testnet USDC (`0.0.429274`) | 🟨 partial | Token confirmed real: `USDC` / `USD Coin`, 6 dp, `FUNGIBLE_COMMON`, treasury `0.0.5176` holding 55.6999 USDC, `freeze_default: false`. **Acquisition still untested.** | not yet |
+| 2 | Spend-leg facilitator supports `hedera:testnet` + HTS USDC | ⬜ | Needs a live seller to query | — |
+| 3 | Associate USDC and receive a transfer | 🟨 partial | Association readable via Mirror Node. Operator `0.0.8812188` has `max_automatic_token_associations: -1` — **unlimited auto-association**, so it can receive USDC with no explicit associate. Receiving a real transfer still untested. | none needed |
+| 4 | Mirror Node history query with explicit timestamp range | ✅ **PASS** | `pnpm --filter @tab/mirror test:live` — 7 checks green. See findings below. | none needed |
+| 5 | Fast-path latency to Upstash Redis, in-region | ⬜ | Needs an Upstash database | — |
+
+## Also proven, beyond the original five
+
+| What | Evidence |
+|---|---|
+| **HCS topics create and accept messages** | `pnpm bootstrap` created `0.0.10182696` (receipts), `0.0.10182697` (ceilings), `0.0.10182698` (settlements), each with an ED25519 submit key so the log is append-only and Tab-owned |
+| **A message round-trips through consensus** | Submitted to the receipt topic, appeared on Mirror Node within ~2s, reassembled and parsed back |
+| **Bootstrap is idempotent** | Second run recreated nothing and skipped the probe write |
+
+## Findings that changed the code
+
+**Mirror Node returns empty pages in the middle of a real result set.**
+Measured: 7 of 8 pages empty, 1 page with data, `links.next` non-null throughout. An indexer that
+stops on the first empty page silently truncates history — and truncated history is a wrong
+counterparty graph, which is a wrong credit decision. `@tab/mirror` stops **only** when
+`links.next` is null, and reports rather than hides a `maxPages` truncation.
+
+**HCS messages above ~1KB are chunked.**
+Each chunk carries its own sequence number plus `chunk_info: {number, total}`. Parsing a lone chunk
+yields truncated JSON — loud if you are lucky, silent if you are not. Every topic read goes through
+`reassembleChunks()`, which drops and reports incomplete groups rather than parsing them.
+This constrains `@tab/protocol`: **keep a receipt under 1KB** so the common path stays single-chunk.
+
+**Failed transactions are returned by the transactions endpoint.**
+`result` must be filtered to `SUCCESS`. A reverted transfer never moved value, and counting one puts
+a phantom edge in the independence graph.
+
+**Hedera transfer lists are net-settled per transaction.**
+One transfer can debit several accounts and credit several others. `toTransferEdges()` pairs them
+proportionally so edge amounts sum back to the total moved; the common 1:1 case is exact.
+
+**Portal accounts now ship with unlimited auto-association.**
+`max_automatic_token_associations: -1`. This softens the README's "fails silently if skipped"
+warning for portal-created accounts — but accounts **we** create in bootstrap must set it
+explicitly, so Probe 3 stays on the list.
 
 Record **evidence**, not just a checkmark: the response body, the transaction id, the measured
 number. A green tick with no evidence is not a finding.

@@ -1,0 +1,19 @@
+{
+  "name": "@tab/bootstrap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tab/hedera": "workspace:*",
+    "@tab/mirror": "workspace:*",
+    "@tab/money": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
+}

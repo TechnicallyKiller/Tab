@@ -11,6 +11,9 @@ packages:
 # runtime depends on it.
 allowBuilds:
   esbuild: true
+  # Transitive dependency of @hiero-ledger/sdk. Its postinstall wires up the
+  # protobuf runtime the SDK encodes transactions with.
+  protobufjs: true
 
 # pnpm 11 reads overrides from HERE, not from package.json's "pnpm" field.
 # Silently ignored in the wrong place, which is how a banned package sneaks back in.

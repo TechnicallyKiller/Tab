@@ -21,11 +21,21 @@ written.
 
 ## Current State
 
-**Phase:** 0 for the backend · frontend built against mocks
-**Next action:** run `pnpm probe`. Nothing in `packages/` or the backend apps starts until all five
-probes are green. See [docs/probes.md](docs/probes.md). The frontend does not wait on them — it runs
-entirely on `apps/web/src/lib/mock/`.
-**Last updated:** 2026-08-21 by Claude (frontend: three surfaces, mocked)
+**Phase:** on-chain — HCS live on testnet. Frontend still on mocks.
+**Next action:** obtain testnet USDC (Probe 1), then HTS transfers in `@tab/hedera`.
+**Last updated:** 2026-08-22 by Claude (Hedera testnet: topics live, Mirror Node verified)
+
+### Live testnet
+
+| | |
+|---|---|
+| Operator | `0.0.8812188` · ED25519 · 1000 HBAR · unlimited auto-association |
+| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) |
+| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) |
+| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) |
+
+All three carry an ED25519 submit key, so the log is append-only and Tab-owned. A message
+round-trips through consensus and back out of Mirror Node in about two seconds.
 
 ### Track board
 
@@ -39,13 +49,13 @@ exist yet.
 
 | Track | Scope | Phase | Claimed by | Status |
 |---|---|---|---|---|
-| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | open |
-| **G** | `tools/guards` | 0 — unblocked, do it early | — | open |
-| **F1** | `money` · `protocol` · `params` | 1 | — | open |
+| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | 3 of 5 answered; 1 and 2 need USDC + a seller |
+| **G** | `tools/guards` | 0 | — | **done** — 5 guards, negative-tested |
+| **F1** | `money` ✅ · `protocol` · `params` | 1 | — | money done (13 tests) |
 | **F2** | `ledger` | 1 | — | open |
 | **F3** | `scoring` · `graph` | 1 | — | open |
-| **A1** | `hedera` · `observability` | 2 | — | open |
-| **A2** | `mirror` · `db` | 2 | — | open |
+| **A1** | `hedera` · `observability` | 2 | — | hedera: client + topics live; HTS/schedule next |
+| **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
 | **A3** | `x402` | 2 | — | open |
 | **A4** | `cache` | 2 | — | open |
 | **FAST** | `fastpath` · `apps/gateway` | 3 | — | open |
@@ -99,6 +109,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-08-22 | **Keep an HCS receipt under 1KB.** Above that it chunks across messages and must be reassembled before parsing; a lone chunk is truncated JSON | `protocol`, `gateway`, `verify` |
+| 2026-08-22 | **Mirror Node returns empty pages mid-result-set.** Stop only on `links.next === null`, never on an empty page, or history truncates silently | `engine` indexer, `verify` |
+| 2026-08-22 | **Filter `result === 'SUCCESS'`** on transactions — failed transfers are returned and would be phantom graph edges | `engine`, `graph` |
+| 2026-08-22 | **No TypeScript parameter properties anywhere.** Packages run under `node --experimental-strip-types`, which cannot handle them. `erasableSyntaxOnly` is now on | everyone |
 | 2026-08-21 | **`allowBuilds` in `pnpm-workspace.yaml` must stay answered.** pnpm 11 only warns locally on an unanswered entry but exits 1 in CI, which fails the deploy | anyone adding a dependency with an install script |
 | 2026-08-21 | **The UI already fixes two shapes**: the refusal reason enum (6 codes) and the ceiling input record (9 rows + canonical hash). `@tab/protocol` must match what the screens render | `protocol`, `scoring`, `fastpath` |
 
@@ -121,6 +135,42 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-08-22 — Claude — Hedera testnet is live
+
+**Did:** `tools/guards` (5 guards, all negative-tested), `@tab/money` extracted from the frontend,
+`@tab/mirror` (7 checks against real testnet), `@tab/hedera` (client + topics), and `pnpm bootstrap`
+— which created three real HCS topics and round-tripped a message through consensus.
+
+**Learned:** Four things measured against the live chain, not read in docs.
+
+1. **Mirror Node returns empty pages in the middle of a real result set** — 7 of 8 empty, one page
+   with data, `links.next` non-null throughout. An indexer that stops on the first empty page
+   silently truncates history, which is a wrong graph and therefore a wrong credit decision.
+2. **HCS messages above ~1KB chunk**, and a lone chunk parses as truncated JSON. Keep receipts under
+   1KB; every read goes through `reassembleChunks()`.
+3. **Portal accounts now ship `max_automatic_token_associations: -1`** — unlimited auto-association,
+   which softens the README's "fails silently" association warning for portal accounts. Accounts we
+   create in bootstrap still need it set explicitly.
+4. **Running the guards found two real defects in the frontend** I had already shipped: the ceiling
+   formula was computed in floats on the landing page, and counterparty share was compared against
+   the 40% cap as a float. `0.4` is not representable, so that comparison can flip at exactly 40% —
+   a refusal that should fire and doesn't. Both now bigint/basis-points.
+
+Also fixed two false positives in my own guards, both by making the check more truthful rather than
+looser: the SDK guard now counts physical copies in the pnpm store instead of parsing peer-suffixed
+lockfile versions, and the secrets guard asks git whether a `.env` is *tracked* rather than whether
+it exists.
+
+**Contract change:** four, in the table above.
+
+**Next:** testnet USDC (Probe 1) is the gate for everything else on-chain. Then HTS transfers, then
+`@tab/protocol` so receipts have a real schema instead of `bootstrap.hello`.
+
+**Blocked:** Probe 1 needs a USDC faucet; Probe 2 needs a live x402 seller to query; Probe 5 needs
+Supabase and Upstash.
 
 ---
 

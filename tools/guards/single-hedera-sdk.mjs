@@ -7,7 +7,7 @@
  * you installing both — and both of our load-bearing dependencies (@x402/hedera,
  * @hashgraph/hedera-agent-kit v4) already resolve the Hiero scope.
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { allDeps, readWorkspace, rel, report, ROOT, walk } from './lib.mjs'
 
@@ -35,21 +35,47 @@ for (const { name, group, shortName, pkg, dir } of readWorkspace()) {
   }
 }
 
-// One resolved version, or a transitive dependency has pulled in a second copy.
+/**
+ * Count PHYSICAL copies, which is the thing that actually breaks `instanceof`.
+ *
+ * When node_modules exists this is authoritative: pnpm materialises one store
+ * directory per (version, peer-resolution) pair, and two directories means two
+ * module instances. Falling back to the lockfile covers a bare clone.
+ *
+ * pnpm writes peer context as a suffix — `2.87.0(bn.js@5.2.3)` in the lockfile,
+ * `2.87.0_bn.js@5.2.3` on disk. That is still ONE version; strip it before
+ * comparing or every install looks like a duplicate.
+ */
+const stripPeers = (v) => v.replace(/[(_].*$/, '')
+
 try {
-  const lock = readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8')
-  const versions = new Set(
-    [...lock.matchAll(/^\s*'?@hiero-ledger\/sdk'?@([^:'\s]+)/gm)].map((m) => m[1]),
+  const storeDirs = readdirSync(join(ROOT, 'node_modules/.pnpm')).filter((d) =>
+    d.startsWith('@hiero-ledger+sdk@'),
   )
-  if (versions.size > 1) {
+  if (storeDirs.length > 1) {
     failures.push({
-      where: 'pnpm-lock.yaml',
-      what: `@hiero-ledger/sdk resolved to ${versions.size} versions: ${[...versions].join(', ')}`,
+      where: 'node_modules/.pnpm',
+      what: `${storeDirs.length} physical copies of @hiero-ledger/sdk: ${storeDirs.join(', ')}`,
       why: `${WHY} Pin it under \`overrides\` in pnpm-workspace.yaml.`,
     })
   }
 } catch {
-  // No lockfile yet. Nothing to assert.
+  // No node_modules — fall back to reading the lockfile.
+  try {
+    const lock = readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8')
+    const versions = new Set(
+      [...lock.matchAll(/^\s*'?@hiero-ledger\/sdk'?@([^:'\s]+)/gm)].map((m) => stripPeers(m[1])),
+    )
+    if (versions.size > 1) {
+      failures.push({
+        where: 'pnpm-lock.yaml',
+        what: `@hiero-ledger/sdk resolved to ${versions.size} versions: ${[...versions].join(', ')}`,
+        why: `${WHY} Pin it under \`overrides\` in pnpm-workspace.yaml.`,
+      })
+    }
+  } catch {
+    // No lockfile either. Nothing to assert.
+  }
 }
 
 process.exit(report('single-hedera-sdk', failures, 'only @hiero-ledger/sdk in the graph'))

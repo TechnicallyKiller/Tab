@@ -1,0 +1,117 @@
+import { micro, type MicroUsdc } from '@tab/money'
+import type { MirrorClient } from './client.ts'
+import type {
+  ConsensusTimestamp,
+  EntityId,
+  MirrorAccount,
+  TokenInfo,
+  TokenRelationship,
+  TokenRelationshipsPage,
+} from './types.ts'
+
+/** Exact account age, the Sybil input. Better than a first-operation heuristic. */
+export async function getAccount(client: MirrorClient, id: EntityId): Promise<MirrorAccount> {
+  return client.get<MirrorAccount>(`/api/v1/accounts/${id}?limit=1`)
+}
+
+/** Whole days since the account was created, at `now`. */
+export function accountAgeDays(
+  account: MirrorAccount,
+  now: ConsensusTimestamp | Date = new Date(),
+): number {
+  const createdMs = consensusToMillis(account.created_timestamp)
+  const nowMs = now instanceof Date ? now.getTime() : consensusToMillis(now)
+  return Math.max(0, Math.floor((nowMs - createdMs) / 86_400_000))
+}
+
+export function consensusToMillis(ts: ConsensusTimestamp): number {
+  const [seconds = '0', nanos = '0'] = ts.split('.')
+  return Number(seconds) * 1000 + Math.floor(Number(nanos.padEnd(9, '0')) / 1e6)
+}
+
+/**
+ * The association check.
+ *
+ * A transfer to an account that is neither associated with the token nor
+ * holding a free auto-association slot fails — silently, if you do not look
+ * for it. Mirror Node is the reliable source here; consensus-node token
+ * queries no longer return this dependably, which is why @x402/hedera's own
+ * preflight uses Mirror Node too.
+ */
+export async function getTokenRelationship(
+  client: MirrorClient,
+  accountId: EntityId,
+  tokenId: EntityId,
+): Promise<TokenRelationship | null> {
+  const page = await client.get<TokenRelationshipsPage>(
+    `/api/v1/accounts/${accountId}/tokens?token.id=${tokenId}&limit=2`,
+  )
+  return page.tokens[0] ?? null
+}
+
+export interface ReceiveCheck {
+  canReceive: boolean
+  associated: boolean
+  frozen: boolean
+  autoAssociationSlots: number
+  reason?: string
+}
+
+/** Can this account actually receive the token right now, and if not, why. */
+export async function canReceiveToken(
+  client: MirrorClient,
+  accountId: EntityId,
+  tokenId: EntityId,
+): Promise<ReceiveCheck> {
+  const [account, relationship] = await Promise.all([
+    getAccount(client, accountId),
+    getTokenRelationship(client, accountId, tokenId),
+  ])
+  const slots = account.max_automatic_token_associations
+
+  if (relationship) {
+    const frozen = relationship.freeze_status === 'FROZEN'
+    return {
+      canReceive: !frozen,
+      associated: true,
+      frozen,
+      autoAssociationSlots: slots,
+      ...(frozen ? { reason: `${accountId} is FROZEN for token ${tokenId}` } : {}),
+    }
+  }
+  // -1 means unlimited automatic associations.
+  const hasSlot = slots === -1 || slots > 0
+  return {
+    canReceive: hasSlot,
+    associated: false,
+    frozen: false,
+    autoAssociationSlots: slots,
+    ...(hasSlot
+      ? {}
+      : {
+          reason:
+            `${accountId} is not associated with ${tokenId} and has no automatic ` +
+            'association slots. Associate it in bootstrap, or the transfer fails.',
+        }),
+  }
+}
+
+/** Token balance as MicroUsdc. Only valid for a 6-decimal token. */
+export async function getUsdcBalance(
+  client: MirrorClient,
+  accountId: EntityId,
+  tokenId: EntityId,
+): Promise<MicroUsdc> {
+  const rel = await getTokenRelationship(client, accountId, tokenId)
+  if (!rel) return micro(0n)
+  if (rel.decimals !== 6) {
+    throw new Error(
+      `Token ${tokenId} has ${rel.decimals} decimals, not 6. MicroUsdc would misread it.`,
+    )
+  }
+  return micro(BigInt(rel.balance))
+}
+
+export async function getToken(client: MirrorClient, tokenId: EntityId): Promise<TokenInfo> {
+  return client.get<TokenInfo>(`/api/v1/tokens/${tokenId}`)
+}

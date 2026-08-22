@@ -17,7 +17,9 @@
     "noPropertyAccessFromIndexSignature": true,
     "exactOptionalPropertyTypes": true,
     "useUnknownInCatchVariables": true,
-    "erasableSyntaxOnly": false,
+    // Packages are consumed as TS source and tested under node --experimental-strip-types,
+    // which cannot handle parameter properties, enums or namespaces. Fail at typecheck, not runtime.
+    "erasableSyntaxOnly": true,
 
     "declaration": true,
     "declarationMap": true,
