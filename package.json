@@ -39,7 +39,8 @@
     "build:web": "pnpm --filter @tab/web build",
     "guard:secrets": "node tools/guards/no-secrets.mjs",
     "token:check": "pnpm --filter @tab/bootstrap token:check",
-    "token:mint": "pnpm --filter @tab/bootstrap token:mint"
+    "token:mint": "pnpm --filter @tab/bootstrap token:mint",
+    "probe3": "pnpm --filter @tab/bootstrap probe3"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

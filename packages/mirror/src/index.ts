@@ -26,6 +26,7 @@ export {
   getToken,
   getTokenRelationship,
   getUsdcBalance,
+  waitForAccount,
   type ReceiveCheck,
 } from './accounts.ts'
 

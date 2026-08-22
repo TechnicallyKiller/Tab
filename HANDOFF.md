@@ -21,8 +21,9 @@ written.
 
 ## Current State
 
-**Phase:** on-chain — HCS live on testnet. Frontend still on mocks.
-**Next action:** obtain testnet USDC (Probe 1), then HTS transfers in `@tab/hedera`.
+**Phase:** on-chain — HCS live, money moving between accounts. Frontend still on mocks.
+**Next action:** `@tab/protocol` — real receipt schemas, so the receipt topic carries typed
+receipts instead of `bootstrap.hello`.
 **Last updated:** 2026-08-22 by Claude (Hedera testnet: topics live, Mirror Node verified)
 
 ### Live testnet
@@ -33,6 +34,7 @@ written.
 | Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) |
 | Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) |
 | Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) |
+| Spend token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) — `TUSD`, 6 dp, 1000 supply. **Stand-in**: the Circle faucet reported a drip that never arrived. Swapping to real USDC is one env var |
 
 All three carry an ED25519 submit key, so the log is append-only and Tab-owned. A message
 round-trips through consensus and back out of Mirror Node in about two seconds.

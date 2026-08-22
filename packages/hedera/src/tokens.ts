@@ -1,4 +1,5 @@
 import {
+  AccountCreateTransaction,
   AccountId,
   Hbar,
   PrivateKey,
@@ -158,4 +159,40 @@ export async function mintStandInToken(
   if (!tokenId) throw new Error('Token creation returned no token id')
 
   return { tokenId: tokenId.toString(), transactionId: executed.transactionId.toString() }
+}
+
+export interface CreatedAccount {
+  accountId: string
+  privateKey: PrivateKey
+  transactionId: string
+}
+
+/**
+ * Create an account.
+ *
+ * `maxAutomaticTokenAssociations` defaults to 0 deliberately. That is the
+ * README's silent-failure case — a transfer to an unassociated account with no
+ * slots fails, and nothing tells you why unless you look. Tests should exercise
+ * it; real Tab accounts set it explicitly.
+ */
+export async function createAccount(
+  client: Client,
+  params: { initialHbar?: number; maxAutomaticTokenAssociations?: number } = {},
+): Promise<CreatedAccount> {
+  const privateKey = PrivateKey.generateED25519()
+  const executed = await new AccountCreateTransaction()
+    .setKeyWithoutAlias(privateKey.publicKey)
+    .setInitialBalance(new Hbar(params.initialHbar ?? 2))
+    .setMaxAutomaticTokenAssociations(params.maxAutomaticTokenAssociations ?? 0)
+    .execute(client)
+
+  const receipt = await executed.getReceipt(client)
+  if (receipt.status !== Status.Success || !receipt.accountId) {
+    throw new Error(`Account creation failed with status ${receipt.status.toString()}`)
+  }
+  return {
+    accountId: receipt.accountId.toString(),
+    privateKey,
+    transactionId: executed.transactionId.toString(),
+  }
 }

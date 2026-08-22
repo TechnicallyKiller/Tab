@@ -1,5 +1,5 @@
 import { micro, type MicroUsdc } from '@tab/money'
-import type { MirrorClient } from './client.ts'
+import { MirrorError, type MirrorClient } from './client.ts'
 import type {
   ConsensusTimestamp,
   EntityId,
@@ -43,10 +43,48 @@ export async function getTokenRelationship(
   accountId: EntityId,
   tokenId: EntityId,
 ): Promise<TokenRelationship | null> {
-  const page = await client.get<TokenRelationshipsPage>(
-    `/api/v1/accounts/${accountId}/tokens?token.id=${tokenId}&limit=2`,
+  try {
+    const page = await client.get<TokenRelationshipsPage>(
+      `/api/v1/accounts/${accountId}/tokens?token.id=${tokenId}&limit=2`,
+    )
+    return page.tokens[0] ?? null
+  } catch (err) {
+    // A 404 here means Mirror Node has not indexed the account yet, NOT that it
+    // does not exist — a just-created account reaches consensus seconds before
+    // it reaches the mirror. Either way there is no relationship to report.
+    if (err instanceof MirrorError && err.status === 404) return null
+    throw err
+  }
+}
+
+/**
+ * Wait for a freshly created entity to appear on Mirror Node.
+ *
+ * Consensus is immediate; indexing is not. Anything that creates an account or
+ * token and then reads it back must wait, or it reads a 404 and concludes the
+ * entity does not exist.
+ */
+export async function waitForAccount(
+  client: MirrorClient,
+  id: EntityId,
+  opts: { attempts?: number; intervalMs?: number } = {},
+): Promise<MirrorAccount> {
+  const attempts = opts.attempts ?? 15
+  const intervalMs = opts.intervalMs ?? 2000
+  let last: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await getAccount(client, id)
+    } catch (err) {
+      if (!(err instanceof MirrorError) || err.status !== 404) throw err
+      last = err
+      await new Promise((r) => setTimeout(r, intervalMs))
+    }
+  }
+  throw new Error(
+    `Account ${id} did not appear on Mirror Node after ${attempts} attempts ` +
+      `(~${Math.round((attempts * intervalMs) / 1000)}s). Last error: ${String(last)}`,
   )
-  return page.tokens[0] ?? null
 }
 
 export interface ReceiveCheck {

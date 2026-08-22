@@ -18,6 +18,8 @@ export {
 
 export {
   associateToken,
+  createAccount,
+  type CreatedAccount,
   mintStandInToken,
   transferToken,
   type MintedToken,

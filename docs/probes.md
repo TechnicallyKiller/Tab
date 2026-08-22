@@ -1,7 +1,8 @@
 # Phase 0 — Probes
 
-**Status: 3 of 5 answered against live Hedera testnet on 2026-08-22.**
-Operator `0.0.8812188` · topics live · Probes 1 and 2 outstanding.
+**Status: 4 of 5 answered against live Hedera testnet on 2026-08-22.**
+Operator `0.0.8812188` · three HCS topics live · money moving between accounts ·
+only Probe 2 (spend-leg facilitator) and Probe 5 (Redis latency) outstanding.
 
 Each probe has a **fallback decided in hour one, not hour twenty.** A probe without a pre-decided
 fallback is just a way to discover a problem late.
@@ -12,9 +13,9 @@ fallback is just a way to discover a problem late.
 
 | # | Probe | Status | Evidence | Fallback taken |
 |---|---|---|---|---|
-| 1 | Obtain testnet USDC (`0.0.429274`) | 🟨 partial | Token confirmed real: `USDC` / `USD Coin`, 6 dp, `FUNGIBLE_COMMON`, treasury `0.0.5176` holding 55.6999 USDC, `freeze_default: false`. **Acquisition still untested.** | not yet |
+| 1 | Obtain testnet USDC (`0.0.429274`) | ✅ **FALLBACK TAKEN** | Circle faucet reported a successful drip; nothing arrived. Polled 10× over 2 min — the account had never had *any* token relationship, so the drip never reached it. Minted the stand-in instead. | **Yes** — `TUSD` `0.0.10182853`, 6 dp, 1000 supply |
 | 2 | Spend-leg facilitator supports `hedera:testnet` + HTS USDC | ⬜ | Needs a live seller to query | — |
-| 3 | Associate USDC and receive a transfer | 🟨 partial | Association readable via Mirror Node. Operator `0.0.8812188` has `max_automatic_token_associations: -1` — **unlimited auto-association**, so it can receive USDC with no explicit associate. Receiving a real transfer still untested. | none needed |
+| 3 | Associate USDC and receive a transfer | ✅ **PASS** | `pnpm probe3` — created a fresh account with **0** auto-association slots, confirmed the transfer fails with `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`, associated it, paid `0.0400`, and confirmed both balances from Mirror Node. | none needed |
 | 4 | Mirror Node history query with explicit timestamp range | ✅ **PASS** | `pnpm --filter @tab/mirror test:live` — 7 checks green. See findings below. | none needed |
 | 5 | Fast-path latency to Upstash Redis, in-region | ⬜ | Needs an Upstash database | — |
 
@@ -47,6 +48,20 @@ a phantom edge in the independence graph.
 **Hedera transfer lists are net-settled per transaction.**
 One transfer can debit several accounts and credit several others. `toTransferEdges()` pairs them
 proportionally so edge amounts sum back to the total moved; the common 1:1 case is exact.
+
+**Mirror Node 404s on an entity that already exists on consensus.**
+A just-created account reaches consensus seconds before it reaches the mirror, and the 404 in
+between means "not indexed yet", not "does not exist". `getTokenRelationship` now treats 404 as
+"no relationship" and `waitForAccount()` polls until the entity appears. Anything that creates an
+account or token and reads it straight back must wait.
+
+**The association failure is real, and silent unless you look for it.**
+Probe 3 demonstrates it deliberately: a fresh account with 0 slots refuses the transfer with
+`TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. Mirror Node predicts this *before* sending — which is what makes
+`canReceiveToken()` worth having in the spend leg's preflight.
+
+**The Circle faucet reported success and delivered nothing.**
+Worth knowing before the demo: do not assume a faucet drip landed. Check the balance on-chain.
 
 **Portal accounts now ship with unlimited auto-association.**
 `max_automatic_token_associations: -1`. This softens the README's "fails silently if skipped"
