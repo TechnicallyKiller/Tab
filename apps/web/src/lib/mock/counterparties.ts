@@ -1,4 +1,4 @@
-import { usdc } from '../money'
+import { bp, usdc } from '../money'
 import type { Counterparty } from './types'
 
 const AGENT = 'agent 0.0.4482091'
@@ -11,8 +11,8 @@ export const COUNTERPARTIES: Counterparty[] = [
     ageDays: 61,
     direction: 'buys from',
     volume: usdc('0.3340'),
-    share: 0.34,
-    weight: 1.0,
+    shareBp: bp(3400),
+    weightBp: bp(10000),
     reason: 'INDEPENDENT',
     hops: [AGENT, '0.0.4410877'],
   },
@@ -22,8 +22,8 @@ export const COUNTERPARTIES: Counterparty[] = [
     ageDays: 12,
     direction: 'sells to',
     volume: usdc('0.1980'),
-    share: 0.2,
-    weight: 0.8,
+    shareBp: bp(2000),
+    weightBp: bp(8000),
     reason: 'AGE_DISCOUNT',
     hops: [AGENT, '0.0.5120033'],
   },
@@ -33,8 +33,8 @@ export const COUNTERPARTIES: Counterparty[] = [
     ageDays: 44,
     direction: 'both',
     volume: usdc('0.1420'),
-    share: 0.14,
-    weight: 0.6,
+    shareBp: bp(1400),
+    weightBp: bp(6000),
     reason: 'RECIPROCAL_FLOW',
     hops: [AGENT, '0.0.6002911'],
   },
@@ -44,8 +44,8 @@ export const COUNTERPARTIES: Counterparty[] = [
     ageDays: 38,
     direction: 'sells to',
     volume: usdc('0.4360'),
-    share: 0.44,
-    weight: 0.5,
+    shareBp: bp(4400),
+    weightBp: bp(5000),
     reason: 'CONCENTRATION',
     hops: [AGENT, '0.0.4899120'],
   },
@@ -55,8 +55,8 @@ export const COUNTERPARTIES: Counterparty[] = [
     ageDays: 9,
     direction: 'sells to',
     volume: usdc('0.0880'),
-    share: 0.09,
-    weight: 0.8,
+    shareBp: bp(900),
+    weightBp: bp(8000),
     reason: 'SHARED_ROOT',
     hops: [AGENT, MID, '0.0.7710455'],
   },
@@ -66,13 +66,13 @@ export const COUNTERPARTIES: Counterparty[] = [
     ageDays: 4,
     direction: 'sells to',
     volume: usdc('0.0400'),
-    share: 0.04,
-    weight: 0.0,
+    shareBp: bp(400),
+    weightBp: bp(0),
     reason: 'HARD_BLOCK_ANCESTRY',
     hops: [AGENT, MID, 'seller 0.0.5591204'],
   },
 ]
 
-export const CONCENTRATION_CAP = 0.4
+export const CONCENTRATION_CAP_BP = bp(4000)
 export const MAX_FUNDING_HOPS = 3
 export const AGE_FULL_DAYS = 3

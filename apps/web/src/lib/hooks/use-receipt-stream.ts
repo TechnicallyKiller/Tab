@@ -74,6 +74,7 @@ export function useReceiptStream() {
 
       const flash = leg === 'CREDIT' ? `credit${stampedAt}` : `debit${stampedAt}`
       const row: Receipt = {
+        // allow-float — a consensus timestamp is seconds.nanos, not an amount.
         consensus: (1755738214.883104 + (seq - TOP_SEQ) * 3.4).toFixed(9),
         leg,
         counterparty,

@@ -1,38 +1,61 @@
 'use client'
 
 import { useState } from 'react'
-import { TIER_HARD_CAP, TIER_MULTIPLE } from '@/lib/mock/landing'
+import {
+  bp,
+  format,
+  formatBpMultiple,
+  formatBpPercent,
+  micro,
+  min,
+  mulBp,
+  usdc,
+  type BasisPoints,
+  type MicroUsdc,
+} from '@/lib/money'
+import { TIER_HARD_CAP, TIER_MULTIPLE_BP } from '@/lib/mock/landing'
+
+const STARTER_FLOOR = usdc('1.0000')
 
 /**
- * Drive the ceiling yourself. The figure flashes on change and the digits never
- * animate — a count-up on money is exactly the decoration the design forbids.
+ * Drive the ceiling yourself.
  *
- * Set tier to Unrated and the ceiling reads 0.0000, because the multiple is 0.
- * That is the mechanism, and letting a reader find it beats asserting it.
+ * This runs the real formula, in bigint micro-USDC with integer basis points —
+ * not floats. The marketing page and the engine have to agree on the arithmetic
+ * or the interactive is a lie, and rounding a ceiling down by a micro-USDC in
+ * one place and not the other is exactly the divergence ADR-0006 exists to stop.
+ *
+ * Rounding is 'down' throughout: a ceiling is a limit, so an inexact result
+ * resolves in the house's favour, never the agent's.
+ *
+ * The figure flashes on change and the digits never animate — a count-up on
+ * money is the decoration the design forbids.
  */
 export function CeilingPlayground() {
-  const [rev, setRev] = useState(0.334)
+  const [revenueMicro, setRevenueMicro] = useState<MicroUsdc>(usdc('0.3340'))
   const [tier, setTier] = useState('C')
-  const [ramp, setRamp] = useState(30)
+  const [rampBp, setRampBp] = useState<BasisPoints>(bp(3000))
   const [flash, setFlash] = useState('none')
 
-  const multiple = TIER_MULTIPLE[tier] ?? 0
-  const cap = TIER_HARD_CAP[tier] ?? 0
-  const raw = rev * multiple * (ramp / 100)
-  const clamped = Math.min(raw, cap)
-  // A tab below its starter floor is raised to the floor unless it is Unrated.
-  const inForce = tier !== 'Unrated' && clamped < 1 ? 1 : clamped
+  const multipleBp = TIER_MULTIPLE_BP[tier] ?? bp(0)
+  const hardCap = TIER_HARD_CAP[tier] ?? usdc('0.0000')
+
+  const computed = mulBp(mulBp(revenueMicro, multipleBp, 'down'), rampBp, 'down')
+  const clamped = min(computed, hardCap)
+  // A tab below its starter floor is raised to the floor — unless it is Unrated,
+  // where the multiple is zero and there is no ceiling at all.
+  const inForce = tier !== 'Unrated' && clamped < STARTER_FLOOR ? STARTER_FLOOR : clamped
 
   const binding =
     tier === 'Unrated'
       ? 'tier multiple 0 — no ceiling at all'
-      : raw > cap
+      : computed > hardCap
         ? `hard cap, tier ${tier} — binding`
-        : clamped < 1
+        : clamped < STARTER_FLOOR
           ? 'starter floor 1.0000 — binding'
           : 'computed value — binding'
 
-  const bump = (next: number, previous: number) =>
+  const bump = (next: bigint, previous: bigint) =>
     setFlash(`${next < previous ? 'debit' : 'credit'}${Date.now()}`)
 
   return (
@@ -40,19 +63,23 @@ export function CeilingPlayground() {
       <div className="card-head">Drive it yourself</div>
       <div style={{ padding: '22px 20px', display: 'grid', gap: 18 }}>
         <div>
-          <SliderLabel left="trailing revenue" right={`${rev.toFixed(4)} USDC`} />
+          <SliderLabel left="trailing revenue" right={`${format(revenueMicro)} USDC`} />
           <input
-            type="range" min={0} max={2} step={0.001} value={rev}
+            type="range"
+            min={0}
+            max={2_000_000}
+            step={1000}
+            value={Number(revenueMicro)}
             aria-label="Trailing attested revenue per window"
             onChange={(e) => {
-              const v = Number(e.target.value)
-              bump(v, rev)
-              setRev(v)
+              const next = micro(BigInt(e.target.value))
+              bump(next, revenueMicro)
+              setRevenueMicro(next)
             }}
           />
         </div>
         <div>
-          <SliderLabel left="tier" right={`${tier} · ${multiple.toFixed(1)}×`} />
+          <SliderLabel left="tier" right={`${tier} · ${formatBpMultiple(multipleBp)}×`} />
           <div className="seg">
             {['A', 'B', 'C', 'Unrated'].map((t) => (
               <button
@@ -60,7 +87,7 @@ export function CeilingPlayground() {
                 type="button"
                 aria-pressed={tier === t}
                 onClick={() => {
-                  bump(TIER_MULTIPLE[t] ?? 0, multiple)
+                  bump(BigInt(TIER_MULTIPLE_BP[t] ?? 0), BigInt(multipleBp))
                   setTier(t)
                 }}
               >
@@ -70,14 +97,18 @@ export function CeilingPlayground() {
           </div>
         </div>
         <div>
-          <SliderLabel left="ramp" right={`${ramp}%`} />
+          <SliderLabel left="ramp" right={formatBpPercent(rampBp, 0)} />
           <input
-            type="range" min={15} max={100} step={5} value={ramp}
+            type="range"
+            min={1500}
+            max={10000}
+            step={500}
+            value={rampBp}
             aria-label="Ramp factor"
             onChange={(e) => {
-              const v = Number(e.target.value)
-              bump(v, ramp)
-              setRamp(v)
+              const next = bp(Number(e.target.value))
+              bump(BigInt(next), BigInt(rampBp))
+              setRampBp(next)
             }}
           />
         </div>
@@ -88,10 +119,10 @@ export function CeilingPlayground() {
           className="t-figure"
           style={{
             fontSize: 'clamp(36px,5vw,68px)',
-            color: inForce === 0 ? 'var(--debit)' : 'var(--pen)',
+            color: inForce === 0n ? 'var(--debit)' : 'var(--pen)',
           }}
         >
-          {inForce.toFixed(4)}
+          {format(inForce)}
         </div>
         <div className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 10 }}>
           {binding}

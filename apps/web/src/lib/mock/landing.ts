@@ -133,5 +133,19 @@ export const NOT_BUILT = [
   'no agent deployment platform',
 ]
 
-export const TIER_MULTIPLE: Record<string, number> = { A: 3.0, B: 2.0, C: 1.0, Unrated: 0 }
-export const TIER_HARD_CAP: Record<string, number> = { A: 20, B: 6, C: 2, Unrated: 0 }
+import { bp, usdc, type BasisPoints, type MicroUsdc } from '../money'
+
+/** Tier multiples as basis points: 30000 = 3.0x. Any default collapses to Unrated. */
+export const TIER_MULTIPLE_BP: Record<string, BasisPoints> = {
+  A: bp(30_000),
+  B: bp(20_000),
+  C: bp(10_000),
+  Unrated: bp(0),
+}
+
+export const TIER_HARD_CAP: Record<string, MicroUsdc> = {
+  A: usdc('20.0000'),
+  B: usdc('6.0000'),
+  C: usdc('2.0000'),
+  Unrated: usdc('0.0000'),
+}

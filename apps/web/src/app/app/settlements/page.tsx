@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Card, CardHead, Chip } from '@/components/ui'
-import { format } from '@/lib/money'
+import { format, formatBpPercent } from '@/lib/money'
 import { RECONCILIATION, SETTLEMENTS } from '@/lib/mock/settlements'
 import type { Outcome, Settlement } from '@/lib/mock/types'
 
@@ -68,7 +68,7 @@ export default function SettlementsView() {
                   <td className="n" style={{ fontWeight: 600, color: s.net < 0n ? 'var(--debit)' : 'var(--credit)' }}>
                     {format(s.net, { sign: 'always' })}
                   </td>
-                  <td style={{ color: 'var(--ink-2)' }}>{s.rampFrom}% → {s.rampTo}%</td>
+                  <td style={{ color: 'var(--ink-2)' }}>{formatBpPercent(s.rampFromBp, 0)} → {formatBpPercent(s.rampToBp, 0)}</td>
                   <td><Chip tone={outcomeTone(s.outcome)}>{s.outcome}</Chip></td>
                 </tr>
               ))}

@@ -1,4 +1,4 @@
-import type { MicroUsdc } from '../money'
+import type { BasisPoints, MicroUsdc } from '../money'
 
 export type Leg = 'DEBIT' | 'CREDIT' | 'REFUSED'
 
@@ -29,8 +29,10 @@ export interface Counterparty {
   ageDays: number
   direction: 'buys from' | 'sells to' | 'both'
   volume: MicroUsdc
-  share: number
-  weight: number
+  /** Share of total volume, in basis points. 4000 = 40.00%. */
+  shareBp: BasisPoints
+  /** Independence weight, in basis points. 10000 = fully counted, 0 = hard block. */
+  weightBp: BasisPoints
   reason: WeightReason
   hops: string[]
 }
@@ -44,8 +46,9 @@ export interface Settlement {
   debits: MicroUsdc
   interest: MicroUsdc
   net: MicroUsdc
-  rampFrom: number
-  rampTo: number
+  /** Ramp factor in basis points. 3000 = 30%. */
+  rampFromBp: BasisPoints
+  rampToBp: BasisPoints
   outcome: Outcome
   receiptCount: number
   transferId: string

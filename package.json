@@ -15,7 +15,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "clean": "turbo run clean && rm -rf node_modules",
-    "guard": "pnpm guard:solidity && pnpm guard:sdk && pnpm guard:boundaries && pnpm guard:money",
+    "guard": "pnpm guard:solidity && pnpm guard:sdk && pnpm guard:boundaries && pnpm guard:money && pnpm guard:secrets",
     "guard:solidity": "node tools/guards/no-solidity.mjs",
     "guard:sdk": "node tools/guards/single-hedera-sdk.mjs",
     "guard:boundaries": "node tools/guards/check-boundaries.mjs",
@@ -36,7 +36,8 @@
     "version-packages": "changeset version",
     "release": "turbo run build --filter='./packages/*' && changeset publish",
     "dev:web": "pnpm --filter @tab/web dev",
-    "build:web": "pnpm --filter @tab/web build"
+    "build:web": "pnpm --filter @tab/web build",
+    "guard:secrets": "node tools/guards/no-secrets.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
