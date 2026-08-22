@@ -17,6 +17,14 @@ export {
 } from './client.ts'
 
 export {
+  associateToken,
+  mintStandInToken,
+  transferToken,
+  type MintedToken,
+  type TransferResult,
+} from './tokens.ts'
+
+export {
   MAX_SINGLE_CHUNK_BYTES,
   createTopic,
   submitMessage,
