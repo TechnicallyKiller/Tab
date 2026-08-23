@@ -24,7 +24,7 @@ written.
 **Phase:** on-chain — HCS live, money moving between accounts. Frontend still on mocks.
 **Next action:** `@tab/protocol` — real receipt schemas, so the receipt topic carries typed
 receipts instead of `bootstrap.hello`.
-**Last updated:** 2026-08-22 by Claude (Hedera testnet: topics live, Mirror Node verified)
+**Last updated:** 2026-08-22 by Claude (Probe 1 + 3 green — money moves on testnet)
 
 ### Live testnet
 
@@ -51,12 +51,12 @@ exist yet.
 
 | Track | Scope | Phase | Claimed by | Status |
 |---|---|---|---|---|
-| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | 3 of 5 answered; 1 and 2 need USDC + a seller |
+| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **4 of 5 green.** Only Probe 2 (facilitator) and 5 (Redis) left |
 | **G** | `tools/guards` | 0 | — | **done** — 5 guards, negative-tested |
-| **F1** | `money` ✅ · `protocol` · `params` | 1 | — | money done (13 tests) |
+| **F1** | `money` ✅ · `protocol` · `params` | 1 | — | **protocol is the next action** — schemas pinned by the UI and the 1KB chunk limit |
 | **F2** | `ledger` | 1 | — | open |
 | **F3** | `scoring` · `graph` | 1 | — | open |
-| **A1** | `hedera` · `observability` | 2 | — | hedera: client + topics live; HTS/schedule next |
+| **A1** | `hedera` · `observability` | 2 | — | hedera: topics + HTS + accounts live. **Schedule (HIP-423) not written** |
 | **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
 | **A3** | `x402` | 2 | — | open |
 | **A4** | `cache` | 2 | — | open |
@@ -89,6 +89,7 @@ downstream reads and writes them, and changing them on day four touches every pa
 | What | Blocking whom | Owner |
 |---|---|---|
 | Probe 2: which facilitator do our demo sellers use? | `x402`, `apps/gateway` spend leg | — |
+| Match `x402-hedera-receipts` conventions, or design receipts bespoke? | `protocol` | **needs a decision** |
 | Probe 5: fast-path latency to in-region Upstash | `cache` LRU design, the 50ms claim | — |
 | Standalone MCP server, or load our plugin into the official Agent Kit MCP server? | `mcp` scope | — |
 | Settlement schedule: provisional-amount-at-open, or short-expiry-near-close? | `apps/settlement` | — |
@@ -111,6 +112,8 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-08-22 | **The spend token is `TUSD` `0.0.10182853`, not real USDC.** The Circle faucet reported a drip that never arrived. Read the token id from `USDC_TOKEN_ID`, never hardcode `0.0.429274` | everyone touching a transfer |
+| 2026-08-22 | **Mirror Node 404s on an entity that exists on consensus.** A just-created account is indexed seconds later; 404 means "not indexed yet". Use `waitForAccount()` after any create-then-read | `engine` indexer, `bootstrap`, `gateway` |
 | 2026-08-22 | **Keep an HCS receipt under 1KB.** Above that it chunks across messages and must be reassembled before parsing; a lone chunk is truncated JSON | `protocol`, `gateway`, `verify` |
 | 2026-08-22 | **Mirror Node returns empty pages mid-result-set.** Stop only on `links.next === null`, never on an empty page, or history truncates silently | `engine` indexer, `verify` |
 | 2026-08-22 | **Filter `result === 'SUCCESS'`** on transactions — failed transfers are returned and would be phantom graph edges | `engine`, `graph` |
@@ -137,6 +140,39 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-08-22 — Claude — Probe 1 and 3 green, money moves on testnet
+
+**Did:** HTS transfers, association and account creation in `@tab/hedera`. Minted the stand-in
+token after the faucet failed. `pnpm probe3` now creates a fresh account, proves the transfer fails
+unassociated, associates it, pays it, and confirms both balances from Mirror Node.
+
+**Learned:**
+
+1. **The Circle faucet reported a successful drip and delivered nothing.** Polled ten times over two
+   minutes — the account had never held *any* token relationship, so it never arrived. Do not assume
+   a faucet worked; check the balance on-chain. Took the hour-one fallback and minted `TUSD`.
+2. **Mirror Node 404s on an entity that already exists on consensus.** A just-created account
+   reaches consensus seconds before it is indexed. That 404 means "not indexed yet", not "does not
+   exist" — treating it as fatal is wrong. `waitForAccount()` exists for this now.
+3. **The association failure is silent unless you look.** Probe 3 tests it with a fresh account at
+   **0** auto-association slots on purpose; the operator has unlimited slots and would have hidden
+   the failure mode completely. `canReceiveToken()` predicts the refusal *before* we send, which is
+   why it belongs in the spend leg's preflight.
+4. **The boundaries guard caught me mid-build.** `tools/bootstrap` tried to import
+   `@hiero-ledger/sdk` directly to create an account. Not on its allow list, so `createAccount`
+   moved into `@tab/hedera` where the SDK belongs. The rule worked without me thinking about it.
+
+**Contract change:** three, in the table above.
+
+**Next:** `@tab/protocol`. The receipt topic currently holds `bootstrap.hello`; it should hold typed
+receipts. Two shapes are already pinned — the 6-code refusal enum and the 9-row ceiling input record
+the UI renders — and messages must stay under 1KB to avoid chunking.
+
+**Blocked:** Probe 2 needs a live x402 seller. Probe 5 needs Supabase and Upstash. One open decision
+before writing schemas: match `x402-hedera-receipts` conventions or go bespoke.
 
 ---
 
