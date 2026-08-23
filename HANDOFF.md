@@ -22,9 +22,13 @@ written.
 ## Current State
 
 **Phase:** on-chain — HCS live, money moving between accounts. Frontend still on mocks.
-**Next action:** `@tab/protocol` — real receipt schemas, so the receipt topic carries typed
-receipts instead of `bootstrap.hello`.
-**Last updated:** 2026-08-22 by Claude (Probe 1 + 3 green — money moves on testnet)
+**Next action:** write `@tab/protocol`. Decision on receipt conventions is made (bespoke — see
+log); nothing is blocking it. The receipt topic still carries only `bootstrap.hello`.
+
+**Pick zod 4 (4.4.3), not 3.** The catalog in `pnpm-workspace.yaml` still pins `zod: ^3.25.0`, but
+v3 has no stable release past 3.25 — the newest v3 tag is a canary. Update the catalog when
+`protocol` lands.
+**Last updated:** 2026-08-22 by Claude (receipt-schema decision made; protocol not yet written)
 
 ### Live testnet
 
@@ -89,7 +93,7 @@ downstream reads and writes them, and changing them on day four touches every pa
 | What | Blocking whom | Owner |
 |---|---|---|
 | Probe 2: which facilitator do our demo sellers use? | `x402`, `apps/gateway` spend leg | — |
-| Match `x402-hedera-receipts` conventions, or design receipts bespoke? | `protocol` | **needs a decision** |
+| ~~Match `x402-hedera-receipts` or go bespoke?~~ | `protocol` | **decided: bespoke** — see log 2026-08-22 |
 | Probe 5: fast-path latency to in-region Upstash | `cache` LRU design, the 50ms claim | — |
 | Standalone MCP server, or load our plugin into the official Agent Kit MCP server? | `mcp` scope | — |
 | Settlement schedule: provisional-amount-at-open, or short-expiry-near-close? | `apps/settlement` | — |
@@ -140,6 +144,41 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-08-22 — Claude — receipt schema: bespoke, decided
+
+**Did:** No code. Investigated the one open decision blocking `@tab/protocol` — whether to match
+the existing `x402-hedera-receipts` package or design our receipts clean.
+
+**Decided: bespoke.** Three reasons, all from reading the package rather than guessing:
+
+1. **It solves a different problem.** It verifies seller *overcharge* under x402's `upto` scheme —
+   signed offers, price schedules, meter readings, so `captured ≠ units × unit_price` is provable.
+   Tab uses `exact`, and our receipts record the tab's own debits and credits. Almost no overlap.
+2. **It depends on `ethers`**, which our own `guard:solidity` bans as EVM tooling. Adopting it
+   would mean either weakening a track-requirement guard or vendoring around it.
+3. **v0.1.1, two versions, published 2026-07-15.** There is no established convention there to
+   match yet, so "matching it" buys no interoperability.
+
+Worth knowing anyway: it is from the Tally project and is adjacent work in the same space. If a
+judge knows it, the distinction above is the answer.
+
+**Learned:** `zod` v3 has no stable release past 3.25 — the newest v3 tag is a canary, and v4.4.3
+is current. The catalog in `pnpm-workspace.yaml` still says `zod: ^3.25.0`; that needs to become
+v4 when `protocol` is written, or install resolves to something unintended.
+
+**Contract change:** none — no code was written.
+
+**Next:** `@tab/protocol`. Constraints already fixed and non-negotiable: messages stay **under 1KB**
+or HCS chunks them; every message carries a schema version; amounts cross the wire as decimal
+strings via `toWire()`; canonical serialization must be byte-stable so the ceiling input hash is
+reproducible. Two shapes are pinned by what the UI already renders — the 6-code refusal enum and
+the 9-row ceiling input record — see `apps/web/src/lib/mock/types.ts`.
+
+**Blocked:** nothing on `protocol`. Probe 2 still needs a live x402 seller; Probe 5 needs Supabase
+and Upstash.
 
 ---
 
