@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "probe:x402": "node --experimental-strip-types --env-file=../../.env src/x402-loop.ts",
     "probe:x402:hts": "node --experimental-strip-types --env-file=../../.env src/x402-loop.ts --hts",
-    "probe:latency": "node --experimental-strip-types --env-file=../../.env src/redis-latency.ts"
+    "probe:latency": "node --experimental-strip-types --env-file=../../.env src/redis-latency.ts",
+    "probe:schedule": "node --experimental-strip-types --env-file=../../.env src/schedule-tick.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",
@@ -19,7 +20,8 @@
     "@x402/hedera": "catalog:",
     "express": "^5.1.0",
     "@x402/express": "catalog:",
-    "ioredis": "catalog:"
+    "ioredis": "catalog:",
+    "@tab/hedera": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

@@ -48,7 +48,8 @@
     "probe:x402": "pnpm --filter @tab/probes probe:x402",
     "seller:create": "pnpm --filter @tab/bootstrap seller:create",
     "probe:x402:hts": "pnpm --filter @tab/probes probe:x402:hts",
-    "probe:latency": "pnpm --filter @tab/probes probe:latency"
+    "probe:latency": "pnpm --filter @tab/probes probe:latency",
+    "probe:schedule": "pnpm --filter @tab/probes probe:schedule"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

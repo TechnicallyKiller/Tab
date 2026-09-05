@@ -157,6 +157,9 @@ importers:
       '@hiero-ledger/sdk':
         specifier: 2.87.0
         version: 2.87.0(bn.js@5.2.3)
+      '@tab/hedera':
+        specifier: workspace:*
+        version: link:../../packages/hedera
       '@tab/mirror':
         specifier: workspace:*
         version: link:../../packages/mirror

@@ -94,3 +94,35 @@ export function toTransferEdges(
 export function outboundFrom(edges: readonly TransferEdge[], accountId: EntityId): TransferEdge[] {
   return edges.filter((e) => e.from === accountId)
 }
+
+/**
+ * Fetch the single transaction at an exact consensus timestamp.
+ *
+ * Use this to assert what a transaction actually DID, rather than diffing
+ * account balances. Two reasons balances are the wrong tool:
+ *
+ *  - Mirror Node account balances are SNAPSHOTS. `balance.timestamp` is the
+ *    last activity that updated them, so a read taken moments after a transfer
+ *    can still return the pre-transfer figure.
+ *  - A scheduled transaction can fire while its inner transaction fails, so
+ *    "the schedule executed" and "value moved" are different claims. Only the
+ *    transfer list settles the second one.
+ */
+export async function getTransactionAt(
+  client: MirrorClient,
+  consensusTimestamp: ConsensusTimestamp,
+): Promise<MirrorTransaction | null> {
+  const page = await client.get<TransactionsPage>(
+    `/api/v1/transactions?timestamp=${consensusTimestamp}`,
+  )
+  return page.transactions?.[0] ?? null
+}
+
+/** Net movement for one account within a single transaction, in tinybars. */
+export function hbarNetFor(tx: MirrorTransaction, accountId: EntityId): bigint {
+  let net = 0n
+  for (const t of tx.transfers ?? []) {
+    if (t.account === accountId) net += BigInt(t.amount)
+  }
+  return net
+}

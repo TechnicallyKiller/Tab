@@ -36,3 +36,12 @@ export {
   type CreateTopicOptions,
   type SubmittedMessage,
 } from './topics.ts'
+
+export {
+  buildSettlementTransfer,
+  getScheduleState,
+  scheduleSettlement,
+  type ScheduledSettlement,
+  type ScheduleSettlementParams,
+  type ScheduleState,
+} from './schedule.ts'

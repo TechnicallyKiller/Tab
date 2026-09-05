@@ -1,6 +1,7 @@
 # Phase 0 — Probes
 
-**Status: 4 of 5 answered · Probe 2 PASSING as of 2026-09-05.**
+**Status: all 5 original probes answered, plus HIP-423. As of 2026-09-05.**
+Four Hedera services proven on testnet: HCS, HTS, Mirror Node, Schedule Service.
 Operator `0.0.8812188` · three HCS topics live · money moving between accounts ·
 only Probe 2 (spend-leg facilitator) and Probe 5 (Redis latency) outstanding.
 
@@ -26,6 +27,46 @@ fallback is just a way to discover a problem late.
 | **HCS topics create and accept messages** | `pnpm bootstrap` created `0.0.10182696` (receipts), `0.0.10182697` (ceilings), `0.0.10182698` (settlements), each with an ED25519 submit key so the log is append-only and Tab-owned |
 | **A message round-trips through consensus** | Submitted to the receipt topic, appeared on Mirror Node within ~2s, reassembled and parsed back |
 | **Bootstrap is idempotent** | Second run recreated nothing and skipped the probe write |
+
+## Probe 6 — HIP-423: the settlement tick runs without a keeper. PASSING
+
+The README claims "Scheduled Transactions execute the settlement tick without a keeper" and it was
+untested. `pnpm probe:schedule` now proves it:
+
+```
+waitForExpiry   true
+delta           0s from expiry     <- fired on time; we submitted nothing after creating it
+result          SUCCESS
+scheduled flag  true
+seller net      +0.1000 ℏ
+payer net       −0.1012 ℏ          (net + 0.0012 network fee)
+```
+
+This is the **fourth** Hedera service, and the track requires at least two.
+
+**Two things this probe got wrong first, both worth knowing.**
+
+**`ScheduleInfoQuery` against a consensus node returns `INVALID_SCHEDULE_ID`** when the query lands
+on a different node than the create did — it has not propagated there yet. Read schedule state from
+Mirror Node (`/api/v1/schedules/{id}`), which has one consistent view. `@tab/mirror` now exposes
+`getSchedule()` and `waitForScheduleExecution()`.
+
+**Do not assert value movement by diffing Mirror Node account balances.** Two independent reasons:
+
+- **Balances are snapshots.** `balance.timestamp` is the last activity that updated them, so a read
+  taken moments after a transfer can still return the pre-transfer figure. That is what made this
+  probe report `1.8000 → 1.8000` while the transfer had demonstrably succeeded.
+- **A schedule can fire while its inner transaction fails.** "The schedule executed" and "value
+  moved" are different claims; only the transfer list settles the second.
+
+The fix is to fetch the transaction at the schedule's `executed_timestamp` and assert on its
+`result` and transfer list. `@tab/mirror` now has `getTransactionAt()` and `hbarNetFor()`.
+
+**Correction owed to `tools/verify`.** `verify-tab` asserts a float invariant from Mirror Node
+balances. Given the snapshot lag, it must either compare balances against receipts **up to
+`balance.timestamp`**, or sum the transfer list rather than trusting the balance field. Otherwise
+the invariant can fail spuriously on a perfectly reconciled ledger — the worst possible failure for
+the one command whose job is to prove correctness.
 
 ## Probe 5 — the 50ms budget does not survive a remote cache
 
@@ -84,6 +125,12 @@ lives in the gateway. Independent support for the design.
 
 **The facilitator fee payer must be a funded ECDSA account, separate from the seller.**
 Same account for both nets to price-minus-fee and reads like a wrong price.
+
+**The empty-page hazard is not rare — it is the common case.**
+Hit three separate times today on three different accounts. Most recently: a single-page query for
+an account with known transfers returned **0 rows with `links.next` present**. Any code that stops
+on an empty page silently reports an account as untouched. `@tab/mirror`'s `walk()` stops only on
+`links.next === null`; nothing should query `/transactions` without it.
 
 **Mirror Node returns empty pages in the middle of a real result set.**
 Measured: 7 of 8 pages empty, 1 page with data, `links.next` non-null throughout. An indexer that

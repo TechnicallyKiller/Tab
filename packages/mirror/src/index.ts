@@ -31,7 +31,9 @@ export {
 } from './accounts.ts'
 
 export {
+  getTransactionAt,
   getTransactions,
+  hbarNetFor,
   outboundFrom,
   toTransferEdges,
   type HistoryQuery,
@@ -47,3 +49,9 @@ export {
 } from './topics.ts'
 
 export type * from './types.ts'
+
+export {
+  getSchedule,
+  waitForScheduleExecution,
+  type MirrorSchedule,
+} from './schedules.ts'
