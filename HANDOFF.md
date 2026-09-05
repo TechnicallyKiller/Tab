@@ -21,15 +21,27 @@ written.
 
 ## Current State
 
-**Phase:** on-chain — **x402 settles on testnet.** HCS live, money moving. Frontend on mocks.
-**Next action:** HIP-423 scheduled transactions (4th Hedera service, lifts Integration), then
-`@tab/protocol`. Decision on receipt conventions is made (bespoke — see
+**Phase:** on-chain — **all 5 probes answered, 4 Hedera services proven.** Frontend on mocks.
+**Next action:** extract `packages/x402` from the working spike in `tools/probes`, then
+`@tab/protocol`.
+
+### Proven on testnet
+
+| Service | Probe | Evidence |
+|---|---|---|
+| **HCS** | bootstrap | 3 topics, submit key, message round-trips in ~2s |
+| **HTS** | Probe 1/3 | token minted, associated, transferred; association failure demonstrated then fixed |
+| **Mirror Node** | Probe 4 | 7 live checks |
+| **Schedule Service (HIP-423)** | Probe 6 | tick fires at expiry with nothing submitted by us |
+| **x402 both assets** | Probe 2 | HBAR 2.4s, HTS token ~30s, both settled exactly |
+
+Track requires two native services. We have four, each with a runnable proof. Decision on receipt conventions is made (bespoke — see
 log); nothing is blocking it. The receipt topic still carries only `bootstrap.hello`.
 
 **Pick zod 4 (4.4.3), not 3.** The catalog in `pnpm-workspace.yaml` still pins `zod: ^3.25.0`, but
 v3 has no stable release past 3.25 — the newest v3 tag is a canary. Update the catalog when
 `protocol` lands.
-**Last updated:** 2026-09-05 by Claude (Probe 2 PASSING — x402 loop settles on Hedera)
+**Last updated:** 2026-09-05 by Claude (x402 + HTS + HIP-423 all passing; Probe 5 found a real constraint)
 
 ### Live testnet
 
@@ -58,7 +70,7 @@ exist yet.
 
 | Track | Scope | Phase | Claimed by | Status |
 |---|---|---|---|---|
-| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **Probe 2 PASSING.** Only Probe 5 (Redis) left |
+| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **all 5 answered + Probe 6.** Phase 0 complete |
 | **G** | `tools/guards` | 0 | — | **done** — 5 guards, negative-tested |
 | **F1** | `money` ✅ · `protocol` · `params` | 1 | — | **protocol is the next action** — schemas pinned by the UI and the 1KB chunk limit |
 | **F2** | `ledger` | 1 | — | open |
@@ -66,7 +78,7 @@ exist yet.
 | **A1** | `hedera` · `observability` | 2 | — | hedera: topics + HTS + accounts live. **Schedule (HIP-423) not written** |
 | **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
 | **A3** | `x402` | 2 | — | loop proven in `tools/probes`; extract the adapter next |
-| **A4** | `cache` | 2 | — | open |
+| **A4** | `cache` | 2 | — | **read Probe 5 first** — the LRU is not optional, and the hold reserve cannot be cached |
 | **FAST** | `fastpath` · `apps/gateway` | 3 | — | open |
 | **SLOW** | `apps/engine` · `apps/settlement` | 3 | — | open |
 | **S1** | `sdk` · `apps/cli` | 4 | — | open |
@@ -119,6 +131,9 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-05 | **The 50ms budget requires a CO-LOCATED cache.** Measured 220ms/command to Upstash us-east-1 from ap-south. An in-process LRU serves the snapshot but a hold reserve must be atomic across gateway instances, so it cannot be cached away. Deployment precondition, not a tuning knob | `cache`, `fastpath`, `gateway`, deployment |
+| 2026-09-05 | **Never diff Mirror Node account balances to prove value moved.** They are snapshots; `balance.timestamp` is the last activity that updated them. Fetch the transaction and assert on `result` + transfer list. **`verify-tab` must account for this** or its invariant fails spuriously | `verify`, `engine`, `settlement` |
+| 2026-09-05 | **Schedule state comes from Mirror Node, not `ScheduleInfoQuery`** — a consensus node that did not see the create returns `INVALID_SCHEDULE_ID` | `settlement` |
 | 2026-09-05 | **x402 settles NATIVE HBAR** (`asset "0.0.0"`, tinybars) as its documented default. The primary track requirement never depended on USDC | `x402`, `gateway`, anyone waiting on the faucet |
 | 2026-09-05 | **x402's client spend controls default to USD-pegged assets only** and are client-side/advisory. HBAR needs an explicit `allowedAssets` entry with an ATOMIC cap. Tab's real cap stays in the gateway | `x402`, `fastpath` |
 | 2026-09-05 | **Facilitator fee payer must be a funded ECDSA account separate from the seller.** Same account for both nets to price-minus-fee | `x402`, `gateway`, `bootstrap` |
@@ -150,6 +165,44 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-09-05 (later) — Claude — Phase 0 complete, four Hedera services proven
+
+**Did:** Closed every remaining probe. HTS-token x402 (Probe 2's other half), Redis latency
+(Probe 5), and HIP-423 scheduled transactions (Probe 6, new). Added `getSchedule`,
+`waitForScheduleExecution`, `getTransactionAt`, `hbarNetFor` to `@tab/mirror` and the HIP-423
+wiring to `@tab/hedera`.
+
+**Learned — the one that changes the architecture:**
+
+**Probe 5: the 50ms budget needs a co-located cache, and an LRU does not rescue it.** Measured
+220ms per Redis command (Upstash primary in us-east-1, client in ap-south; the 45ms TCP handshake
+to the same host is what made it attributable). The snapshot read *can* be served from memory. A
+**hold reserve cannot** — it must be atomic across every gateway instance or two both allow, which
+is the exact race the README lists as caught. So the budget is a deployment precondition. The
+README's "under 50ms, cache only" needs restating, and `apps/README.md`'s "horizontally scalable,
+stateless" gateway is only true *because* the hold lives in Redis.
+
+**Also learned:**
+
+- **Never diff Mirror Node balances to prove value moved.** They are snapshots. This probe reported
+  `1.8000 → 1.8000` while the transfer had succeeded. Worse, a schedule can fire while its inner
+  transaction fails, so "executed" and "moved" are separate claims. **`verify-tab` inherits this
+  problem** — it asserts a float invariant from balances, so it must compare against receipts up to
+  `balance.timestamp` or sum transfers instead. A spurious failure there is the worst possible bug.
+- **HTS-token x402 takes ~30s vs ~2.4s for HBAR** from here, because the facilitator's Mirror Node
+  preflight reads are 5–15s each. Same geography as Probe 5.
+- **The empty-page hazard is the common case, not an edge case.** Hit it three times today on three
+  accounts. Nothing should query `/transactions` without `walk()`.
+
+**Contract change:** three, in the table above.
+
+**Next:** extract `packages/x402` from the working spike, then `@tab/protocol`.
+
+**Blocked:** Supabase `DATABASE_URL` still unset (blocks `db`, then `engine`). Real testnet USDC
+still unobtained, but proven not to block anything — TUSD settles identically.
 
 ---
 
