@@ -112,6 +112,7 @@ redis.disconnect()
 const p99 = reserveStats.p99
 const oneHop = report('(one round trip)', pings)
 const fits = p99 < BUDGET_MS
+const remote = oneHop.p50 > 5
 
 console.log(`
   Verdict
@@ -119,42 +120,33 @@ console.log(`
     A spend decision is one snapshot read plus one atomic hold reserve —
     two round trips. Measured p99 ${p99.toFixed(1)}ms against a ${BUDGET_MS}ms budget.
 
-    ${fits ? 'FITS.' : 'DOES NOT FIT, by roughly ' + Math.round(p99 / BUDGET_MS) + 'x.'}
+    ${fits ? `FITS, with ${(BUDGET_MS / p99).toFixed(0)}x headroom.` : `DOES NOT FIT, by roughly ${Math.round(p99 / BUDGET_MS)}x.`}
+`)
 
-  What this actually measured
+if (!remote) {
+  console.log(`  This is a co-located cache — ${oneHop.p50.toFixed(1)}ms per round trip. That is the
+  shape the budget assumes, and it holds comfortably.
+`)
+} else {
+  console.log(`  This is a REMOTE cache — ${oneHop.p50.toFixed(0)}ms per round trip. Compare that to the
+  TCP handshake against the same host: if the handshake is far cheaper than a
+  command, the hostname is an edge endpoint and every command is proxying to a
+  primary in another region. That is geography, not a design problem.
+`)
+}
 
-    One round trip is ${oneHop.p50.toFixed(0)}ms, but the TCP handshake to the same host is
-    only ~45ms. That gap is the diagnosis: the DNS name terminates at a
-    nearby Upstash edge, and every COMMAND proxies to the primary region.
-    With a primary in us-east-1 and a client in ap-south, ~175ms of the
-    ${oneHop.p50.toFixed(0)}ms is one intercontinental hop per command.
+console.log(`  What cannot be optimised away
 
-    So read this as three separate facts.
+    An in-process LRU serves the snapshot read — the engine writes it, the
+    gateway reads it. But a HOLD RESERVE cannot be cached: it must be atomic
+    across every gateway instance, or two instances both see the same
+    available balance and both allow. That is the race the README lists as
+    caught. Shared atomic state means one network hop, so the budget needs
+    the cache CO-LOCATED with the gateway.
 
-    1. The primary region is wrong for this client, and that is fixable
-       without touching the design. Recreating the database with its
-       primary near the gateway should take a command to roughly the
-       handshake figure (~45ms from here, ~1-2ms co-located).
-
-    2. An in-process LRU does NOT rescue this on its own, even with the
-       region fixed — which is the part worth understanding. The snapshot read can be cached in memory — it
-       is written by the engine and read by the gateway. But a HOLD RESERVE
-       cannot: it has to be atomic across every gateway instance, or two
-       instances both see the same available balance and both allow. That
-       is the race the README lists as caught. Shared, atomic state means a
-       network hop, so the sub-50ms budget REQUIRES the cache to be
-       co-located with the gateway. It is a deployment constraint, not a
-       tuning knob.
-
-    3. For the demo specifically: run a LOCAL Redis, or the headline
-       "under 50ms" is not demonstrable on the machine doing the
-       demonstrating. Two round trips at ${oneHop.p50.toFixed(0)}ms each is ~${p99.toFixed(0)}ms per spend.
-
-    Consequence for the README: "under 50ms, cache only" needs to say
-    "in-process snapshot plus a co-located atomic reserve", and
-    apps/README.md's claim that the gateway is "horizontally scalable,
-    stateless" is only true because the hold lives in Redis — which is
-    exactly why the hop cannot be optimised away.
+    A deployment precondition, not a tuning knob — and satisfiable for free:
+    a local Redis for development and the demo, or the gateway deployed in
+    the same region as the managed cache.
 `)
 void getStats
-process.exit(0)
+process.exit(fits ? 0 : 1)

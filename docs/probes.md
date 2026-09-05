@@ -18,7 +18,7 @@ fallback is just a way to discover a problem late.
 | 2 | x402 loop settles on `hedera:testnet` | ✅ **PASS** | `pnpm probe:x402` — 402 challenge → signed retry → verify → settle → 200 with the seller's body, in 2.4s. Buyer −0.5000 ℏ, seller +0.5000 ℏ exactly. Self-hosted facilitator, stock seller. | none needed |
 | 3 | Associate USDC and receive a transfer | ✅ **PASS** | `pnpm probe3` — created a fresh account with **0** auto-association slots, confirmed the transfer fails with `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`, associated it, paid `0.0400`, and confirmed both balances from Mirror Node. | none needed |
 | 4 | Mirror Node history query with explicit timestamp range | ✅ **PASS** | `pnpm --filter @tab/mirror test:live` — 7 checks green. See findings below. | none needed |
-| 5 | Fast-path latency to managed Redis | ✅ **RUN — FAILS the 50ms budget** | `pnpm probe:latency` — PING p50 **220ms**, read+reserve p99 **499ms** against a 50ms budget. TCP handshake to the same host is ~45ms, so ~175ms per command is an intercontinental hop to the primary region. | **Yes** — see below |
+| 5 | Fast-path latency to the cache | ✅ **PASS when co-located** | `pnpm probe:latency` — **co-located: p99 1.5ms, 33× headroom.** Remote (Upstash us-east-1 from ap-south): p99 499ms, 10× over. Geography, not architecture. | none needed |
 
 ## Also proven, beyond the original five
 
@@ -68,42 +68,46 @@ balances. Given the snapshot lag, it must either compare balances against receip
 the invariant can fail spuriously on a perfectly reconciled ledger — the worst possible failure for
 the one command whose job is to prove correctness.
 
-## Probe 5 — the 50ms budget does not survive a remote cache
+## Probe 5 — the budget holds, but only with a co-located cache
 
-Measured, not estimated:
+Both measured on the same machine with the same probe:
 
-```
-PING           p50 220.3ms   (TCP handshake to the same host: ~45ms)
-GET snapshot   p50 221.0ms
-read+reserve   p50 442.7ms · p99 499.1ms
-budget                50ms
-```
+| Cache | One round trip | read+reserve p99 | vs 50ms budget |
+|---|---|---|---|
+| **Local Redis** (co-located) | **0.2ms** | **1.5ms** | **FITS — 33× headroom** |
+| Upstash us-east-1, client ap-south | 220ms | 499ms | 10× over |
+
+The remote figure is geography, not design: the TCP handshake to that same host is ~45ms, so a
+command costing 220ms means the hostname is an edge endpoint and every command proxies to the
+primary region.
+
+**This is satisfiable for free, and needs no design change.**
+
+| Path | Latency | Cost |
+|---|---|---|
+| Local Redis for development and the demo | ~1.5ms | free — `redis-server` is already installed, no Docker, no sudo |
+| Gateway deployed in the same region as the managed cache | ~1–2ms | free tier — the existing Upstash is already in us-east-1, so deploy the gateway there |
+| Recreate Upstash in ap-south-1 | ~90ms (2 hops × 45ms) | free, but still over budget from a laptop |
+
+**Run the demo against a local Redis.** Two remote round trips is ~450ms per spend, so the headline
+"under 50ms" is not demonstrable on a laptop talking to another continent.
 
 **Diagnosis.** The Upstash hostname terminates at a nearby edge, but every *command* proxies to the
 primary region. With the primary in us-east-1 and the client in ap-south, roughly 175ms of each
 220ms is one intercontinental hop.
 
-**Three consequences, in order of how much they change the design.**
+**What cannot be optimised away, whatever the region.**
 
-1. **Region is a deployment constraint, and it is fixable.** Recreating the database with its
-   primary near the gateway should bring a command close to the handshake figure — ~45ms from a
-   laptop here, ~1–2ms co-located.
-
-2. **An in-process LRU does not rescue this on its own, even with the region fixed.** The snapshot
-   read *can* be served from memory: the engine writes it, the gateway reads it. But a **hold
-   reserve cannot**. It has to be atomic across every gateway instance, or two instances both see
-   the same available balance and both allow — which is precisely the race the README lists as
-   *caught*. Shared atomic state means a network hop, so **the sub-50ms budget requires the cache to
-   be co-located with the gateway.** Not a tuning knob.
-
-3. **For the demo, run a local Redis.** Two round trips at 220ms is ~450ms per spend, so the
-   headline "under 50ms" is not demonstrable on the machine doing the demonstrating.
+An in-process LRU serves the snapshot read — the engine writes it, the gateway reads it. But a
+**hold reserve cannot be cached**: it has to be atomic across every gateway instance, or two
+instances both see the same available balance and both allow, which is precisely the race the
+README lists as *caught*. Shared atomic state means one network hop. So the budget needs the cache
+co-located — a deployment precondition rather than a tuning knob, and a free one.
 
 **Corrections owed.** The README's "under 50ms, cache only" should read "in-process snapshot plus a
 co-located atomic reserve", and `apps/README.md`'s "horizontally scalable, stateless" gateway is
 only true *because* the hold lives in Redis — which is exactly why that hop cannot be optimised
-away. Both claims are still achievable; they just carry a deployment precondition that was
-previously unstated.
+away. Both claims hold; they carry a deployment precondition that was previously unstated.
 
 ## Findings that changed the code
 
