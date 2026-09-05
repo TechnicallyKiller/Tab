@@ -43,7 +43,8 @@
     "probe3": "pnpm --filter @tab/bootstrap probe3",
     "chain:status": "pnpm --filter @tab/bootstrap status",
     "evm:account": "pnpm --filter @tab/bootstrap evm:account",
-    "faucet:sweep": "pnpm --filter @tab/bootstrap faucet:sweep"
+    "faucet:sweep": "pnpm --filter @tab/bootstrap faucet:sweep",
+    "faucet:watch": "pnpm --filter @tab/bootstrap faucet:watch"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
