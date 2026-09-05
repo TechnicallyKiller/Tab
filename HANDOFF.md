@@ -21,42 +21,68 @@ written.
 
 ## Current State
 
-**Phase:** on-chain — **all 5 probes answered, 4 Hedera services proven.** Frontend on mocks.
+**Phase:** on-chain. Phase 0 complete — five probes answered, five Hedera/x402 capabilities proven.
+Frontend still runs entirely on mocks.
+
 **Next action:** `@tab/protocol` — receipt schemas, so the receipt topic carries typed receipts
-instead of `bootstrap.hello`. Then `@tab/ledger` and a minimal gateway.
+instead of `bootstrap.hello`. Then `@tab/ledger`, then a minimal gateway. That trio is the MVP core:
+the smallest thing that makes an agent actually spend against a ceiling.
+
+**Last updated:** 2026-09-05 by Claude (`@tab/x402` extracted and proven; found the undici timeout)
+
+### Written: 7 of 27 packages
+
+`money` · `mirror` · `hedera` · `x402` · `web` · `bootstrap` · `probes`
+
+Everything else is a README. Notably absent and needed for a demo: `protocol`, `ledger`, `gateway`.
 
 ### Proven on testnet
 
-| Service | Probe | Evidence |
+| Capability | How to re-run | Result |
 |---|---|---|
-| **HCS** | bootstrap | 3 topics, submit key, message round-trips in ~2s |
-| **HTS** | Probe 1/3 | token minted, associated, transferred; association failure demonstrated then fixed |
-| **Mirror Node** | Probe 4 | 7 live checks |
-| **Schedule Service (HIP-423)** | Probe 6 | tick fires at expiry with nothing submitted by us |
-| **x402 both assets** | Probe 2 | HBAR 2.4s, HTS token ~30s, both settled exactly |
+| **HCS** | `pnpm bootstrap` | 3 topics with submit keys; message round-trips in ~2s |
+| **HTS** | `pnpm probe3` | mint, associate, transfer. Association failure demonstrated *then* fixed |
+| **Mirror Node** | `pnpm --filter @tab/mirror test:live` | 7 checks |
+| **Schedule Service (HIP-423)** | `pnpm probe:schedule` | tick fires at expiry; we submit nothing |
+| **x402 via `@tab/x402`** | `pnpm probe:adapter` / `:hts` | HBAR ~2.2s · token ~39s · both settle exactly |
+| **Cache latency** | `pnpm probe:latency` | co-located 1.5ms p99 · remote 499ms |
 
-Track requires two native services. We have four, each with a runnable proof. Decision on receipt conventions is made (bespoke — see
-log); nothing is blocking it. The receipt topic still carries only `bootstrap.hello`.
-
-**Pick zod 4 (4.4.3), not 3.** The catalog in `pnpm-workspace.yaml` still pins `zod: ^3.25.0`, but
-v3 has no stable release past 3.25 — the newest v3 tag is a canary. Update the catalog when
-`protocol` lands.
-**Last updated:** 2026-09-05 by Claude (x402 + HTS + HIP-423 all passing; Probe 5 found a real constraint)
+The track requires two native Hedera services. We have four, each with a command a judge can run.
 
 ### Live testnet
 
 | | |
 |---|---|
-| Operator | `0.0.8812188` · ED25519 · 1000 HBAR · unlimited auto-association |
-| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) |
-| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) |
-| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) |
-| x402 seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) — stock `@x402/hedera` seller, receives only |
-| Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) — **ECDSA**, co-signs and submits. Also the faucet relay |
-| Spend token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) — `TUSD`, 6 dp, 1000 supply. **Stand-in**: the Circle faucet reported a drip that never arrived. Swapping to real USDC is one env var |
+| Operator / hot float | [`0.0.8812188`](https://hashscan.io/testnet/account/0.0.8812188) · ED25519 · ~966 ℏ · unlimited auto-association |
+| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) — still only `bootstrap.hello` |
+| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) — empty |
+| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) — empty |
+| Spend token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) · `TUSD` · 6 dp · **stand-in** for USDC |
+| x402 demo seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) · stock `@x402/hedera`, receives only |
+| Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) · **ECDSA** · also the faucet relay |
 
-All three carry an ED25519 submit key, so the log is append-only and Tab-owned. A message
-round-trips through consensus and back out of Mirror Node in about two seconds.
+All three topics carry an ED25519 submit key, so the log is append-only and Tab-owned.
+
+### Read these before you write code
+
+Three findings cost hours each and will cost them again if rediscovered:
+
+1. **Node's `fetch` has a 10s connect timeout no `AbortController` can extend.** Mirror Node needs
+   5–15s from a high-latency link. Every app and tool entry point must call `configureGlobalHttp()`
+   from `@tab/mirror` **before any HTTP**. Skip it and x402 reports
+   `invalid_exact_hedera_payload_signature_invalid` — a signature error for a network problem.
+2. **Mirror Node returns empty pages mid-result-set.** Hit three times on three accounts. Stop only
+   on `links.next === null`; use `walk()`.
+3. **Never diff Mirror Node account balances to prove value moved** — they are snapshots. Fetch the
+   transaction and assert on `result` plus the transfer list. **`verify-tab` inherits this.**
+
+### Environment
+
+| | |
+|---|---|
+| `REDIS_URL` | set — Upstash **us-east-1**. Use a **local Redis for the demo** (`redis-server --port 6380`, already installed) or the 50ms claim is not demonstrable |
+| `DATABASE_URL` | **NOT SET** — blocks `db`, and therefore `engine` |
+| Real USDC | not obtained. Circle's faucet reported drips that never arrived. Proven not to block anything |
 
 ### Track board
 
@@ -107,12 +133,14 @@ downstream reads and writes them, and changing them on day four touches every pa
 
 | What | Blocking whom | Owner |
 |---|---|---|
-| Probe 2: which facilitator do our demo sellers use? | `x402`, `apps/gateway` spend leg | — |
+| Test against a **third-party public** x402 seller — ours is stock, which tests "unmodified" but not a public facilitator accepting HTS | `x402`, `gateway` spend leg | — |
 | ~~Match `x402-hedera-receipts` or go bespoke?~~ | `protocol` | **decided: bespoke** — see log 2026-08-22 |
-| Probe 5: fast-path latency to in-region Upstash | `cache` LRU design, the 50ms claim | — |
+| ~~Probe 5: fast-path latency~~ | `cache` | **answered: co-located 1.5ms, remote 499ms.** Demo must use local Redis |
 | Standalone MCP server, or load our plugin into the official Agent Kit MCP server? | `mcp` scope | — |
 | Settlement schedule: provisional-amount-at-open, or short-expiry-near-close? | `apps/settlement` | — |
 | `AGE_FULL_DAYS` testnet value | `graph`, `params`, the config dump | — |
+| `DATABASE_URL` (Supabase) not set | `db` → `engine` | **needs the user** |
+| No demo video, no user-testing evidence, no network-impact doc — 45% of the rubric | submission | **needs the user** |
 | Refusal reason enum — the UI already renders 6 codes, `@tab/protocol` must match exactly | `protocol`, `fastpath`, `web` | — |
 | Ceiling input record shape — the CEILING view renders 9 rows and a canonical hash | `scoring`, `protocol`, `web` | — |
 
@@ -301,9 +329,9 @@ the existing `x402-hedera-receipts` package or design our receipts clean.
 Worth knowing anyway: it is from the Tally project and is adjacent work in the same space. If a
 judge knows it, the distinction above is the answer.
 
-**Learned:** `zod` v3 has no stable release past 3.25 — the newest v3 tag is a canary, and v4.4.3
-is current. The catalog in `pnpm-workspace.yaml` still says `zod: ^3.25.0`; that needs to become
-v4 when `protocol` is written, or install resolves to something unintended.
+**Learned:** `zod` v3 has no stable release past 3.25 — the newest v3 tag is a canary. The catalog
+said `^3.25.0`, which would have resolved to something unintended. **Since bumped to `^4.5.4`**, so
+`protocol` should just use `catalog:`.
 
 **Contract change:** none — no code was written.
 
