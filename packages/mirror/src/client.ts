@@ -37,7 +37,7 @@ export interface MirrorConfig {
 }
 
 const DEFAULTS = {
-  timeoutMs: 10_000,
+  timeoutMs: 20_000,
   maxRetries: 3,
   maxPages: 200,
 }
@@ -95,7 +95,17 @@ export class MirrorClient {
         lastError = new MirrorError(`Mirror Node ${res.status} for ${path}`, res.status, path)
       } catch (err) {
         if (err instanceof MirrorError && err.status < 500 && err.status !== 429) throw err
-        lastError = err
+        // An aborted fetch surfaces as a bare DOMException with no context.
+        // Wrap it so a timeout says which request timed out and for how long.
+        if (err instanceof Error && err.name === 'AbortError') {
+          lastError = new MirrorError(
+            `Mirror Node timed out after ${this.timeoutMs}ms for ${path}`,
+            0,
+            path,
+          )
+        } else {
+          lastError = err
+        }
       } finally {
         clearTimeout(timer)
       }

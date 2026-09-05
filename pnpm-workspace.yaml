@@ -21,12 +21,23 @@ overrides:
   "@hiero-ledger/sdk": "2.87.0"
   "@hashgraph/sdk": "npm:@hiero-ledger/sdk@2.87.0"
 
-# One resolution for the Hedera SDK across the whole graph.
-# Two copies => two `Transaction`/`AccountId` classes => silent signing failures.
-# See docs/adr/0002-hiero-sdk-single-instance.md
+# One version per dependency, for the whole workspace.
+#
+# pnpm catalogs are keyed by the REAL package name — a label like `x402` or
+# `hiero-sdk` resolves to nothing, so `catalog:` references against it fail with
+# ENTRY_NOT_FOUND. Reference these as `"@x402/core": "catalog:"`.
+#
+# Two copies of @hiero-ledger/sdk means two Transaction/AccountId classes and
+# signing fails at request time. See docs/adr/0002-single-hedera-sdk.md.
 catalog:
-  hiero-sdk: 2.87.0
-  x402: ~2.25.0
+  "@hiero-ledger/sdk": 2.87.0
+  "@x402/core": ~2.25.0
+  "@x402/hedera": ~2.25.0
+  "@x402/fetch": ~2.25.0
+  "@x402/express": ~2.25.0
+  "@x402/fastify": ~2.25.0
+  "@x402/extensions": ~2.25.0
+  "@hashgraph/hedera-agent-kit": ^4.1.0
   zod: ^4.5.4
   fastify: ^5.4.0
   pino: ^9.7.0

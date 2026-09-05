@@ -40,7 +40,8 @@
     "guard:secrets": "node tools/guards/no-secrets.mjs",
     "token:check": "pnpm --filter @tab/bootstrap token:check",
     "token:mint": "pnpm --filter @tab/bootstrap token:mint",
-    "probe3": "pnpm --filter @tab/bootstrap probe3"
+    "probe3": "pnpm --filter @tab/bootstrap probe3",
+    "chain:status": "pnpm --filter @tab/bootstrap status"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
