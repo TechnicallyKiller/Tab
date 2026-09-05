@@ -26,8 +26,8 @@ overrides:
 # See docs/adr/0002-hiero-sdk-single-instance.md
 catalog:
   hiero-sdk: 2.87.0
-  x402: ~2.22.0
-  zod: ^3.25.0
+  x402: ~2.25.0
+  zod: ^4.5.4
   fastify: ^5.4.0
   pino: ^9.7.0
   ioredis: ^5.6.0
