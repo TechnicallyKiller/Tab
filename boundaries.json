@@ -347,7 +347,7 @@
         "x402",
         "observability"
       ],
-      "why": "Phase 0. Writes docs/probes.md. Runs before any other code exists, so it depends only on adapters.",
+      "why": "Phase 0 and beyond: the runnable proofs behind every claim in docs/probes.md. It exercises every protocol role and every adapter end to end, so its allow list is deliberately the widest in the repo. Nothing depends on it, so that breadth costs nothing architecturally.",
       "externalAllowList": [
         "@x402/core",
         "@x402/hedera",
@@ -356,7 +356,9 @@
         "@hiero-ledger/sdk",
         "express",
         "ioredis",
-        "undici"
+        "postgres",
+        "undici",
+        "zod"
       ]
     },
     "bootstrap": {
