@@ -21,14 +21,15 @@ written.
 
 ## Current State
 
-**Phase:** on-chain — HCS live, money moving between accounts. Frontend still on mocks.
-**Next action:** write `@tab/protocol`. Decision on receipt conventions is made (bespoke — see
+**Phase:** on-chain — **x402 settles on testnet.** HCS live, money moving. Frontend on mocks.
+**Next action:** HIP-423 scheduled transactions (4th Hedera service, lifts Integration), then
+`@tab/protocol`. Decision on receipt conventions is made (bespoke — see
 log); nothing is blocking it. The receipt topic still carries only `bootstrap.hello`.
 
 **Pick zod 4 (4.4.3), not 3.** The catalog in `pnpm-workspace.yaml` still pins `zod: ^3.25.0`, but
 v3 has no stable release past 3.25 — the newest v3 tag is a canary. Update the catalog when
 `protocol` lands.
-**Last updated:** 2026-08-22 by Claude (receipt-schema decision made; protocol not yet written)
+**Last updated:** 2026-09-05 by Claude (Probe 2 PASSING — x402 loop settles on Hedera)
 
 ### Live testnet
 
@@ -38,6 +39,8 @@ v3 has no stable release past 3.25 — the newest v3 tag is a canary. Update the
 | Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) |
 | Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) |
 | Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) |
+| x402 seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) — stock `@x402/hedera` seller, receives only |
+| Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) — **ECDSA**, co-signs and submits. Also the faucet relay |
 | Spend token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) — `TUSD`, 6 dp, 1000 supply. **Stand-in**: the Circle faucet reported a drip that never arrived. Swapping to real USDC is one env var |
 
 All three carry an ED25519 submit key, so the log is append-only and Tab-owned. A message
@@ -55,14 +58,14 @@ exist yet.
 
 | Track | Scope | Phase | Claimed by | Status |
 |---|---|---|---|---|
-| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **4 of 5 green.** Only Probe 2 (facilitator) and 5 (Redis) left |
+| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **Probe 2 PASSING.** Only Probe 5 (Redis) left |
 | **G** | `tools/guards` | 0 | — | **done** — 5 guards, negative-tested |
 | **F1** | `money` ✅ · `protocol` · `params` | 1 | — | **protocol is the next action** — schemas pinned by the UI and the 1KB chunk limit |
 | **F2** | `ledger` | 1 | — | open |
 | **F3** | `scoring` · `graph` | 1 | — | open |
 | **A1** | `hedera` · `observability` | 2 | — | hedera: topics + HTS + accounts live. **Schedule (HIP-423) not written** |
 | **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
-| **A3** | `x402` | 2 | — | open |
+| **A3** | `x402` | 2 | — | loop proven in `tools/probes`; extract the adapter next |
 | **A4** | `cache` | 2 | — | open |
 | **FAST** | `fastpath` · `apps/gateway` | 3 | — | open |
 | **SLOW** | `apps/engine` · `apps/settlement` | 3 | — | open |
@@ -116,6 +119,9 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-05 | **x402 settles NATIVE HBAR** (`asset "0.0.0"`, tinybars) as its documented default. The primary track requirement never depended on USDC | `x402`, `gateway`, anyone waiting on the faucet |
+| 2026-09-05 | **x402's client spend controls default to USD-pegged assets only** and are client-side/advisory. HBAR needs an explicit `allowedAssets` entry with an ATOMIC cap. Tab's real cap stays in the gateway | `x402`, `fastpath` |
+| 2026-09-05 | **Facilitator fee payer must be a funded ECDSA account separate from the seller.** Same account for both nets to price-minus-fee | `x402`, `gateway`, `bootstrap` |
 | 2026-08-22 | **The spend token is `TUSD` `0.0.10182853`, not real USDC.** The Circle faucet reported a drip that never arrived. Read the token id from `USDC_TOKEN_ID`, never hardcode `0.0.429274` | everyone touching a transfer |
 | 2026-08-22 | **Mirror Node 404s on an entity that exists on consensus.** A just-created account is indexed seconds later; 404 means "not indexed yet". Use `waitForAccount()` after any create-then-read | `engine` indexer, `bootstrap`, `gateway` |
 | 2026-08-22 | **Keep an HCS receipt under 1KB.** Above that it chunks across messages and must be reassembled before parsing; a lone chunk is truncated JSON | `protocol`, `gateway`, `verify` |
@@ -144,6 +150,45 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-09-05 — Claude — x402 settles on Hedera testnet (Probe 2 PASS)
+
+**Did:** Built `tools/probes` and proved the full x402 loop end to end on real testnet —
+402 challenge, signed retry, verify, settle, 200 with the seller's actual response body, in 2.4s.
+Buyer −0.5000 ℏ, seller +0.5000 ℏ, exact. Self-hosted facilitator, stock
+`@x402/hedera/exact/server` seller. Also vendored `hedera-dev/hedera-skills`, bumped @x402 to
+2.25.0, and fixed the pnpm catalog (it was keyed by labels, so no `catalog:` reference could ever
+resolve).
+
+**Learned — the important one first:**
+
+1. **x402 settles native HBAR by default, so the primary track requirement never needed USDC.**
+   `asset "0.0.0"`, tinybars. I spent a lot of today chasing a testnet USDC faucet while the thing
+   that could actually sink the submission — "x402 on both legs", completely untested — sat
+   untouched. The `x402-payments` skill said this in its first paragraph. Read the skills first.
+2. **ADR-0004's gas asymmetry is now measured, not asserted.** The buyer moved exactly the price
+   and no fee; the facilitator's fee payer absorbed it. So the seller's facilitator pays gas when
+   Tab spends, and Tab pays gas when it earns and self-facilitates. The gateway needs an HBAR
+   balance watched separately from its USDC float.
+3. **x402 has its own client-side spend controls** — USD-pegged assets only, `$1` cap, so HBAR
+   needs an explicit `allowedAssets` entry with an atomic (tinybar) cap. It is x402's version of a
+   per-call cap and it is **advisory**: the agent configures it, so a compromised agent can raise
+   it. That is independent support for putting Tab's real cap in the gateway.
+4. **The seller must not be the fee payer.** First run showed `+0.4975 ℏ` for a `0.5 ℏ` price
+   because one account both received and paid fees. `pnpm seller:create` makes a dedicated one.
+5. **`@x402/core`'s own types fail its own interfaces** under `exactOptionalPropertyTypes`
+   (`network` widens to `string`). Relaxed in `tools/probes` only; `packages/` and `apps/` stay strict.
+
+**Contract change:** three, in the table above.
+
+**Next:** HIP-423 scheduled transactions — takes us from 3 Hedera services to 4, which lifts
+Integration (15% of the grade), and it is already claimed in the README. Then extract
+`packages/x402` from the working spike, then `@tab/protocol`.
+
+**Still open on Probe 2:** not tested against a *third-party* public seller, and not tested with an
+HTS token rather than HBAR. Probe 5 needs Supabase and Upstash.
 
 ---
 

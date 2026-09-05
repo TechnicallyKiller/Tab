@@ -2,10 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
     "composite": false,
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    // @x402/core's own getSupported() return type does not satisfy its own
+    // FacilitatorClient interface under exactOptionalPropertyTypes: `network`
+    // widens to string where the interface wants `${string}:${string}`. That is
+    // a library type issue, not ours. Relaxed HERE ONLY — probes are throwaway
+    // spikes; packages/ and apps/ keep the strict setting.
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": false
   },
   "include": ["src/**/*.ts"]
 }

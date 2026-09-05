@@ -1,6 +1,6 @@
 # Phase 0 — Probes
 
-**Status: 4 of 5 answered against live Hedera testnet on 2026-08-22.**
+**Status: 4 of 5 answered · Probe 2 PASSING as of 2026-09-05.**
 Operator `0.0.8812188` · three HCS topics live · money moving between accounts ·
 only Probe 2 (spend-leg facilitator) and Probe 5 (Redis latency) outstanding.
 
@@ -14,7 +14,7 @@ fallback is just a way to discover a problem late.
 | # | Probe | Status | Evidence | Fallback taken |
 |---|---|---|---|---|
 | 1 | Obtain testnet USDC (`0.0.429274`) | ✅ **FALLBACK TAKEN** | Circle faucet reported a successful drip; nothing arrived. Polled 10× over 2 min — the account had never had *any* token relationship, so the drip never reached it. Minted the stand-in instead. | **Yes** — `TUSD` `0.0.10182853`, 6 dp, 1000 supply |
-| 2 | Spend-leg facilitator supports `hedera:testnet` + HTS USDC | ⬜ | Needs a live seller to query | — |
+| 2 | x402 loop settles on `hedera:testnet` | ✅ **PASS** | `pnpm probe:x402` — 402 challenge → signed retry → verify → settle → 200 with the seller's body, in 2.4s. Buyer −0.5000 ℏ, seller +0.5000 ℏ exactly. Self-hosted facilitator, stock seller. | none needed |
 | 3 | Associate USDC and receive a transfer | ✅ **PASS** | `pnpm probe3` — created a fresh account with **0** auto-association slots, confirmed the transfer fails with `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`, associated it, paid `0.0400`, and confirmed both balances from Mirror Node. | none needed |
 | 4 | Mirror Node history query with explicit timestamp range | ✅ **PASS** | `pnpm --filter @tab/mirror test:live` — 7 checks green. See findings below. | none needed |
 | 5 | Fast-path latency to Upstash Redis, in-region | ⬜ | Needs an Upstash database | — |
@@ -28,6 +28,25 @@ fallback is just a way to discover a problem late.
 | **Bootstrap is idempotent** | Second run recreated nothing and skipped the probe write |
 
 ## Findings that changed the code
+
+**Settlement is native HBAR, and never needed USDC.**
+`asset: "0.0.0"`, tinybars. `@x402/hedera` supports HTS too, but HBAR is the documented default —
+so the primary track requirement was provable with HBAR we already held. Considerable time went to
+a USDC faucet that was not blocking it.
+
+**ADR-0004's gas asymmetry, now measured.** The buyer moved exactly the price and no fee; the
+facilitator's fee payer absorbed it. So the seller's facilitator pays gas when Tab **spends**, and
+Tab pays gas when it **earns** and self-facilitates. The gateway needs an HBAR balance monitored
+separately from its USDC float.
+
+**x402 ships client-side spend controls, defaulting to USD-pegged assets only.**
+`findDefaultAsset` knows USDC, not HBAR, capped at `$1`. HBAR needs an explicit `allowedAssets`
+entry with an atomic (tinybar) cap. Notable beyond the fix: it is x402's own version of a per-call
+cap, and it is **client-side and advisory** — the agent sets it — which is exactly why Tab's cap
+lives in the gateway. Independent support for the design.
+
+**The facilitator fee payer must be a funded ECDSA account, separate from the seller.**
+Same account for both nets to price-minus-fee and reads like a wrong price.
 
 **Mirror Node returns empty pages in the middle of a real result set.**
 Measured: 7 of 8 pages empty, 1 page with data, `links.next` non-null throughout. An indexer that
