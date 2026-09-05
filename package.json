@@ -46,7 +46,9 @@
     "faucet:sweep": "pnpm --filter @tab/bootstrap faucet:sweep",
     "faucet:watch": "pnpm --filter @tab/bootstrap faucet:watch",
     "probe:x402": "pnpm --filter @tab/probes probe:x402",
-    "seller:create": "pnpm --filter @tab/bootstrap seller:create"
+    "seller:create": "pnpm --filter @tab/bootstrap seller:create",
+    "probe:x402:hts": "pnpm --filter @tab/probes probe:x402:hts",
+    "probe:latency": "pnpm --filter @tab/probes probe:latency"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

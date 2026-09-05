@@ -32,8 +32,17 @@ import { MirrorClient } from '@tab/mirror'
 
 const NETWORK = HEDERA_TESTNET_CAIP2
 const PORT = 4021
-const PRICE_HBAR = '0.5'
 const TINYBAR_PER_HBAR = 100_000_000n
+
+/**
+ * `--hts` settles an HTS token instead of native HBAR.
+ *
+ * This is the path Tab actually uses: the product is denominated in a
+ * 6-decimal dollar token, not HBAR. HBAR is @x402/hedera's documented default
+ * and the easier first proof, but if the HTS path did not work the whole design
+ * would need rethinking — so it gets its own run.
+ */
+const USE_HTS = process.argv.includes('--hts')
 
 const env = (k: string) => {
   const v = process.env[k]
@@ -51,6 +60,17 @@ const BUYER_KEY = PrivateKey.fromStringDer(env('HEDERA_OPERATOR_KEY').replace(/^
 const FEE_PAYER_ID = env('FAUCET_ACCOUNT_ID')
 const FEE_PAYER_KEY = PrivateKey.fromStringDer(env('FAUCET_ACCOUNT_KEY').replace(/^0x/, ''))
 
+// The asset under test.
+const TOKEN_ID = process.env['USDC_TOKEN_ID'] ?? ''
+if (USE_HTS && (!TOKEN_ID || TOKEN_ID.includes('xxxxx'))) {
+  throw new Error('--hts needs USDC_TOKEN_ID in .env. Run `pnpm chain:status`.')
+}
+const ASSET = USE_HTS ? TOKEN_ID : HBAR_ASSET_ID
+// HBAR has 8 decimals (tinybars); our dollar token has 6.
+const ATOMIC_PRICE = USE_HTS ? 40_000n : TINYBAR_PER_HBAR / 2n
+const UNIT = USE_HTS ? 1_000_000n : TINYBAR_PER_HBAR
+const SYMBOL = USE_HTS ? 'tokens' : 'ℏ'
+
 // Seller: any account can receive HBAR — no association needed. Must be
 // SEPARATE from the fee payer, or the net movement reads as price-minus-fees
 // and looks like the price was wrong. `pnpm seller:create` makes one.
@@ -64,17 +84,37 @@ if (SELLER_ID === FEE_PAYER_ID) {
 }
 
 const mirror = new MirrorClient({ network: 'testnet', timeoutMs: 30_000, maxRetries: 4 })
-const hbar = async (id: string) => {
-  const a = await mirror.get<{ balance?: { balance?: number } }>(`/api/v1/accounts/${id}?limit=1`)
-  return BigInt(a.balance?.balance ?? 0)
+/** Balance of whichever asset is under test, in that asset's atomic units. */
+const balanceOf = async (id: string): Promise<bigint> => {
+  if (!USE_HTS) {
+    const a = await mirror.get<{ balance?: { balance?: number } }>(`/api/v1/accounts/${id}?limit=1`)
+    return BigInt(a.balance?.balance ?? 0)
+  }
+  try {
+    const page = await mirror.get<{ tokens?: { balance: number }[] }>(
+      `/api/v1/accounts/${id}/tokens?token.id=${TOKEN_ID}&limit=2`,
+    )
+    return BigInt(page.tokens?.[0]?.balance ?? 0)
+  } catch {
+    return 0n // not indexed or not associated — both read as zero here
+  }
 }
-const fmt = (tinybar: bigint) => `${(Number(tinybar) / 1e8).toFixed(4)} ℏ`
+const fmt = (atomic: bigint) => {
+  const negative = atomic < 0n
+  const m = negative ? -atomic : atomic
+  const whole = m / UNIT
+  const frac = ((m % UNIT) * 10_000n) / UNIT
+  return `${negative ? '−' : ''}${whole}.${frac.toString().padStart(4, '0')} ${SYMBOL}`
+}
 
 console.log('\nProbe 2 — x402 loop on Hedera testnet\n')
 console.log(`  buyer      ${BUYER_ID}   (Tab hot float)`)
 console.log(`  seller     ${SELLER_ID}`)
 console.log(`  fee payer  ${FEE_PAYER_ID}   (facilitator, ECDSA)`)
-console.log(`  asset      ${HBAR_ASSET_ID} native HBAR · price ${PRICE_HBAR} ℏ`)
+console.log(
+  `  asset      ${ASSET} ${USE_HTS ? 'HTS token' : 'native HBAR'} · price ` +
+    `${(Number(ATOMIC_PRICE) / Number(UNIT)).toFixed(4)} ${SYMBOL}`,
+)
 console.log(`  network    ${NETWORK}\n`)
 
 // ── 1. facilitator, in process ───────────────────────────────────────────────
@@ -118,7 +158,7 @@ app.use(
         accepts: [
           {
             scheme: 'exact',
-            price: { amount: (BigInt(5) * TINYBAR_PER_HBAR / 10n).toString(), asset: HBAR_ASSET_ID },
+            price: { amount: ATOMIC_PRICE.toString(), asset: ASSET },
             network: NETWORK,
             payTo: SELLER_ID,
           },
@@ -155,9 +195,9 @@ client.setSpendControls({
   allowedAssets: [
     {
       network: NETWORK,
-      asset: HBAR_ASSET_ID,
-      // Atomic units, so tinybars — not "$1". 1 HBAR ceiling for this probe.
-      maxAmountPerPayment: TINYBAR_PER_HBAR.toString(),
+      asset: ASSET,
+      // Atomic units — tinybars for HBAR, micro-units for a 6dp token. Never "$1".
+      maxAmountPerPayment: (ATOMIC_PRICE * 4n).toString(),
     },
   ],
 })
@@ -172,20 +212,31 @@ try {
   const unpaid = await fetch(url)
   console.log(`  unpaid request      HTTP ${unpaid.status}  ${unpaid.status === 402 ? '(402 challenge)' : 'UNEXPECTED'}`)
 
-  const buyerBefore = await hbar(BUYER_ID)
-  const sellerBefore = await hbar(SELLER_ID)
+  const buyerBefore = await balanceOf(BUYER_ID)
+  const sellerBefore = await balanceOf(SELLER_ID)
   console.log(`  buyer before        ${fmt(buyerBefore)}`)
   console.log(`  seller before       ${fmt(sellerBefore)}`)
 
   console.log('\n  paying…')
+  // Attribute the time: a 30s payment needs to be traceable to a leg, not
+  // reported as "slow". Phase timings come from the client hooks.
+  const marks: [string, number][] = []
+  const mark = (label: string) => marks.push([label, performance.now()])
   const t0 = performance.now()
+  mark('start')
   const paid = await payingFetch(url, { method: 'GET' })
+  mark('http complete')
   // Clone before processResponse, which consumes the stream.
   const body = await paid.clone().json().catch(() => null)
   const result = await httpClient.processResponse(paid)
   const elapsed = ((performance.now() - t0) / 1000).toFixed(2)
 
   console.log(`  paid request        HTTP ${paid.status}  in ${elapsed}s`)
+  let previous = t0
+  for (const [label, at] of marks.slice(1)) {
+    console.log(`    ${label.padEnd(18)} +${((at - previous) / 1000).toFixed(2)}s`)
+    previous = at
+  }
   // processResponse consumes the body, so read the settlement receipt from it
   // and the resource itself from a clone taken before it was read.
   const settled = result as { kind?: string; settlement?: { transaction?: string } }
@@ -202,8 +253,8 @@ try {
   for (let i = 0; i < 12; i++) {
     await new Promise((r) => setTimeout(r, 2500))
     process.stdout.write('.')
-    buyerAfter = await hbar(BUYER_ID)
-    sellerAfter = await hbar(SELLER_ID)
+    buyerAfter = await balanceOf(BUYER_ID)
+    sellerAfter = await balanceOf(SELLER_ID)
     if (sellerAfter !== sellerBefore) break
   }
   console.log()
@@ -211,7 +262,10 @@ try {
   console.log(`  seller after        ${fmt(sellerAfter)}   (${fmt(sellerAfter - sellerBefore)})`)
 
   const moved = sellerAfter > sellerBefore
-  console.log(`\n  ${moved ? 'PASS' : 'FAIL'} — x402 payment ${moved ? 'settled on Hedera' : 'did NOT settle'}\n`)
+  console.log(
+    `\n  ${moved ? 'PASS' : 'FAIL'} — x402 ${USE_HTS ? 'HTS token' : 'HBAR'} payment ` +
+      `${moved ? 'settled on Hedera' : 'did NOT settle'}\n`,
+  )
   server.close()
   process.exit(moved ? 0 : 1)
 } catch (err) {

@@ -17,7 +17,7 @@ fallback is just a way to discover a problem late.
 | 2 | x402 loop settles on `hedera:testnet` | ✅ **PASS** | `pnpm probe:x402` — 402 challenge → signed retry → verify → settle → 200 with the seller's body, in 2.4s. Buyer −0.5000 ℏ, seller +0.5000 ℏ exactly. Self-hosted facilitator, stock seller. | none needed |
 | 3 | Associate USDC and receive a transfer | ✅ **PASS** | `pnpm probe3` — created a fresh account with **0** auto-association slots, confirmed the transfer fails with `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`, associated it, paid `0.0400`, and confirmed both balances from Mirror Node. | none needed |
 | 4 | Mirror Node history query with explicit timestamp range | ✅ **PASS** | `pnpm --filter @tab/mirror test:live` — 7 checks green. See findings below. | none needed |
-| 5 | Fast-path latency to Upstash Redis, in-region | ⬜ | Needs an Upstash database | — |
+| 5 | Fast-path latency to managed Redis | ✅ **RUN — FAILS the 50ms budget** | `pnpm probe:latency` — PING p50 **220ms**, read+reserve p99 **499ms** against a 50ms budget. TCP handshake to the same host is ~45ms, so ~175ms per command is an intercontinental hop to the primary region. | **Yes** — see below |
 
 ## Also proven, beyond the original five
 
@@ -26,6 +26,43 @@ fallback is just a way to discover a problem late.
 | **HCS topics create and accept messages** | `pnpm bootstrap` created `0.0.10182696` (receipts), `0.0.10182697` (ceilings), `0.0.10182698` (settlements), each with an ED25519 submit key so the log is append-only and Tab-owned |
 | **A message round-trips through consensus** | Submitted to the receipt topic, appeared on Mirror Node within ~2s, reassembled and parsed back |
 | **Bootstrap is idempotent** | Second run recreated nothing and skipped the probe write |
+
+## Probe 5 — the 50ms budget does not survive a remote cache
+
+Measured, not estimated:
+
+```
+PING           p50 220.3ms   (TCP handshake to the same host: ~45ms)
+GET snapshot   p50 221.0ms
+read+reserve   p50 442.7ms · p99 499.1ms
+budget                50ms
+```
+
+**Diagnosis.** The Upstash hostname terminates at a nearby edge, but every *command* proxies to the
+primary region. With the primary in us-east-1 and the client in ap-south, roughly 175ms of each
+220ms is one intercontinental hop.
+
+**Three consequences, in order of how much they change the design.**
+
+1. **Region is a deployment constraint, and it is fixable.** Recreating the database with its
+   primary near the gateway should bring a command close to the handshake figure — ~45ms from a
+   laptop here, ~1–2ms co-located.
+
+2. **An in-process LRU does not rescue this on its own, even with the region fixed.** The snapshot
+   read *can* be served from memory: the engine writes it, the gateway reads it. But a **hold
+   reserve cannot**. It has to be atomic across every gateway instance, or two instances both see
+   the same available balance and both allow — which is precisely the race the README lists as
+   *caught*. Shared atomic state means a network hop, so **the sub-50ms budget requires the cache to
+   be co-located with the gateway.** Not a tuning knob.
+
+3. **For the demo, run a local Redis.** Two round trips at 220ms is ~450ms per spend, so the
+   headline "under 50ms" is not demonstrable on the machine doing the demonstrating.
+
+**Corrections owed.** The README's "under 50ms, cache only" should read "in-process snapshot plus a
+co-located atomic reserve", and `apps/README.md`'s "horizontally scalable, stateless" gateway is
+only true *because* the hold lives in Redis — which is exactly why that hop cannot be optimised
+away. Both claims are still achievable; they just carry a deployment precondition that was
+previously unstated.
 
 ## Findings that changed the code
 
