@@ -19,7 +19,9 @@ export {
 export {
   associateToken,
   createAccount,
+  createEvmAccount,
   type CreatedAccount,
+  type CreatedEvmAccount,
   mintStandInToken,
   transferToken,
   type MintedToken,

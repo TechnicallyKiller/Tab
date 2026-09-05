@@ -9,7 +9,9 @@
     "token:check": "node --experimental-strip-types --env-file=../../.env src/token.ts",
     "token:mint": "node --experimental-strip-types --env-file=../../.env src/token.ts --mint",
     "probe3": "node --experimental-strip-types --env-file=../../.env src/pay-test.ts",
-    "status": "node --experimental-strip-types --env-file=../../.env src/whoami.ts"
+    "status": "node --experimental-strip-types --env-file=../../.env src/whoami.ts",
+    "evm:account": "node --experimental-strip-types --env-file=../../.env src/evm-account.ts",
+    "faucet:sweep": "node --experimental-strip-types --env-file=../../.env src/faucet-sweep.ts"
   },
   "dependencies": {
     "@tab/hedera": "workspace:*",

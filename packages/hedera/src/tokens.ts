@@ -196,3 +196,45 @@ export async function createAccount(
     transactionId: executed.transactionId.toString(),
   }
 }
+
+export interface CreatedEvmAccount extends CreatedAccount {
+  /** Real ECDSA-derived EVM address, `0x…`. Usable with EVM-oriented tooling. */
+  evmAddress: string
+}
+
+/**
+ * Create an ECDSA account with a real EVM alias.
+ *
+ * Tab itself never needs an EVM address — we deploy no contracts and touch no
+ * EVM tooling. But some faucets and explorers are EVM-oriented and only accept
+ * a `0x` address, and an ED25519 Hedera account has no true one: its
+ * `evm_address` is a synthetic "long-zero" encoding of the account number,
+ * which EVM-oriented forms reject or misroute.
+ *
+ * This exists solely so an EVM-only faucet can be used. It is NOT a step toward
+ * the EVM: no Solidity, no contracts, no EVM tooling in the dependency graph.
+ */
+export async function createEvmAccount(
+  client: Client,
+  params: { initialHbar?: number; maxAutomaticTokenAssociations?: number } = {},
+): Promise<CreatedEvmAccount> {
+  const privateKey = PrivateKey.generateECDSA()
+  const executed = await new AccountCreateTransaction()
+    // Two args: the account key, and the ECDSA key the EVM alias derives from.
+    .setKeyWithAlias(privateKey.publicKey, privateKey)
+    .setInitialBalance(new Hbar(params.initialHbar ?? 5))
+    // -1 is unlimited: a faucet must be able to send a token we never associated.
+    .setMaxAutomaticTokenAssociations(params.maxAutomaticTokenAssociations ?? -1)
+    .execute(client)
+
+  const receipt = await executed.getReceipt(client)
+  if (receipt.status !== Status.Success || !receipt.accountId) {
+    throw new Error(`ECDSA account creation failed with status ${receipt.status.toString()}`)
+  }
+  return {
+    accountId: receipt.accountId.toString(),
+    privateKey,
+    evmAddress: `0x${privateKey.publicKey.toEvmAddress()}`,
+    transactionId: executed.transactionId.toString(),
+  }
+}
