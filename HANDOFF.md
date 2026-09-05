@@ -22,8 +22,8 @@ written.
 ## Current State
 
 **Phase:** on-chain — **all 5 probes answered, 4 Hedera services proven.** Frontend on mocks.
-**Next action:** extract `packages/x402` from the working spike in `tools/probes`, then
-`@tab/protocol`.
+**Next action:** `@tab/protocol` — receipt schemas, so the receipt topic carries typed receipts
+instead of `bootstrap.hello`. Then `@tab/ledger` and a minimal gateway.
 
 ### Proven on testnet
 
@@ -77,7 +77,7 @@ exist yet.
 | **F3** | `scoring` · `graph` | 1 | — | open |
 | **A1** | `hedera` · `observability` | 2 | — | hedera: topics + HTS + accounts live. **Schedule (HIP-423) not written** |
 | **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
-| **A3** | `x402` | 2 | — | loop proven in `tools/probes`; extract the adapter next |
+| **A3** | `x402` | 2 | — | **done** — 3 roles, proven on testnet for HBAR and HTS. No `hold_id` threading yet |
 | **A4** | `cache` | 2 | — | **read Probe 5 first** — the LRU is not optional, and the hold reserve cannot be cached |
 | **FAST** | `fastpath` · `apps/gateway` | 3 | — | open |
 | **SLOW** | `apps/engine` · `apps/settlement` | 3 | — | open |
@@ -131,6 +131,8 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-05 | **Node's `fetch` has a 10s CONNECT timeout no AbortController can extend.** Mirror Node needs 5–15s from a high-latency link, so ~half of requests die on it. Inside x402 it surfaces as `invalid_exact_hedera_payload_signature_invalid` — a signature error for a network problem. **Every app/tool entry point must call `configureGlobalHttp()` from `@tab/mirror` before any HTTP** | everyone doing HTTP; `gateway` especially |
+| 2026-09-05 | **`@tab/x402` may import `@hiero-ledger/sdk`** — second exception after `@tab/hedera`, now actually in `boundaries.json` rather than only in a README | `x402`, anyone reading the SDK ban |
 | 2026-09-05 | **The 50ms budget requires a CO-LOCATED cache — and holds easily with one.** Local Redis: p99 **1.5ms**, 33× headroom. Remote Upstash us-east-1 from ap-south: 499ms. **Run the demo against local Redis** (`redis-server --port 6380`, already installed, no Docker/sudo). An LRU serves the snapshot but a hold reserve must be atomic across instances, so it cannot be cached away | `cache`, `fastpath`, `gateway`, demo |
 | 2026-09-05 | **Never diff Mirror Node account balances to prove value moved.** They are snapshots; `balance.timestamp` is the last activity that updated them. Fetch the transaction and assert on `result` + transfer list. **`verify-tab` must account for this** or its invariant fails spuriously | `verify`, `engine`, `settlement` |
 | 2026-09-05 | **Schedule state comes from Mirror Node, not `ScheduleInfoQuery`** — a consensus node that did not see the create returns `INVALID_SCHEDULE_ID` | `settlement` |
@@ -165,6 +167,42 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-09-05 (evening) — Claude — @tab/x402 extracted; a 10s timeout that faked a crypto bug
+
+**Did:** `packages/x402` — all three protocol roles behind one adapter, proven on testnet for both
+HBAR (~2.2s) and the 6-decimal token (~39s). Added `configureGlobalHttp()` to `@tab/mirror`.
+
+**Learned — and this one is worth reading before you debug anything network-adjacent:**
+
+**Node's `fetch` has a 10-second connect timeout that no `AbortController` can extend.** An abort
+bounds the whole request; the connect phase fails first and independently. Mirror Node from a
+high-latency link takes **5–15s to connect**, so roughly half of all requests die on undici's
+default.
+
+Inside x402 that surfaces as `invalid_exact_hedera_payload_signature_invalid` with
+`invalidMessage: "fetch failed"` — the facilitator's `verifyPayerSignature` fetches the payer's
+on-chain key from Mirror Node, and when that dies the scheme fails closed reporting a **signature**
+error for a **network** problem.
+
+I bisected through four wrong hypotheses (spend controls, facilitator config, sync `getSupported`,
+resource-server wiring), compared payloads and challenge headers byte for byte — all identical —
+while the original spike kept passing. The premise was wrong the whole time. **Check whether the
+process can reach the host before believing an error message about cryptography.**
+
+This also explains two earlier mysteries: the intermittent "This operation was aborted" failures,
+and `probe:x402:hts` taking ~30s while HBAR took 2.4s.
+
+**Also learned:** the boundaries guard caught me committing a documented-but-unimplemented
+exception. `@tab/hedera`'s README claimed `@tab/x402` was permitted to import the SDK; that was
+never in `boundaries.json`. It is now. I pushed at 2/5 guards before noticing — **run `pnpm guard`
+before committing, not after.**
+
+**Contract change:** two, in the table above.
+
+**Next:** `@tab/protocol`. The receipt topic still holds `bootstrap.hello`.
 
 ---
 

@@ -157,10 +157,13 @@
         "@x402/core",
         "@x402/hedera",
         "@x402/fetch",
+        "@x402/express",
+        "@x402/fastify",
         "@x402/extensions",
+        "@hiero-ledger/sdk",
         "zod"
       ],
-      "why": "Adapter over the @x402 v2 packages for all three roles we play: client (spend leg), resource server (earn leg), self-hosted facilitator (earn leg settlement). Isolated because @x402 is a fast-moving dependency."
+      "why": "Adapter over the @x402 v2 packages for all three roles Tab plays: client (spend leg), resource server (earn leg), self-hosted facilitator (earn leg settlement). Isolated because @x402 is a fast-moving dependency. This is ONE OF TWO packages besides @tab/hedera permitted to import @hiero-ledger/sdk, because @x402/hedera builds and signs Hedera transactions and the signer factories take a PrivateKey and a Client directly. The single-version override still applies \u2014 two copies of the SDK would break instanceof across this boundary, which is exactly where a partially-signed transfer crosses."
     },
     "observability": {
       "allow": [],
@@ -344,7 +347,17 @@
         "x402",
         "observability"
       ],
-      "why": "Phase 0. Writes docs/probes.md. Runs before any other code exists, so it depends only on adapters."
+      "why": "Phase 0. Writes docs/probes.md. Runs before any other code exists, so it depends only on adapters.",
+      "externalAllowList": [
+        "@x402/core",
+        "@x402/hedera",
+        "@x402/fetch",
+        "@x402/express",
+        "@hiero-ledger/sdk",
+        "express",
+        "ioredis",
+        "undici"
+      ]
     },
     "bootstrap": {
       "allow": [
