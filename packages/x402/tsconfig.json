@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "composite": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    // @x402/core's own getSupported() widens `network` to string where its
+    // FacilitatorClient interface wants `${string}:${string}`. A mismatch
+    // inside the library's types, not ours. Everything else stays strict.
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["src/**/*.ts"]
+}

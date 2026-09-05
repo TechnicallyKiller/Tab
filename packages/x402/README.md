@@ -1,84 +1,81 @@
 # @tab/x402
 
-**Tier 2 · adapter over `@x402/core` and `@x402/hedera` · all three protocol roles**
+**Tier 2 · adapter over `@x402/core` + `@x402/hedera` · all three protocol roles**
 
-## Use the scoped v2 packages
+Tab plays every role in the protocol, which is why they live in one package rather than scattered
+across the gateway:
 
-| Use | Do not use |
-|---|---|
-| `@x402/core`, `@x402/hedera` — **2.22.0** (2026-08-11) | `x402` unscoped — 1.2.0, older single-package line |
-
-`@x402/hedera` exports exactly three entry points, and Tab plays **all three roles** — which is
-why this is one adapter package rather than logic scattered across the gateway:
-
-| Entry point | Tab's role | Which leg |
+| Role | Leg | File |
 |---|---|---|
-| `@x402/hedera/exact/client` | buyer | **spend** — gateway pays the seller from hot float |
-| `@x402/hedera/exact/server` | resource server | **earn** — gateway fronts the agent's endpoint |
-| `@x402/hedera/exact/facilitator` | facilitator | **earn** — we verify and settle inbound ourselves |
+| **client** | spend — pays unmodified sellers from the hot float | `client.ts` |
+| **resource server** | earn — fronts the agent's endpoint, returns 402 | `server.ts` |
+| **facilitator** | earn — verifies and settles inbound ourselves | `facilitator.ts` |
 
-## How the Hedera exact scheme actually works
+Proven end to end on Hedera testnet: `pnpm probe:adapter` (HBAR, ~2.2s) and
+`pnpm probe:adapter:hts` (6-decimal token, ~39s). Both settle real value.
 
-This is the single most important thing to understand before writing gateway code, and it has
-consequences the README did not account for.
+## The finding that cost the most to trace
 
-1. The **client** builds a `TransferTransaction` debiting itself, signs it, and base64-encodes it
-   as `ExactHederaPayloadV2 = { transaction: string }`.
-2. The **facilitator** decodes it, verifies transfer semantics via `inspectHederaTransaction`,
-   and **submits it as fee payer** — `getExtra()` returns `feePayer`.
+**Node's `fetch` has a 10-second connect timeout that no `AbortController` can extend.** An abort
+signal bounds the whole request; the connect phase fails first and independently.
 
-Two consequences:
-
-**The paying account signs per request, inside the request.** This is why the float is split into
-a single-key Hot Float and a KeyList Cold Treasury: an m-of-n signature collection cannot live in
-a path budgeted under 50ms. See [ADR-0003](../../docs/adr/0003-two-account-float.md).
-
-**Gas responsibility is asymmetric.** We pay HBAR fees when we *earn* (we facilitate inbound);
-the seller's facilitator pays when we *spend*. Monitor the gateway's HBAR balance separately from
-the USDC float. See [ADR-0004](../../docs/adr/0004-self-hosted-facilitator.md).
-
-## Constants to import, not redeclare
-
-`@x402/hedera` exports these. Do not put them in `.env`:
+Mirror Node from a high-latency link takes **5–15 seconds to connect**, so roughly half of all
+requests die on undici's default. Inside x402 that surfaces as:
 
 ```
-HEDERA_TESTNET_CAIP2 = "hedera:testnet"     HEDERA_TESTNET_USDC = "0.0.429274"
-HEDERA_MAINNET_CAIP2 = "hedera:mainnet"     HEDERA_MAINNET_USDC = "0.0.456858"
-HEDERA_USDC_DECIMALS = 6                    HBAR_ASSET_ID       = "0.0.0"
-HEDERA_TESTNET_MIRROR_NODE_URL              HEDERA_MAINNET_MIRROR_NODE_URL
+invalid_exact_hedera_payload_signature_invalid
+invalidMessage: "fetch failed"
 ```
 
-Also exported and worth using: `createHederaPreflightTransfer()`, which checks via Mirror Node
-that the payer holds enough of the asset and that `payTo` is associated with it or has a free
-auto-association slot. A seller that forgot to associate then fails preflight with a reason
-instead of silently.
+The facilitator's `verifyPayerSignature` fetches the payer's on-chain key from Mirror Node. When
+that fetch dies, the scheme fails closed and reports a **signature** error for a **network**
+problem. It presents as intermittent — the same code passing and failing minutes apart — which
+sends you looking for a race in your own wiring. I bisected through four wrong hypotheses before
+checking whether Node could reach Mirror Node at all.
 
-## Contents
+**Every app and tool must call `configureGlobalHttp()` from `@tab/mirror` at boot**, before any
+HTTP. It is process-global, so once is enough and library code must never call it.
 
-| File | Holds |
-|---|---|
-| `src/client.ts` | spend leg: 402 handling, payload construction, `hold_id` as idempotency key |
-| `src/server.ts` | earn leg: payment requirements, price parsing, 402 responses |
-| `src/facilitator.ts` | self-hosted verify + settle for inbound payments |
-| `src/signer.ts` | hot-float signer wiring for client and facilitator roles |
-| `src/errors.ts` | typed errors — a facilitator failure must be distinguishable from a refusal |
+The HTS path needs more headroom than HBAR: the facilitator's preflight checks payer balance *and*
+`payTo` association, and each token query runs 5–15s. `probe:adapter:hts` uses 90s.
+
+## Other things worth knowing
+
+**Two decimal systems, and mixing them is a 100× error.** HBAR is 8 decimals (tinybars), a dollar
+token is 6 (micro-units). Every amount crossing this package is atomic units of a **named** asset
+(`hbarAsset()` / `tokenAsset(id)`), never a bare number.
+
+**x402 ships its own client-side spend controls, and they default to USD-pegged assets only.**
+`findDefaultAsset` knows USDC, not HBAR, capped at `$1`. A non-default asset needs an explicit
+`allowedAssets` entry with an **atomic** cap.
+
+That control is worth understanding rather than just satisfying: it is x402's version of a per-call
+cap, and it is **client-side and advisory** — whoever configures the client can raise it. Tab's real
+cap lives in the gateway fast path where the agent cannot reach it. Defence in depth, not the
+defence.
+
+**The facilitator fee payer must be a funded ECDSA account, separate from the seller.** Same account
+for both nets to price-minus-fee, which reads like a wrong price.
+
+**Gas is asymmetric, and it is measured.** The buyer moves exactly the price and no fee; the
+facilitator's fee payer absorbs it. So the seller's facilitator pays gas when Tab **spends**, and Tab
+pays gas when it **earns** and self-facilitates. The gateway needs an HBAR balance monitored
+separately from its token float.
 
 ## Invariants
 
-- **`hold_id` is the idempotency key on every spend-leg payment.** A retry with the same key must
-  never double-pay. This is the `reserve → pay → commit` order in
-  [@tab/ledger](../ledger/) and the reason a crash is recoverable.
-- **The seller never learns Tab exists.** Any change requiring seller cooperation breaks the
-  strongest property in the design: *works with any unmodified x402 endpoint*. The README says
-  this must not be traded away. Nothing in this package may send a Tab-specific header or
-  credential to a seller.
-- **A facilitator failure refuses cleanly with a typed error.** It is not a ceiling refusal and
-  must not be reported as one — the Refusals view is a correctness demonstration and polluting it
-  with infrastructure errors ruins that.
-- **Both legs speak stock x402.** No Tab-specific extension on the wire.
+- **The seller never learns Tab exists.** No Tab-specific header, credential or negotiation may
+  reach a seller. The moment one does, we lose *works with any unmodified x402 endpoint*, which is
+  the strongest property in the design.
+- **`hold_id` is the idempotency key on every spend-leg payment** once the gateway wires it in.
+- **A facilitator failure is a typed error, distinguishable from a ceiling refusal.** The Refusals
+  view is a correctness demonstration; polluting it with infrastructure errors ruins that.
+- **`payTo` is a Hedera account id string**, never an EVM address.
 
-## Open for Phase 0
+## Not done yet
 
-Which public facilitator advertises `hedera:testnet` in `/supported`, and whether our chosen demo
-sellers accept HTS USDC or only HBAR. Self-facilitating does not answer this — on the spend leg we
-are the client and must use whatever the seller advertises. See [docs/probes.md](../../docs/probes.md).
+- `hold_id` is not threaded through as the idempotency key — that arrives with the gateway.
+- Settlement receipts are not written to HCS here; that is the gateway's job via `@tab/protocol`.
+- No unit tests. The probes cover behaviour but need the network and real testnet accounts.
+- Never tested against a **third-party public seller** — ours is stock `@x402/hedera`, which is the
+  right test of "unmodified", but does not prove a public facilitator accepts HTS tokens.

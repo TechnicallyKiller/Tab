@@ -17,6 +17,12 @@ import {
   waitForScheduleExecution,
 } from '@tab/mirror'
 import { micro } from '@tab/money'
+import { configureGlobalHttp } from '@tab/mirror'
+
+// Node's fetch dies after a 10s CONNECT timeout that no AbortController can
+// extend, and Mirror Node needs 5-15s from a high-latency link. Must run before
+// any HTTP. See packages/mirror/src/http.ts.
+configureGlobalHttp()
 
 const WAIT_SECONDS = Number(process.env['SCHEDULE_WAIT_SECONDS'] ?? 45)
 

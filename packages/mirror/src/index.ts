@@ -55,3 +55,5 @@ export {
   waitForScheduleExecution,
   type MirrorSchedule,
 } from './schedules.ts'
+
+export { configureGlobalHttp } from './http.ts'

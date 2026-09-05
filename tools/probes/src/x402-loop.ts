@@ -29,6 +29,12 @@ import { ExactHederaScheme as FacilitatorScheme } from '@x402/hedera/exact/facil
 import { ExactHederaScheme as ServerScheme } from '@x402/hedera/exact/server'
 import { PrivateKey } from '@hiero-ledger/sdk'
 import { MirrorClient } from '@tab/mirror'
+import { configureGlobalHttp } from '@tab/mirror'
+
+// Node's fetch dies after a 10s CONNECT timeout that no AbortController can
+// extend, and Mirror Node needs 5-15s from a high-latency link. Must run before
+// any HTTP. See packages/mirror/src/http.ts.
+configureGlobalHttp()
 
 const NETWORK = HEDERA_TESTNET_CAIP2
 const PORT = 4021
@@ -211,6 +217,11 @@ try {
   // Unpaid request must be refused with a 402 challenge.
   const unpaid = await fetch(url)
   console.log(`  unpaid request      HTTP ${unpaid.status}  ${unpaid.status === 402 ? '(402 challenge)' : 'UNEXPECTED'}`)
+  const ch = unpaid.headers.get('payment-required')
+  if (ch) {
+    const decoded = JSON.parse(Buffer.from(ch, 'base64').toString('utf8'))
+    console.log(`  challenge accepts   ${JSON.stringify(decoded.accepts?.[0])}`)
+  }
 
   const buyerBefore = await balanceOf(BUYER_ID)
   const sellerBefore = await balanceOf(SELLER_ID)

@@ -10,6 +10,12 @@
  *   pnpm probe:latency
  */
 import { Redis } from 'ioredis'
+import { configureGlobalHttp } from '@tab/mirror'
+
+// Node's fetch dies after a 10s CONNECT timeout that no AbortController can
+// extend, and Mirror Node needs 5-15s from a high-latency link. Must run before
+// any HTTP. See packages/mirror/src/http.ts.
+configureGlobalHttp()
 
 const url = process.env['REDIS_URL']
 if (!url || url.includes('...')) {
