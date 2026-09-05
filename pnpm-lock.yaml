@@ -114,6 +114,22 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/ledger:
+    dependencies:
+      '@tab/money':
+        specifier: workspace:*
+        version: link:../money
+      '@tab/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/mirror:
     dependencies:
       '@tab/money':

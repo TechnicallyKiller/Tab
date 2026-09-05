@@ -1,0 +1,284 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { bp, format, micro, usdc, type MicroUsdc } from '@tab/money'
+import type { Entry } from './entries.ts'
+import { inConsensusOrder } from './entries.ts'
+import { canReserve, position, resolveHolds } from './holds.ts'
+import { accrue, TIER_APR_BP } from './interest.ts'
+import { netWindow, planSettlement } from './netting.ts'
+import { checkFloatInvariant, checkLedger } from './invariants.ts'
+
+const CEILING = usdc('1.000000')
+const ts = (n: number) => `17886${String(90000 + n).padStart(5, '0')}.000000000`
+// Shortly after the entries below, and before their 60s expiries — so a hold is
+// pending unless a test deliberately expires it.
+const NOW = ts(5)
+
+function hold(id: string, amt: string, at: number, expires = at + 60): Entry {
+  return {
+    kind: 'hold', holdId: id, counterparty: '0.0.5120033', amount: usdc(amt),
+    at: ts(at), window: 148, expiresAt: ts(expires),
+  }
+}
+function debit(id: string, amt: string, at: number): Entry {
+  return {
+    kind: 'debit', holdId: id, counterparty: '0.0.5120033', amount: usdc(amt),
+    at: ts(at), window: 148, transactionId: `tx-${id}`,
+  }
+}
+function credit(amt: string, at: number, attested = true): Entry {
+  return {
+    kind: 'credit', counterparty: '0.0.4410877', amount: usdc(amt),
+    at: ts(at), window: 148, attested, transactionId: `tx-c${at}`,
+  }
+}
+
+/* ── the write-ahead order ───────────────────────────────────────────────── */
+
+test('a hold reduces available BEFORE the debit exists', () => {
+  // This is the whole defence against racing spends past the ceiling.
+  const reserved = position([hold('h1', '0.400000', 1)], CEILING, NOW)
+  assert.equal(format(reserved.holds), '0.4000')
+  assert.equal(format(reserved.available), '0.6000')
+  // Balance is untouched — nothing has been paid yet.
+  assert.equal(format(reserved.balance), '0.0000')
+})
+
+test('committing a hold moves it from holds to balance, not both', () => {
+  const after = position([hold('h1', '0.400000', 1), debit('h1', '-0.400000', 2)], CEILING, NOW)
+  assert.equal(format(after.holds), '0.0000', 'a committed hold must stop reserving')
+  assert.equal(format(after.outstanding), '0.4000')
+  assert.equal(format(after.available), '0.6000', 'counting both would halve available')
+})
+
+test('an expired hold releases exactly what it reserved', () => {
+  const entries = [hold('h1', '0.250000', 1, 2)]
+  const before = position(entries, CEILING, ts(1))
+  const after = position(entries, CEILING, ts(3))
+  assert.equal(format(before.holds), '0.2500')
+  assert.equal(format(after.holds), '0.0000')
+  assert.equal(format(after.available), '1.0000')
+})
+
+test('a crash-shaped gap — paid but never committed — leaves the hold reserving', () => {
+  // reserve -> pay -> (crash). The hold still protects the ceiling until it
+  // expires, and the reconciler writes a repair.
+  const stranded = position([hold('h1', '0.300000', 1, 999)], CEILING, NOW)
+  assert.equal(format(stranded.holds), '0.3000')
+  assert.equal(format(stranded.available), '0.7000')
+})
+
+/* ── replay determinism ──────────────────────────────────────────────────── */
+
+test('position is independent of arrival order', () => {
+  const entries: Entry[] = [
+    hold('h1', '0.100000', 1), debit('h1', '-0.100000', 2),
+    credit('0.250000', 3), hold('h2', '0.050000', 4),
+  ]
+  const forward = position(entries, CEILING, NOW)
+  const reversed = position([...entries].reverse(), CEILING, NOW)
+  const shuffled = position([entries[2]!, entries[0]!, entries[3]!, entries[1]!], CEILING, NOW)
+  assert.deepEqual(forward, reversed)
+  assert.deepEqual(forward, shuffled)
+})
+
+test('duplicate delivery of the same hold reserves once, not twice', () => {
+  const once = position([hold('h1', '0.400000', 1)], CEILING, NOW)
+  const twice = position([hold('h1', '0.400000', 1), hold('h1', '0.400000', 1)], CEILING, NOW)
+  assert.deepEqual(once, twice, 'a redelivered hold must not double-reserve')
+})
+
+test('consensus ordering compares nanoseconds, not floats', () => {
+  const a: Entry = { ...credit('0.000001', 1), at: '1788690001.000000001' }
+  const b: Entry = { ...credit('0.000001', 1), at: '1788690001.000000002' }
+  assert.deepEqual(inConsensusOrder([b, a]).map((e) => e.at), [a.at, b.at])
+})
+
+/* ── refusals move nothing ───────────────────────────────────────────────── */
+
+test('a refusal costs the agent nothing', () => {
+  const entries: Entry[] = [
+    { kind: 'refusal', counterparty: '0.0.5591204', requested: usdc('0.040000'),
+      rule: 'CONTROL_CLUSTER', at: ts(5), window: 148 },
+  ]
+  const p = position(entries, CEILING, NOW)
+  assert.equal(format(p.balance), '0.0000')
+  assert.equal(format(p.available), '1.0000')
+  assert.equal(netWindow(entries, 148).refusalCount, 1)
+  assert.equal(format(netWindow(entries, 148).net), '0.0000')
+})
+
+/* ── the hand-computed fixture ───────────────────────────────────────────── */
+
+test('hand-computed window: odd micro-amounts net exactly', () => {
+  // Deliberately awkward figures so a rounding slip cannot hide.
+  //   credits  +0.250000 +0.012345          = +0.262345
+  //   debits   -0.018000 -0.040001 -0.009999 = -0.068000
+  //   interest -0.000137
+  //   net      +0.262345 - 0.068000 - 0.000137 = +0.194208
+  const entries: Entry[] = [
+    credit('0.250000', 1), credit('0.012345', 2),
+    hold('h1', '0.018000', 3), debit('h1', '-0.018000', 4),
+    hold('h2', '0.040001', 5), debit('h2', '-0.040001', 6),
+    hold('h3', '0.009999', 7), debit('h3', '-0.009999', 8),
+    { kind: 'interest', amount: usdc('-0.000137'), rateBp: 1200, at: ts(9), window: 148 },
+  ]
+  const net = netWindow(entries, 148)
+  assert.equal(format(net.credits, { sign: 'always' }), '+0.2623')
+  assert.equal(format(net.debits, { sign: 'always' }), '−0.0680')
+  assert.equal(format(net.interest, { sign: 'always' }), '−0.0001')
+  assert.equal(net.net, usdc('0.194208'), 'exact to the micro-USDC')
+  assert.equal(net.receiptCount, 5)
+})
+
+/* ── interest ────────────────────────────────────────────────────────────── */
+
+test('interest is simple, pro-rated, and truncated in the agent’s favour', () => {
+  // 1.000000 at 12% APR for 600s = 1e6 * 1200/10000 * 600 / 31_536_000
+  //                              = 120000 * 600 / 31536000 = 2.283... -> 2
+  const owed = accrue({ outstanding: usdc('1.000000'), aprBp: TIER_APR_BP['C']!, seconds: 600 })
+  assert.equal(owed, 2n, 'truncated down, never up')
+})
+
+test('no outstanding, no interest', () => {
+  assert.equal(accrue({ outstanding: micro(0n), aprBp: bp(1200), seconds: 600 }), 0n)
+  assert.equal(accrue({ outstanding: usdc('1.000000'), aprBp: bp(1200), seconds: 0 }), 0n)
+})
+
+test('interest compounds across windows because each accrues on the new balance', () => {
+  let owed: MicroUsdc = usdc('10.000000')
+  for (let i = 0; i < 3; i++) {
+    owed = micro(owed + accrue({ outstanding: owed, aprBp: bp(1200), seconds: 86_400 }))
+  }
+  assert.ok(owed > usdc('10.000000'))
+  assert.ok(owed < usdc('10.010000'), 'three days at 12% APR should be small')
+})
+
+/* ── settlement ──────────────────────────────────────────────────────────── */
+
+test('a positive net with a funded float settles clean and ramps up', () => {
+  const plan = planSettlement({
+    net: netWindow([credit('0.500000', 1)], 148),
+    outstandingBefore: micro(0n), rampBp: 3000, funded: true,
+  })
+  assert.equal(plan.outcome, 'clean')
+  assert.equal(format(plan.transfer), '0.5000')
+  assert.equal(plan.rampToBp, 4500)
+})
+
+test('a positive net the float cannot cover is MISSED, and the ramp collapses', () => {
+  const plan = planSettlement({
+    net: netWindow([credit('0.500000', 1)], 148),
+    outstandingBefore: micro(0n), rampBp: 4500, funded: false,
+  })
+  assert.equal(plan.outcome, 'missed')
+  assert.equal(format(plan.transfer), '0.0000', 'nothing moves if it cannot be paid')
+  assert.equal(plan.rampToBp, 1500, 'shrink is instant')
+})
+
+test('a negative net is carried, not demanded — the agent has no wallet to pay from', () => {
+  const entries = [hold('h1', '0.216000', 1), debit('h1', '-0.216000', 2)]
+  const plan = planSettlement({
+    net: netWindow(entries, 148), outstandingBefore: usdc('0.100000'), rampBp: 3000, funded: true,
+  })
+  assert.equal(plan.outcome, 'carried')
+  assert.equal(format(plan.transfer), '0.0000')
+  assert.equal(format(plan.outstandingAfter), '0.3160')
+  assert.equal(plan.rampToBp, 3000, 'carrying is neither rewarded nor punished')
+})
+
+test('the ramp clamps at both ends', () => {
+  const win = netWindow([credit('0.100000', 1)], 148)
+  const high = planSettlement({ net: win, outstandingBefore: micro(0n), rampBp: 9500, funded: true })
+  assert.equal(high.rampToBp, 10_000)
+  const low = planSettlement({ net: win, outstandingBefore: micro(0n), rampBp: 1000, funded: false })
+  assert.equal(low.rampToBp, 0)
+})
+
+/* ── invariants ──────────────────────────────────────────────────────────── */
+
+test('a clean ledger passes every invariant', () => {
+  const result = checkLedger(
+    [hold('h1', '0.100000', 1), debit('h1', '-0.100000', 2), credit('0.250000', 3)],
+    CEILING, NOW,
+  )
+  assert.equal(result.ok, true, JSON.stringify(result.violations))
+  assert.equal(result.checked.length, 4)
+})
+
+test('a hold committed twice is caught', () => {
+  const r = checkLedger(
+    [hold('h1', '0.100000', 1), debit('h1', '-0.100000', 2), debit('h1', '-0.100000', 3)],
+    CEILING, NOW,
+  )
+  assert.equal(r.ok, false)
+  assert.ok(r.violations.some((v) => v.invariant === 'hold_committed_once'))
+})
+
+test('a debit that bypassed reserve is caught', () => {
+  const r = checkLedger([debit('ghost', '-0.100000', 1)], CEILING, NOW)
+  assert.ok(r.violations.some((v) => v.invariant === 'debit_has_hold'))
+})
+
+test('debiting more than was held is caught', () => {
+  const r = checkLedger(
+    [hold('h1', '0.100000', 1), debit('h1', '-0.900000', 2)], CEILING, NOW,
+  )
+  assert.ok(r.violations.some((v) => v.invariant === 'commit_amount_matches_hold'))
+})
+
+test('spending past the ceiling is caught', () => {
+  const r = checkLedger(
+    [hold('h1', '0.900000', 1), debit('h1', '-0.900000', 2), hold('h2', '0.500000', 3)],
+    CEILING, NOW,
+  )
+  assert.ok(r.violations.some((v) => v.invariant === 'available_non_negative'))
+})
+
+test('the float invariant spans both accounts and names the snapshot time', () => {
+  const clean = checkFloatInvariant({
+    treasury: usdc('900.000000'), hotFloat: usdc('50.000000'),
+    floatTotal: usdc('949.500000'), outstandingTotal: usdc('0.500000'),
+    balanceAsOf: NOW,
+  })
+  assert.equal(clean.length, 0)
+
+  const broken = checkFloatInvariant({
+    treasury: usdc('900.000000'), hotFloat: usdc('50.000000'),
+    floatTotal: usdc('949.500000'), outstandingTotal: usdc('0.400000'),
+    balanceAsOf: NOW,
+  })
+  assert.equal(broken.length, 1)
+  // The message must warn about snapshot lag — a stale balance looks exactly
+  // like a discrepancy, and that false alarm would discredit verify-tab.
+  assert.match(broken[0]!.detail, /snapshots/)
+  assert.match(broken[0]!.detail, /1788690005/)
+})
+
+/* ── reserve decision ────────────────────────────────────────────────────── */
+
+test('canReserve names the shortfall rather than just refusing', () => {
+  const p = position([hold('h1', '0.900000', 1)], CEILING, NOW)
+  const no = canReserve(p, usdc('0.200000'))
+  assert.equal(no.allowed, false)
+  assert.equal(format(no.shortfall!), '0.1000')
+  assert.equal(canReserve(p, usdc('0.100000')).allowed, true)
+})
+
+test('a zero or negative price is a programming error, not a refusal', () => {
+  const p = position([], CEILING, NOW)
+  assert.throws(() => canReserve(p, micro(0n)))
+  assert.throws(() => canReserve(p, micro(-1n)))
+})
+
+/* ── resolveHolds states ─────────────────────────────────────────────────── */
+
+test('holds resolve to pending, committed or expired', () => {
+  const entries: Entry[] = [
+    hold('pending', '0.100000', 1, 999),
+    hold('committed', '0.100000', 2, 999), debit('committed', '-0.100000', 3),
+    hold('expired', '0.100000', 4, 5),
+  ]
+  const byId = Object.fromEntries(resolveHolds(entries, ts(10)).map((h) => [h.holdId, h.state]))
+  assert.deepEqual(byId, { pending: 'pending', committed: 'committed', expired: 'expired' })
+})
