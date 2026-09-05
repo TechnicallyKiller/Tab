@@ -11,7 +11,8 @@
     "probe:latency": "node --experimental-strip-types --env-file=../../.env src/redis-latency.ts",
     "probe:schedule": "node --experimental-strip-types --env-file=../../.env src/schedule-tick.ts",
     "probe:adapter": "node --experimental-strip-types --env-file=../../.env src/x402-adapter.ts",
-    "probe:adapter:hts": "node --experimental-strip-types --env-file=../../.env src/x402-adapter.ts --hts"
+    "probe:adapter:hts": "node --experimental-strip-types --env-file=../../.env src/x402-adapter.ts --hts",
+    "probe:protocol": "node --experimental-strip-types --env-file=../../.env src/protocol-roundtrip.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",
@@ -24,7 +25,9 @@
     "@x402/express": "catalog:",
     "ioredis": "catalog:",
     "@tab/hedera": "workspace:*",
-    "@tab/x402": "workspace:*"
+    "@tab/x402": "workspace:*",
+    "postgres": "^3.4.5",
+    "@tab/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

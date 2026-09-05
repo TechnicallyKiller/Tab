@@ -51,7 +51,8 @@
     "probe:latency": "pnpm --filter @tab/probes probe:latency",
     "probe:schedule": "pnpm --filter @tab/probes probe:schedule",
     "probe:adapter": "pnpm --filter @tab/probes probe:adapter",
-    "probe:adapter:hts": "pnpm --filter @tab/probes probe:adapter:hts"
+    "probe:adapter:hts": "pnpm --filter @tab/probes probe:adapter:hts",
+    "probe:protocol": "pnpm --filter @tab/probes probe:protocol"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
