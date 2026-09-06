@@ -21,47 +21,75 @@ written.
 
 ## Current State
 
-**Phase:** on-chain. Phase 0 complete — five probes answered, five Hedera/x402 capabilities proven.
-Frontend still runs entirely on mocks.
+**Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
+ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** `@tab/protocol` — receipt schemas, so the receipt topic carries typed receipts
-instead of `bootstrap.hello`. Then `@tab/ledger`, then a minimal gateway. That trio is the MVP core:
-the smallest thing that makes an agent actually spend against a ceiling.
+**Next action:** settlement. `planSettlement` is written and tested, HIP-423 is proven, and the tab
+is sitting at `−0.0600` waiting to be netted into one transfer. Then `graph` + `scoring`, which is
+what the attack demo needs.
 
-**Last updated:** 2026-09-05 by Claude (`@tab/x402` extracted and proven; found the undici timeout)
+**Last updated:** 2026-09-06 by Claude (earn leg — the tab now swings positive)
 
-### Written: 7 of 27 packages
+### Written: 12 of 27 packages
 
-`money` · `mirror` · `hedera` · `x402` · `web` · `bootstrap` · `probes`
+`money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
+`gateway` · `honest-agent` · `bootstrap` · `probes`
 
-Everything else is a README. Notably absent and needed for a demo: `protocol`, `ledger`, `gateway`.
+Still only a README: `params` · `scoring` · `graph` · `fastpath` · `cache` · `db` ·
+`observability` · `sdk` · `cli` · `agentkit-plugin` · `mcp` · `engine` · `settlement` ·
+`loop-attacker` · `verify`
+
+**47 unit tests** — money 13, protocol 9, ledger 25.
+
+### The demo that runs today
+
+```bash
+pnpm seller                                              # unmodified x402 seller
+pnpm agent:endpoint                                      # agent's own endpoint, no key
+AGENT_ENDPOINT_URL=http://localhost:4066 pnpm start:gateway
+pnpm demo:honest    # spend leg — tab goes negative
+pnpm demo:earn      # earn leg  — tab goes positive
+```
+
+Last run, and the receipt topic agrees to the micro-USDC:
+
+```
+spend   available 0.9200 -> 0.8400   two debits, seq 6 and 7
+earn    balance  -0.1600 -> -0.0600  two attested credits, seq 8 and 9
+replay  net -0.0600                  independent HCS reconstruction
+```
 
 ### Proven on testnet
 
-| Capability | How to re-run | Result |
+| Capability | Re-run with | Result |
 |---|---|---|
-| **HCS** | `pnpm bootstrap` | 3 topics with submit keys; message round-trips in ~2s |
-| **HTS** | `pnpm probe3` | mint, associate, transfer. Association failure demonstrated *then* fixed |
+| **HCS** | `pnpm bootstrap` | 3 topics with submit keys; round-trips in ~2s |
+| **HTS** | `pnpm probe3` | mint, associate, transfer. Association failure shown *then* fixed |
 | **Mirror Node** | `pnpm --filter @tab/mirror test:live` | 7 checks |
 | **Schedule Service (HIP-423)** | `pnpm probe:schedule` | tick fires at expiry; we submit nothing |
-| **x402 via `@tab/x402`** | `pnpm probe:adapter` / `:hts` | HBAR ~2.2s · token ~39s · both settle exactly |
+| **x402, both roles** | `pnpm probe:adapter` / `:hts` | HBAR ~2.2s · token ~39s |
+| **Typed receipts** | `pnpm probe:protocol` | written, read back, topic replayed |
 | **Cache latency** | `pnpm probe:latency` | co-located 1.5ms p99 · remote 499ms |
 
-The track requires two native Hedera services. We have four, each with a command a judge can run.
+Four native Hedera services; the track requires two.
 
 ### Live testnet
 
 | | |
 |---|---|
-| Operator / hot float | [`0.0.8812188`](https://hashscan.io/testnet/account/0.0.8812188) · ED25519 · ~966 ℏ · unlimited auto-association |
-| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) — still only `bootstrap.hello` |
-| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) — empty |
-| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) — empty |
+| Operator / hot float | [`0.0.8812188`](https://hashscan.io/testnet/account/0.0.8812188) · ED25519 · unlimited auto-association |
+| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) — **9 messages: 4 debits, 1 refusal, 2 credits, 2 pre-schema** |
+| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) — empty, nothing publishes ceilings yet |
+| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) — empty, no settlement worker |
 | Spend token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) · `TUSD` · 6 dp · **stand-in** for USDC |
 | x402 demo seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) · stock `@x402/hedera`, receives only |
 | Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) · **ECDSA** · also the faucet relay |
+| Demo payer | [`0.0.10385196`](https://hashscan.io/testnet/account/0.0.10385196) · independent, funded with TUSD |
 
-All three topics carry an ED25519 submit key, so the log is append-only and Tab-owned.
+**A working x402 payment needs THREE distinct accounts** — payer, `payTo`, and fee payer. x402
+rejects a transfer the fee payer is a party to
+(`invalid_exact_hedera_payload_fee_payer_transferring_funds`). `pnpm payer:create` and
+`pnpm seller:create` exist for this.
 
 ### Read these before you write code
 
@@ -98,21 +126,21 @@ exist yet.
 |---|---|---|---|---|
 | **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **all 5 answered + Probe 6.** Phase 0 complete |
 | **G** | `tools/guards` | 0 | — | **done** — 5 guards, negative-tested |
-| **F1** | `money` ✅ · `protocol` · `params` | 1 | — | **protocol is the next action** — schemas pinned by the UI and the 1KB chunk limit |
-| **F2** | `ledger` | 1 | — | open |
+| **F1** | `money` ✅ · `protocol` ✅ · `params` | 1 | — | only `params` left — `TIER_APR_BP` is squatting in `ledger` until it exists |
+| **F2** | `ledger` | 1 | — | **done** — 25 tests. No generative property tests yet |
 | **F3** | `scoring` · `graph` | 1 | — | open |
 | **A1** | `hedera` · `observability` | 2 | — | hedera: topics + HTS + accounts live. **Schedule (HIP-423) not written** |
 | **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
 | **A3** | `x402` | 2 | — | **done** — 3 roles, proven on testnet for HBAR and HTS. No `hold_id` threading yet |
 | **A4** | `cache` | 2 | — | **read Probe 5 first** — the LRU is not optional, and the hold reserve cannot be cached |
-| **FAST** | `fastpath` · `apps/gateway` | 3 | — | open |
+| **FAST** | `fastpath` · `apps/gateway` | 3 | — | gateway: **both legs live**. `fastpath` unwritten — checks are inline in `spend.ts` |
 | **SLOW** | `apps/engine` · `apps/settlement` | 3 | — | open |
 | **S1** | `sdk` · `apps/cli` | 4 | — | open |
 | **S2** | `agentkit-plugin` | 4 | — | open |
 | **S3** | `apps/web` | 4 | — | open |
 | **S4** | `mcp` — scope it before building | 4 | — | open |
 | **D1** | `tools/verify` | 5 — pull earlier if you can | — | open |
-| **D2** | `agents/honest-agent` | 5 | — | open |
+| **D2** | `agents/honest-agent` | 5 | — | **done** — zero dependencies, spends and earns |
 | **D3** | `agents/loop-attacker` | 5 | — | open |
 
 **Before Phase 1 is claimed:** agree the `@tab/protocol` message shapes together. Everything
@@ -159,6 +187,9 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-06 | **An x402 payment needs THREE distinct accounts** — payer, `payTo`, fee payer. The scheme rejects a transfer the fee payer is a party to. Same rule that bit us on the seller, now general | `x402`, `gateway`, `testkit`, any demo |
+| 2026-09-06 | **The earn leg forwards even if the receipt write fails.** The money has already moved by then — refusing to serve a request the payer paid for would be theft; a missing receipt is repairable. A payment taken but not served is `attested: false` | `gateway`, `settlement` reconciler |
+| 2026-09-06 | **The gateway is SINGLE INSTANCE.** Holds live in process memory, so two instances would each allow up to the ceiling. `@tab/cache` fixes it; Probe 5 says why the hop cannot be removed | `gateway`, `cache`, deployment |
 | 2026-09-05 | **Node's `fetch` has a 10s CONNECT timeout no AbortController can extend.** Mirror Node needs 5–15s from a high-latency link, so ~half of requests die on it. Inside x402 it surfaces as `invalid_exact_hedera_payload_signature_invalid` — a signature error for a network problem. **Every app/tool entry point must call `configureGlobalHttp()` from `@tab/mirror` before any HTTP** | everyone doing HTTP; `gateway` especially |
 | 2026-09-05 | **`@tab/x402` may import `@hiero-ledger/sdk`** — second exception after `@tab/hedera`, now actually in `boundaries.json` rather than only in a README | `x402`, anyone reading the SDK ban |
 | 2026-09-05 | **The 50ms budget requires a CO-LOCATED cache — and holds easily with one.** Local Redis: p99 **1.5ms**, 33× headroom. Remote Upstash us-east-1 from ap-south: 499ms. **Run the demo against local Redis** (`redis-server --port 6380`, already installed, no Docker/sudo). An LRU serves the snapshot but a hold reserve must be atomic across instances, so it cannot be cached away | `cache`, `fastpath`, `gateway`, demo |
@@ -195,6 +226,48 @@ with it, write it down so nobody else does.
 **Next:** what you would do next, or what you are handing over.
 **Blocked:** nothing · or what you need and from whom.
 ```
+
+---
+
+### 2026-09-06 — Claude — both legs work; the tab spends and earns
+
+**Did:** `@tab/protocol`, `@tab/ledger`, `apps/gateway` (spend + earn), `agents/honest-agent`,
+`@tab/testkit`. The product now exists: an agent with no key spends against a ceiling, earns
+through its own endpoint, and every movement is a typed receipt on HCS.
+
+```
+spend   available 0.9200 -> 0.8400   seq 6, 7
+earn    balance  -0.1600 -> -0.0600  seq 8, 9, attested
+replay  net -0.0600                  independent HCS reconstruction agrees
+```
+
+**Learned:**
+
+1. **An x402 payment needs three distinct accounts** — payer, `payTo`, fee payer. The earn leg
+   404'd twice before I found it: first the payer held none of the spend token, then it *was* the
+   facilitator's fee payer and x402 rejected the transfer with
+   `invalid_exact_hedera_payload_fee_payer_transferring_funds`. Same rule that bit the seller
+   earlier, now general. Independence matters beyond the protocol: revenue from a payer Tab
+   controls is exactly what `@tab/graph` exists to discount.
+2. **The earn leg's ordering is the mirror image of the spend leg.** Spend reserves *before*
+   paying. Earn forwards *even if the receipt write fails*, because the money has already moved —
+   refusing to serve a paid request would be theft, while a missing receipt is repairable. A
+   payment taken but not served is `attested: false`; real money must not claim to be revenue it
+   did not earn.
+3. **The boundaries guard caught a real design error.** I put the unmodified seller inside
+   `agents/honest-agent`; it was rejected because a seller needs a key and the agent must not have
+   one. The seller moved to `@tab/testkit`, where the spec always said it belonged. `honest-agent`
+   now declares **zero dependencies**, so "the agent holds no key" is a check, not a claim.
+4. **Two "fetch failed" scares were both mine** — a `timeout` had killed the seller, and the
+   gateway's own header/body timeouts were 45s against a ~40s payment. Neither was the protocol.
+
+**Contract change:** three, in the table above.
+
+**Next:** settlement — `planSettlement` is written and tested, HIP-423 is proven, and the tab sits
+at `−0.0600` waiting to be netted. Then `graph` + `scoring` for the attack demo.
+
+**Blocked on nobody.** Still outstanding and needing the user: a demo video, user-testing evidence
+for Validation (15% of the rubric, currently zero), and a network-impact doc for Success (20%).
 
 ---
 
