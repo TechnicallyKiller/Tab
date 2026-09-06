@@ -454,6 +454,11 @@ The **Refusals** view is not an error log. It is the product demonstrating that 
 
 **The differentiated claim:** other submissions will show that an agent *can* pay. Tab shows an agent transacting **with no wallet at all** — spending money it does not have, at a ceiling underwritten by revenue the gateway can attest to, and being **refused mid-window** when the graph catches a self-dealing seller. Refusal is the demo. Almost nobody demos the attack that breaks their own design.
 
+**Network impact, measured:** [docs/NETWORK_IMPACT.md](docs/NETWORK_IMPACT.md) — the transaction
+profile per unit of work, real fee medians read from Mirror Node's `charged_tx_fee` on our own
+transactions, what scales and what does not, and the fee floor (~1¢ per call) below which the whole
+pattern stops making sense.
+
 ### Secondary — "No Solidity Allowed" — Build with Hedera SDKs
 
 | Requirement | How Tab satisfies it |

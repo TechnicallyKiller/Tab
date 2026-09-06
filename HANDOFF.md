@@ -24,12 +24,12 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** the **network-impact doc** — untouched, and the largest unclaimed share of the
-rubric. Then a demo-parameter pass so the attack produces a REFUSAL, a faucet-funded independent
-customer, and `apps/web` against live data. Still open: bump `MODEL_VERSION` before the next
-formula change.
+**Next action:** demo-parameter pass so the attack produces a REFUSAL (currently the manufactured
+revenue never lifts the ceiling above the starter floor, so the collapse has nothing to take away);
+a faucet-funded independent customer so the honest demo is not itself inside our control cluster;
+then `apps/web` against live data. Still open: bump `MODEL_VERSION` before the next formula change.
 
-**Last updated:** 2026-09-07 by Claude (holds published — the write-ahead order is provable by a stranger)
+**Last updated:** 2026-09-07 by Claude (network-impact doc — every figure measured from our own transactions)
 
 ### Written: 19 of 27 packages
 
@@ -269,6 +269,51 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (late) — Claude — docs/NETWORK_IMPACT.md, measured rather than asserted
+
+The network-impact doc, which was the largest unclaimed share of the rubric and had nothing in it.
+
+**Every number came from our own transactions.** No fee schedule quoted from memory, no projection
+from a model. The fee table is the median `charged_tx_fee` over 100 consecutive SUCCESS transactions
+on the operator, split by type — because the MEAN was badly skewed: one 63.5M-tinybar outlier pulled
+HTS token transfers to 5.9M when the median is 1.36M. A mean would have overstated our own costs by
+4x, in the doc whose entire credibility is that its numbers are real.
+
+Tinybar is presented as the exact measurement and USD as an explicitly assumed $0.05/ℏ conversion.
+
+| Unit of work | HCS | HTS | Schedules | ℏ | USD |
+|---|---|---|---|---|---|
+| One agent spend | 2 | 1 | — | 0.01896 | $0.00095 |
+| One inbound call | 1 | 1 | — | 0.01627 | $0.00081 |
+| Window close, per tab | 2 | 1 | 1 | 0.13968 | $0.00698 |
+
+**The number that matters: ~2.4% of a 4¢ call, and ~9.5% of a 1¢ call.** That is the viability
+argument and its limit in one line — Tab works for per-request payments down to roughly a cent and
+not below. Stated in the doc rather than left for someone to compute.
+
+**One claim I deliberately narrowed.** "Ten thousand calls become one transfer" is easy to
+overclaim. Tab does NOT reduce the number of seller payments — x402 pays per request by design and
+those transfers are the product working. What collapses to one transfer is the AGENT's settlement,
+its net position against the float. So 10,000 calls produce 10,000 HTS payments, 20,000 HCS
+messages, and **three** window-level operations. The doc says this explicitly.
+
+The scaling section lists only limits, with causes and the package that fixes each: single gateway
+instance (holds in memory → `@tab/cache`, p99 1.5ms measured), one hold message per attempted spend
+tripling topic volume (→ rolling batch commitment), replay cost growing with topic length (→
+checkpoints), and the independence graph failing OPEN because it re-derives from an
+eventually-consistent index (→ `@tab/db`).
+
+Also folded in the operational findings that are genuinely useful to other Hedera builders and are
+not in any documentation I could find: an x402 payment needs THREE distinct accounts; the Hedera
+exact scheme's default `authorization` flow settles AFTER the handler; Node's `fetch` has a 10s
+connect timeout no `AbortController` can extend; schedule state must come from Mirror Node; and
+Mirror Node's transactions-by-account index is intermittent for a new account.
+
+Linked from README-TAB.md's track justification.
+
+**Next:** demo-parameter pass so the attack produces a REFUSAL, a faucet-funded independent
+customer, then `apps/web` against live data.
 
 ### 2026-09-07 (night) — Claude — holds are published: the write-ahead order is now provable
 
