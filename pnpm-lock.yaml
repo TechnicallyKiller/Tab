@@ -503,6 +503,37 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  tools/verify:
+    dependencies:
+      '@tab/graph':
+        specifier: workspace:*
+        version: link:../../packages/graph
+      '@tab/ledger':
+        specifier: workspace:*
+        version: link:../../packages/ledger
+      '@tab/mirror':
+        specifier: workspace:*
+        version: link:../../packages/mirror
+      '@tab/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@tab/params':
+        specifier: workspace:*
+        version: link:../../packages/params
+      '@tab/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@tab/scoring':
+        specifier: workspace:*
+        version: link:../../packages/scoring
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
 packages:
 
   '@adraffy/ens-normalize@1.10.1':

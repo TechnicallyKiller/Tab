@@ -25,6 +25,7 @@ export {
   getAccount,
   getToken,
   getTokenRelationship,
+  getBalanceSnapshot,
   getUsdcBalance,
   waitForAccount,
   type ReceiveCheck,

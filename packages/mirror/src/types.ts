@@ -61,6 +61,22 @@ export interface MirrorAccount {
   max_automatic_token_associations: number
   memo?: string | null
   evm_address?: string | null
+  /**
+   * The balance SNAPSHOT, with the timestamp it was taken at.
+   *
+   * `timestamp` is the last activity that updated these balances, not "now".
+   * Modelled explicitly because `verify-tab` asserts a balance against replayed
+   * receipts, and comparing a stale snapshot to receipts replayed to the present
+   * fails on a perfectly reconciled ledger — the worst possible failure for the
+   * one command whose job is proving correctness. The caller must replay only
+   * up to this timestamp.
+   */
+  balance?: {
+    timestamp: ConsensusTimestamp
+    /** Tinybars. */
+    balance: number
+    tokens?: { token_id: EntityId; balance: number }[]
+  }
 }
 
 export interface TokenRelationship {

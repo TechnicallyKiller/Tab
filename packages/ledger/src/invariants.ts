@@ -211,3 +211,57 @@ export function checkLedger(
     violations,
   }
 }
+
+/**
+ * The invariants a STRANGER can assert from the public record alone.
+ *
+ * This exists because `checkLedger` cannot be run against an HCS replay, and
+ * finding that out the hard way is instructive: `@tab/protocol` has no hold
+ * message. Holds live in the gateway's memory and never reach a topic, so a
+ * replay contains debits with no holds and `debit_has_hold` fails for EVERY
+ * debit, on a perfectly correct ledger. `verify-tab` printed exactly that —
+ * three tabs, all FAIL — which a stranger would reasonably read as fraud.
+ *
+ * So the invariant set splits by what the evidence can support:
+ *
+ *  - **Public.** Derivable from receipts alone. A stranger asserts these and a
+ *    failure means something is genuinely wrong.
+ *  - **Local.** Need the in-process hold table. The gateway can assert them;
+ *    nobody else can, and pretending otherwise turns the trust artifact into a
+ *    generator of false accusations.
+ *
+ * The right long-term answer is arguably to publish holds, making the
+ * write-ahead ordering itself auditable. That costs an HCS message per
+ * ATTEMPTED spend — including every hold that expires unused — on the latency
+ * path the whole fast/slow split exists to protect. Worth a decision rather
+ * than a default, and recorded as open.
+ */
+export const LOCAL_ONLY_INVARIANTS = [
+  'debit_has_hold',
+  'commit_amount_matches_hold',
+] as const
+
+export function checkPublicLedger(
+  entries: readonly Entry[],
+  ceiling: MicroUsdc,
+  now: ConsensusTimestamp,
+): CheckResult & { notCheckable: readonly string[] } {
+  const violations = [
+    ...checkHoldsCommittedOnce(entries),
+    ...checkAvailableNonNegative(entries, ceiling, now),
+    ...checkWindowSettledOnce(entries),
+  ]
+  return {
+    ok: violations.length === 0,
+    checked: ['hold_committed_once', 'available_non_negative', 'window_settled_once'],
+    violations,
+    /*
+     * Named, not silently dropped.
+     *
+     * A verifier that quietly checks less than it appears to is worse than one
+     * that checks less and says so — the whole value of the tool is that its
+     * output can be trusted about its own scope.
+     */
+    notCheckable: LOCAL_ONLY_INVARIANTS,
+  }
+}

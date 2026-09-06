@@ -24,14 +24,14 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** `tools/verify` — the stranger-recomputes-it claim, which now has a working manual
-example to codify. Then a demo-parameter pass so the attack produces a REFUSAL and not only a
-blocked counterparty, and an independent (faucet-funded) customer so the honest demo is not itself
-inside our control cluster.
+**Next action:** a demo-parameter pass so the attack produces a REFUSAL and not only a blocked
+counterparty; a faucet-funded independent customer so the honest demo is not itself inside our
+control cluster; then `apps/web` against live data. Also open: bump `MODEL_VERSION` before the next
+formula change, and decide whether holds get published.
 
-**Last updated:** 2026-09-07 by Claude (loop attack caught on live testnet — after three real defects)
+**Last updated:** 2026-09-07 by Claude (tools/verify — the trust artifact, which caught my own freeze-rule break)
 
-### Written: 18 of 27 packages
+### Written: 19 of 27 packages
 
 `money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
 `gateway` · `honest-agent` · `bootstrap` · `probes`
@@ -188,6 +188,12 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-07 | **`MODEL_VERSION` COVERS THE FORMULA, NOT ONLY THE PARAMETER NUMBERS.** `verify-ceiling` caught me breaking this: I changed `computeCeiling`'s Unrated/`hasDefaulted` behaviour without a version bump, so ceiling seq 1 — published under `tab-v1` — no longer reproduces under today's `tab-v1`. Its hash still MATCHES, so the record is authentic; the code that produced it changed. **Any change to `computeCeiling`'s behaviour is a version bump, exactly like a parameter change** | `params`, `scoring`, `engine`, `verify` |
+| 2026-09-07 | **Two kinds of verify-ceiling failure, and they mean OPPOSITE things.** `hash_mismatch` — the published inputs do not hash to the published hash; the record contradicts itself, suspect the publisher. `not_reproducible` — the hash matches but today's code gives a different number; the record is genuine and OUR release process failed. Conflating them would send a reader to the wrong conclusion about whether to trust the topic | `verify`, `web` (the verify button) |
+| 2026-09-07 | **`checkLedger` CANNOT be run against an HCS replay — use `checkPublicLedger`.** `@tab/protocol` has no hold message: holds live in gateway memory and never reach a topic, so a replay has debits with no holds and `debit_has_hold` fails for EVERY debit on a correct ledger. `verify-tab` printed FAIL for all three tabs, which a stranger would read as fraud. The invariant set now splits public (assertable from receipts alone) from local (needs the in-process hold table), and `verify-tab` names what it cannot check instead of skipping it silently | `verify`, `ledger`, `gateway`, `engine` |
+| 2026-09-07 | **OPEN DECISION: publish holds, or not.** Publishing them makes the write-ahead `reserve → pay → commit` ordering auditable by a stranger; it costs an HCS message per ATTEMPTED spend — including every hold that expires unused — on the latency path the fast/slow split exists to protect. Currently NOT published, so that ordering is not externally verifiable. Worth a decision rather than a default | `protocol`, `gateway`, `verify` |
+| 2026-09-07 | **`FLOAT_TOTAL_USDC` is the one number a stranger cannot derive.** Not on any topic, so `verify-tab` asserts the full float invariant only when told it. That is a real gap in the transparency claim, not a config detail — the fix is to publish the float total at bootstrap so the starting balance is as auditable as everything built on it | `verify`, `bootstrap`, `protocol` |
+| 2026-09-07 | **`getBalanceSnapshot` returns a balance AND its `asOf` timestamp.** Use it for any INVARIANT; `getUsdcBalance` is for funding checks. `verify-tab` bounds its replay to the OLDER of two account snapshots, because comparing a stale balance to receipts replayed to now fails on a correct ledger | `mirror`, `verify`, `engine` |
 | 2026-09-06 | **`FUNDED_BY_AGENT` CAN NEVER FIRE FOR A TAB, and the hard block the design leaned on was dead code.** An agent's tab holds no key by design — it receives settlement payouts and signs nothing — so a tab cannot fund anybody. The reachable control shape is one operator behind both accounts, now `COMMON_FUNDER`: the same account funded the tab AND the counterparty. Hard block. Honest limitation documented in `clusters.ts`: if a public exchange funded both, it fires wrongly, which is defensible only because a Tab is funded by the gateway's float rather than an exchange | `graph`, `engine`, `web`, `verify` |
 | 2026-09-06 | **Mirror Node's `/transactions?account.id=` index is INTERMITTENT for a new account, not merely lagging.** Against a real attacker account it returned 5 transactions once and 0 both before and after, minutes apart, while `/accounts/{id}/tokens` showed the funded balance correctly the whole time. **The loop attacker ran end to end and was NOT CAUGHT because of it** — the engine fails open. Never derive a security input from that index | `engine`, `graph`, `verify`, `db` |
 | 2026-09-06 | **`funderOf` is a POINT LOOKUP now**: `/accounts/{id}` for `created_timestamp`, then `/transactions?timestamp=<exact>` for the CRYPTOCREATEACCOUNT, and the funder is the transaction id's own payer prefix. Read the payer from the ID, never from the transfer list — fee collectors (`0.0.98`, `0.0.802`) appear there with POSITIVE amounts and "most negative entry" is a heuristic that works until it does not. Also more correct: "who created this" ≠ "earliest inbound transfer" | `engine`, `verify`, `graph` |
@@ -259,6 +265,73 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (evening) — Claude — tools/verify: the trust artifact, and it caught me first
+
+`pnpm verify-tab` and `pnpm verify-ceiling` both run. 11 tests, 156 total.
+
+**verify-ceiling verifies 5 of 6 published ceilings, and the sixth failure is real and mine.**
+
+```
+  FAIL  seq 1 · tab 0.0.10390398 · window 5962322
+        AUTHENTIC BUT NOT REPRODUCIBLE — the hash matches, so the record is
+        genuine; today's formula or parameter set no longer produces it
+        published hash   788a5f6a…   recomputed hash  788a5f6a…
+        binding          unrated vs computed   MISMATCH
+```
+
+I changed `computeCeiling`'s Unrated/`hasDefaulted` behaviour without bumping `MODEL_VERSION`, so a
+ceiling published under `tab-v1` no longer reproduces under today's `tab-v1`. **The freeze rule I
+wrote covers parameter NUMBERS; it has to cover the FORMULA too**, and the tool built to catch that
+caught it within minutes of existing.
+
+That drove the most useful thing in the package: **the two failure kinds mean opposite things.** A
+hash mismatch says the record contradicts itself — suspect the publisher. A hash MATCH with a
+different recomputed number says the record is authentic and our release process failed. Reporting
+both as "FAIL" would send a reader to precisely the wrong conclusion, so each is named.
+
+**verify-tab found something worse, in my own invariant set.** It printed FAIL for all three tabs:
+
+```
+  debit_has_hold: debit unsettled:h_8b10… references unknown hold h_8b10… — it bypassed reserve
+```
+
+Not a ledger problem. **`@tab/protocol` has no hold message.** Holds live in the gateway's memory
+and never reach a topic, so an HCS replay contains debits with no holds and that invariant fails for
+every debit, forever, on a perfectly correct ledger — and a stranger would read three red lines as
+fraud. The worst possible failure mode for the trust artifact.
+
+So the invariant set now splits by what the evidence can support: **public** (assertable from
+receipts alone) versus **local** (needs the in-process hold table). `verify-tab` runs the public set
+and NAMES what it cannot check rather than skipping it quietly — a verifier that checks less than it
+appears to is worse than one that checks less and says so.
+
+It now reads:
+
+```
+  PASS  tab 0.0.8812188: 8 entr(ies) fold to balance −0.0200, outstanding 0.0200
+  PASS  tab 0.0.10385196: 1 entr(ies) fold to balance −0.0400, outstanding 0.0400
+  FAIL  tab 0.0.10390398: window 5962288 has 2 settlement receipts — paid 2 times
+  PASS  not checkable from the public record: debit_has_hold, commit_amount_matches_hold
+```
+
+That remaining FAIL is a **true positive**: the double-settlement damage from this morning's bug is
+still on the topic, and the tool exiting non-zero on it is correct.
+
+**The tests are the point, not the live run.** "It printed PASS against live data once" tells you
+nothing — a checker that cannot fail is not a checker. So `recheck` is extracted from the command
+and tested against a TAMPERED record (caught as `hash_mismatch`), an inflated ceiling with authentic
+inputs (caught as `not_reproducible` — hash checking alone would pass it), a changed binding, an
+unknown parameter version, malformed records, and a float where basis points belong.
+
+**Two gaps stated rather than papered over.** `FLOAT_TOTAL_USDC` — what the float started with — is
+not on any topic, so a stranger can derive every input to `verify-tab` except that one and must be
+told it; the fix is to publish it at bootstrap. And whether to publish HOLDS is now an open
+decision: it would make the write-ahead ordering externally auditable, at the cost of an HCS message
+per attempted spend on the latency path.
+
+**Next:** demo parameters so the attack produces a REFUSAL, a faucet-funded independent customer,
+and `apps/web` against live data.
 
 ### 2026-09-07 (later) — Claude — the loop attack, caught on live testnet — after it wasn't
 

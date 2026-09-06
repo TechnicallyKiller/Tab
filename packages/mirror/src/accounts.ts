@@ -153,3 +153,48 @@ export async function getUsdcBalance(
 export async function getToken(client: MirrorClient, tokenId: EntityId): Promise<TokenInfo> {
   return client.get<TokenInfo>(`/api/v1/tokens/${tokenId}`)
 }
+
+/** A token balance together with the timestamp it was snapshotted at. */
+export interface BalanceSnapshot {
+  balance: MicroUsdc
+  /**
+   * When Mirror Node last updated this balance.
+   *
+   * Not "now". `verify-tab` replays receipts only up to this point, because a
+   * receipt that landed after the snapshot would appear as a discrepancy on a
+   * correct ledger.
+   */
+  asOf: ConsensusTimestamp
+  /** HBAR balance in tinybars, for reporting the fee payer's runway. */
+  tinybars: bigint
+}
+
+/**
+ * Token balance AND its snapshot timestamp, from one request.
+ *
+ * `getUsdcBalance` answers "how much" and is the right call for a funding
+ * check. This answers "how much, as of when", which is what an INVARIANT needs
+ * — the timestamp is not a detail, it is the difference between a check that
+ * means something and one that fails at random.
+ */
+export async function getBalanceSnapshot(
+  client: MirrorClient,
+  accountId: EntityId,
+  tokenId: EntityId,
+): Promise<BalanceSnapshot> {
+  const account = await getAccount(client, accountId)
+  const snapshot = account.balance
+  if (!snapshot) {
+    throw new Error(
+      `Mirror Node returned no balance snapshot for ${accountId}. Without the snapshot ` +
+        'timestamp an invariant cannot be asserted honestly — a balance with no "as of" is ' +
+        'not comparable to a replayed ledger.',
+    )
+  }
+  const token = (snapshot.tokens ?? []).find((t) => t.token_id === tokenId)
+  return {
+    balance: micro(BigInt(token?.balance ?? 0)),
+    asOf: snapshot.timestamp,
+    tinybars: BigInt(snapshot.balance),
+  }
+}
