@@ -277,7 +277,10 @@
         "pino",
         "ioredis",
         "postgres",
-        "drizzle-orm"
+        "drizzle-orm",
+        "@x402/fastify",
+        "@x402/core",
+        "@x402/hedera"
       ]
     },
     "engine": {

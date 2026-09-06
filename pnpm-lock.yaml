@@ -12,6 +12,9 @@ catalogs:
     '@x402/express':
       specifier: ~2.25.0
       version: 2.25.0
+    '@x402/fastify':
+      specifier: ~2.25.0
+      version: 2.25.0
     '@x402/fetch':
       specifier: ~2.25.0
       version: 2.25.0
@@ -93,6 +96,9 @@ importers:
       '@tab/x402':
         specifier: workspace:*
         version: link:../../packages/x402
+      '@x402/fastify':
+        specifier: 'catalog:'
+        version: 2.25.0(ethers@6.16.0)(fastify@5.12.3)(typescript@5.9.3)
       fastify:
         specifier: 'catalog:'
         version: 5.12.3
@@ -1586,6 +1592,15 @@ packages:
 
   '@x402/extensions@2.25.0':
     resolution: {integrity: sha512-7gXpYoHX8CkQ4bwUfzx0GS6VQlx810+GiGOAYhwsbTtIZFt/ahz/5CjCs7qfoKYcgAWcVyvBCl9U3FYYBX01nA==}
+
+  '@x402/fastify@2.25.0':
+    resolution: {integrity: sha512-8w2a5zYR7hzxCKwxbD2+9zSq9g11BBKpwp4dSTlQNN5XqgEq5ylaZCLI1grojas+oi5tRYPIBYb78LPJNAxAGg==}
+    peerDependencies:
+      '@x402/paywall': ^2.25.0
+      fastify: ^5.0.0
+    peerDependenciesMeta:
+      '@x402/paywall':
+        optional: true
 
   '@x402/fetch@2.25.0':
     resolution: {integrity: sha512-kpmxnMTjxZJD5r4yVhRDtCrBVfGhum+XwrUUUdffi3Y91eAm9ZiWCDNHLtahOS2kmuzTR2NPbbIoohZQJmQsxg==}
@@ -4114,6 +4129,17 @@ snapshots:
       tweetnacl: 1.0.3
       viem: 2.56.3(typescript@5.9.3)(zod@3.25.76)
       zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - ethers
+      - typescript
+      - utf-8-validate
+
+  '@x402/fastify@2.25.0(ethers@6.16.0)(fastify@5.12.3)(typescript@5.9.3)':
+    dependencies:
+      '@x402/core': 2.25.0
+      '@x402/extensions': 2.25.0(ethers@6.16.0)(typescript@5.9.3)
+      fastify: 5.12.3
     transitivePeerDependencies:
       - bufferutil
       - ethers

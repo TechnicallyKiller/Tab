@@ -54,7 +54,11 @@
     "probe:adapter:hts": "pnpm --filter @tab/probes probe:adapter:hts",
     "probe:protocol": "pnpm --filter @tab/probes probe:protocol",
     "start:gateway": "pnpm --filter @tab/gateway start",
-    "seller": "pnpm --filter @tab/testkit seller"
+    "seller": "pnpm --filter @tab/testkit seller",
+    "agent:endpoint": "pnpm --filter @tab/honest-agent endpoint",
+    "demo:earn": "pnpm --filter @tab/testkit payer",
+    "fund:payer": "pnpm --filter @tab/bootstrap fund:payer",
+    "payer:create": "pnpm --filter @tab/bootstrap payer:create"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

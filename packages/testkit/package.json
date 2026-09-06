@@ -5,10 +5,13 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "seller": "node --experimental-strip-types --env-file=../../.env src/run-seller.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "payer": "node --experimental-strip-types --env-file=../../.env src/fake-payer.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",
@@ -19,6 +22,8 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0", "@types/node": "^22.15.0", "typescript": "^5.9.0"
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
   }
 }

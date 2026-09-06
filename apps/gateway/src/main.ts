@@ -7,7 +7,7 @@ import { PrivateKey } from '@hiero-ledger/sdk'
 import { clientFromEnv } from '@tab/hedera'
 import { MirrorClient, configureGlobalHttp } from '@tab/mirror'
 import { format } from '@tab/money'
-import { NETWORKS, createSpendClient, tokenAsset } from '@tab/x402'
+import { NETWORKS, createFacilitator, createSpendClient, tokenAsset } from '@tab/x402'
 import { loadEnv } from './env.ts'
 import { ReceiptWriter } from './receipts.ts'
 import { buildServer } from './server.ts'
@@ -59,15 +59,43 @@ const client = createSpendClient({
 // Windows are wall-clock buckets for now. The settlement worker will own this.
 const windowOf = () => Math.floor(Date.now() / 1000 / env.windowSeconds)
 
-const app = buildServer({
-  env,
-  state,
-  client,
-  receipts: new ReceiptWriter(tab, env.receiptTopic),
-  window: windowOf,
-})
+// The earn leg needs its own facilitator — we self-facilitate inbound, which
+// is what lets the credit receipt be written in the same code path that
+// settled the payment. ADR-0004.
+const asset = tokenAsset(env.tokenId, 'TUSD')
+const agentUpstream = process.env['AGENT_ENDPOINT_URL']
+
+const app = buildServer(
+  {
+    env,
+    state,
+    client,
+    receipts: new ReceiptWriter(tab, env.receiptTopic),
+    window: windowOf,
+  },
+  agentUpstream
+    ? {
+        network: NETWORKS.testnet,
+        asset,
+        facilitator: createFacilitator({
+          network: NETWORKS.testnet,
+          feePayerId: env.feePayerId,
+          feePayerKey: PrivateKey.fromStringDer(env.feePayerKey.replace(/^0x/, '')),
+        }),
+        endpoint: {
+          tab: env.operatorId,
+          upstream: agentUpstream,
+          atomicPrice: env.perCallCap,
+          description: 'The agent’s own paid endpoint',
+        },
+      }
+    : undefined,
+)
 
 await app.listen({ port: env.port, host: '0.0.0.0' })
+console.log(
+  `  earn leg        ${agentUpstream ? `fronting ${agentUpstream} at /v1/earn` : 'off (set AGENT_ENDPOINT_URL)'}`,
+)
 console.log(`\n  listening       http://localhost:${env.port}`)
 console.log(`  window          ${windowOf()} (${env.windowSeconds}s buckets)\n`)
 

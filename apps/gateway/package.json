@@ -16,7 +16,8 @@
     "@tab/protocol": "workspace:*",
     "@tab/x402": "workspace:*",
     "fastify": "catalog:",
-    "@hiero-ledger/sdk": "catalog:"
+    "@hiero-ledger/sdk": "catalog:",
+    "@x402/fastify": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

@@ -5,8 +5,13 @@
   "type": "module",
   "scripts": {
     "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "endpoint": "node --experimental-strip-types --env-file=../../.env src/endpoint.ts",
+    "earn": "node --experimental-strip-types --env-file=../../.env src/earn-demo.ts"
   },
   "dependencies": {},
-  "devDependencies": { "@types/node": "^22.15.0", "typescript": "^5.9.0" }
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
 }

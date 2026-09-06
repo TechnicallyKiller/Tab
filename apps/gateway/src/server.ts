@@ -1,6 +1,9 @@
 import Fastify, { type FastifyInstance } from 'fastify'
+import { paymentMiddleware } from '@x402/fastify'
 import { format, usdc } from '@tab/money'
 import { REFUSAL_GUIDANCE, isRetryable } from '@tab/protocol'
+import { createEarnServer, type Asset, type TabFacilitator } from '@tab/x402'
+import { serveAndCredit, type AgentEndpoint } from './earn.ts'
 import { nowConsensus } from './receipts.ts'
 import { spend, type SpendDeps } from './spend.ts'
 
@@ -12,8 +15,58 @@ import { spend, type SpendDeps } from './spend.ts'
  * try/catch to read the rule would make the Refusals view harder to build —
  * refusal is the product working, not a fault.
  */
-export function buildServer(deps: SpendDeps): FastifyInstance {
+export interface EarnConfig {
+  facilitator: TabFacilitator
+  asset: Asset
+  network: string
+  endpoint: AgentEndpoint
+}
+
+export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance {
   const app = Fastify({ logger: false })
+
+  // ── the EARN leg ────────────────────────────────────────────────────────
+  //
+  // The gateway fronts the agent's endpoint. x402 answers the 402, verifies and
+  // settles the inbound payment into the hot float, and only then does the
+  // handler below run — so by the time we forward upstream, the money has
+  // already moved and the credit is attestable.
+  if (earn) {
+    const route = 'GET /v1/earn'
+    const built = createEarnServer({
+      network: earn.network,
+      facilitator: earn.facilitator,
+      routes: [
+        {
+          route,
+          // Payment lands in the hot float, never in the agent's hands. The
+          // agent holds nothing — that is the entire premise.
+          payTo: deps.env.operatorId,
+          asset: earn.asset,
+          atomicPrice: earn.endpoint.atomicPrice,
+          description: earn.endpoint.description,
+        },
+      ],
+    })
+    paymentMiddleware(app, built.routes as never, built.server as never)
+
+    app.get('/v1/earn', async (request, reply) => {
+      const payer = (request.query as { payer?: string }).payer ?? 'unknown'
+      const result = await serveAndCredit(
+        { env: deps.env, state: deps.state, receipts: deps.receipts, window: deps.window, endpoint: earn.endpoint },
+        { payer, path: '/serve' },
+      )
+      return reply.status(result.status).send({
+        served: result.body,
+        credited: {
+          amount: format(earn.endpoint.atomicPrice),
+          attested: result.status >= 200 && result.status < 300,
+          receiptSeq: result.receiptSeq,
+          written: result.creditWritten,
+        },
+      })
+    })
+  }
 
   app.get('/health', async () => ({
     ok: true,
