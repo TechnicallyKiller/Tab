@@ -52,9 +52,32 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
 
     app.get('/v1/earn', async (request, reply) => {
       const payer = (request.query as { payer?: string }).payer ?? 'unknown'
+
+      /*
+       * The settlement transaction id, from the middleware that just settled.
+       *
+       * `x402Context.beforeHandlerSettlement` is the settle result, and it is
+       * available here because the payment moved BEFORE this handler ran. The
+       * route used to pass nothing, so every credit receipt fell back to
+       * `unsettled:<timestamp>` and the reconciler had no id to match it
+       * against — a receipt claiming money moved, with nothing tying it to the
+       * transfer that moved it. Only accept a SUCCESS: a failed settle can
+       * still carry an id, and recording that would assert a movement that
+       * did not happen.
+       */
+      const settled = (
+        request as unknown as {
+          x402Context?: { beforeHandlerSettlement?: { result?: { success?: boolean; transaction?: string } } }
+        }
+      ).x402Context?.beforeHandlerSettlement?.result
+
       const result = await serveAndCredit(
         { env: deps.env, state: deps.state, receipts: deps.receipts, window: deps.window, endpoint: earn.endpoint },
-        { payer, path: '/serve' },
+        {
+          payer,
+          path: '/serve',
+          ...(settled?.success && settled.transaction ? { settlementTx: settled.transaction } : {}),
+        },
       )
       return reply.status(result.status).send({
         served: result.body,

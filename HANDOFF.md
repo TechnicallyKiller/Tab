@@ -24,11 +24,10 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** the `unsettled:` defect in `apps/gateway/src/spend.ts:143` — the one thing still
-blocking the reconciler from matching a debit, and reconciliation is a demo artifact. Then `graph`
-+ `scoring`, which is what the attack demo needs.
+**Next action:** `graph` + `scoring` — the loop-attack detection, which is the differentiator and
+the largest remaining build. Both legs, settlement and reconciliation are now proven end to end.
 
-**Last updated:** 2026-09-06 by Claude (the loop closes — consensus paid the agent 0.1100 on testnet)
+**Last updated:** 2026-09-06 by Claude (reconciler proves a spend; double-payment bug found and fixed)
 
 ### Written: 14 of 27 packages
 
@@ -187,6 +186,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-06 | **A WINDOW SETTLES AT MOST ONCE — `checkWindowSettledOnce` is now a ledger invariant, and the worker refuses to run when it fires.** The worker replayed only the receipts topic, so it never saw the settlement receipts that live on the SETTLEMENTS topic: every closed window looked unsettled forever and each pass re-paid it. Not a slow leak — one extra pass double-pays, ten passes pay eleven times. It really happened on testnet (window 5962288, two schedule ids, 0.1100 paid twice). **Anything replaying tab history must merge BOTH topics** | `settlement`, `gateway`, `verify`, `web`, `engine` |
+| 2026-09-06 | **A duplicate settlement needs NO money repair.** A clean settlement subtracts its net, so a window settled twice subtracts twice and the ledger already records the tab as owing the surplus back — it nets out against future windows. Writing a correcting repair would double-correct. The violation is a bug signature, not a mis-statement; `--acknowledge-duplicates` continues once the cause is fixed | `settlement`, `verify` |
+| 2026-09-06 | **The earn route declares `extra: { paymentFlow: 'upfront' }`.** x402's default `authorization` flow VERIFIES before the handler and SETTLES in the response hook afterwards — so `earn.ts`'s stated premise ("the money has ALREADY moved by the time we are called") was FALSE, and it wrote attested credits for payments that had not settled. `upfront` settles first, which is what the code always assumed. Note the key is `paymentFlow`; `assetTransferMethod` is a different axis and setting `upfront` there fails at boot | `x402`, `gateway` |
+| 2026-09-06 | **`unsettled:` is FIXED — both legs now record real transaction ids.** Spend: `processResponse` returns `{ status, paymentStatus, body, header }` and the id is on `header.transaction`; the client read `processed.settlement?.transaction`, a property that never existed, so `tx` was always undefined. An inline cast asserted the shape rather than checking it, which is why the compiler never objected. Earn: the route now reads `request.x402Context.beforeHandlerSettlement.result`. Only a `success` settle is trusted — a failed one still carries an id. **The reconciler now reports `matched 1 · violations 0 · questions 0`** | `x402`, `gateway`, `settlement` |
 | 2026-09-06 | **THE TAB IS ITS OWN ACCOUNT.** `TAB_ACCOUNT_ID` is now required by the gateway and the settlement worker, and it MUST differ from the hot float. It used to default to the operator id, which made the tab and the float one account: settlement scheduled a transfer from `0.0.8812188` to `0.0.8812188`, consensus executed it, and the worker printed CLEAN with a schedule id having moved nothing between two parties. `tick` now throws rather than build a self-transfer. Four accounts are distinct and each has a reason — float fronts and pays out · tab receives · payer is the agent's CUSTOMER · fee payer co-signs. `pnpm tab:create` makes one | `gateway`, `settlement`, `testkit`, `bootstrap`, any demo |
 | 2026-09-06 | **`@tab/params` exists, and window bucketing lives there.** `windowOf(epochSeconds, windowSeconds)` is the single source; the gateway's inline `Math.floor(now / windowSeconds)` is gone. Two copies agree until one is handed milliseconds, and then the gateway files receipts into a window the worker never settles. `windowOf` throws on a millisecond timestamp for that reason | `gateway`, `settlement`, `fastpath`, `web` |
 | 2026-09-06 | **`TIER_APR_BP` moved from `@tab/ledger` to `@tab/params`** (`aprBpFor(tier)`). Ledger cannot import params by design — it takes `aprBp` as an argument, so it does the arithmetic and never decides the policy. A rate change is now a params version bump touching no math. `RAMP_*` steps stay in ledger because `planSettlement` uses them internally | `ledger`, `settlement`, `scoring`, `verify` |
@@ -242,6 +245,52 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-06 (night) — Claude — the reconciler finally proves a spend, and a double-payment bug
+
+**`matched 1 · violations 0 · questions 0`.** The reconciler proves a debit against the chain for
+the first time. It has run clean before, but only ever by having nothing it could check — this is
+the first run where it actually verified a spend and found nothing wrong.
+
+**The `unsettled:` blocker is fixed, and it was a one-word bug.** `processResponse` returns
+`{ status, paymentStatus, body, header }` and the settlement id is on `header.transaction`. The
+client read `processed.settlement?.transaction` — a property that has never existed on that type —
+so `tx` was `undefined` on every single spend and every debit fell back to `unsettled:<holdId>`.
+The reason it survived so long: the call site casts the result to an inline type, and **a cast
+asserts a shape rather than checking it**, so the compiler had nothing to disagree with. Worth
+remembering the next time an `as {...}` looks harmless.
+
+**The earn leg had a worse version of the same problem.** Its route passed no settlement id at all,
+and chasing that turned up something more serious: x402's default `authorization` flow only
+VERIFIES before the handler and SETTLES in the response hook afterwards. So `earn.ts`'s central
+comment — "the money has ALREADY moved by the time we are called" — was **false**, and the handler
+was writing `attested: true` credits for payments that had not settled and still might not. The
+Hedera scheme supports `upfront`, which settles first; the route now declares it, which makes the
+ordering the code always claimed. It is also faster: 25s per call against 46s, one settle phase
+instead of two.
+
+**Then the settlement worker paid a window twice.** It replayed only the receipts topic, so it
+never saw the settlement receipts — those live on the settlements topic — and every closed window
+looked unsettled forever. Window 5962288 settled twice, two schedule ids, `0.1100` paid twice on
+testnet. This is not a slow leak: one extra pass double-pays, ten passes pay eleven times.
+
+Three things came out of that, and the last is the one that matters:
+
+1. The worker merges both topics now.
+2. `checkWindowSettledOnce` is a ledger invariant (`checkLedger` runs it), and the worker audits
+   before scheduling anything. It catches the bug **from the data alone** — no one has to notice
+   two schedule ids.
+3. **No money repair is due, and writing one would have made it worse.** A clean settlement
+   subtracts its net, so a window settled twice subtracts twice: the ledger already records the tab
+   as owing the surplus back, and it nets out against future windows. Confirmed against the chain —
+   tab holds `0.3200`, net receipts are `0.2700`, ledger balance `−0.0500`, and those agree. The
+   violation is a bug signature, not a mis-statement. `--acknowledge-duplicates` continues once the
+   cause is fixed.
+
+The instinct to "repair" a flagged violation is exactly the wrong one here, and the ledger being
+self-correcting is not luck — it is what double-entry is for.
+
+70 tests, 5/5 guards, 14 of 27 packages.
 
 ### 2026-09-06 (evening) — Claude — the loop closes: an agent with no key earned, and consensus paid it
 

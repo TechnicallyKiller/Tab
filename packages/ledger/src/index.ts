@@ -61,6 +61,7 @@ export {
   checkFloatInvariant,
   checkHoldsCommittedOnce,
   checkLedger,
+  checkWindowSettledOnce,
   type CheckResult,
   type FloatInvariantInput,
   type Violation,

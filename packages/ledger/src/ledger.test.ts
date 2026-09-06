@@ -6,7 +6,7 @@ import { inConsensusOrder } from './entries.ts'
 import { canReserve, position, resolveHolds } from './holds.ts'
 import { accrue } from './interest.ts'
 import { RAMP_START_BP, netWindow, planSettlement, rampAfter } from './netting.ts'
-import { checkFloatInvariant, checkLedger } from './invariants.ts'
+import { checkFloatInvariant, checkLedger, checkWindowSettledOnce } from './invariants.ts'
 
 const CEILING = usdc('1.000000')
 const ts = (n: number) => `17886${String(90000 + n).padStart(5, '0')}.000000000`
@@ -203,7 +203,9 @@ test('a clean ledger passes every invariant', () => {
     CEILING, NOW,
   )
   assert.equal(result.ok, true, JSON.stringify(result.violations))
-  assert.equal(result.checked.length, 4)
+  // Update this when you ADD an invariant — it is here so a check cannot be
+  // silently dropped, which would make `ok: true` mean less than it appears to.
+  assert.equal(result.checked.length, 5)
 })
 
 test('a hold committed twice is caught', () => {
@@ -348,4 +350,34 @@ test('the ramp is the last settlement rampTo, not a re-fold of the outcomes', ()
 test('the ramp reads in consensus order, not array order', () => {
   const out = [settled(148, 3, 5500, 7000), settled(146, 1, 2500, 4000)]
   assert.equal(rampAfter(out), 7000)
+})
+
+/* ── a window settles at most once ───────────────────────────────────────── */
+
+test('two settlement receipts for one window is a material violation', () => {
+  // The real incident: the worker replayed only the receipts topic, never saw
+  // the settlements topic, and re-paid every closed window on every pass.
+  const doubled = [settled(148, 1, 2500, 4000), settled(148, 2, 4000, 5500)]
+  const violations = checkWindowSettledOnce(doubled)
+  assert.equal(violations.length, 1)
+  assert.match(violations[0]!.detail, /window 148 has 2 settlement receipts/)
+  assert.equal(violations[0]!.material, true, 'money paid twice is always material')
+})
+
+test('one settlement per window passes, across many windows', () => {
+  const clean = [settled(146, 1, 2500, 4000), settled(147, 2, 4000, 5500), settled(148, 3, 5500, 7000)]
+  assert.deepEqual(checkWindowSettledOnce(clean), [])
+})
+
+test('checkLedger surfaces a double settlement', () => {
+  const entries = [
+    hold('h1', '0.040000', 1),
+    debit('h1', '-0.040000', 2),
+    settled(148, 3, 2500, 4000),
+    settled(148, 4, 4000, 5500),
+  ]
+  const result = checkLedger(entries, CEILING, NOW)
+  assert.equal(result.ok, false)
+  assert.ok(result.checked.includes('window_settled_once'))
+  assert.ok(result.violations.some((v) => v.invariant === 'window_settled_once'))
 })

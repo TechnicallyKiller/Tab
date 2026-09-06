@@ -17,7 +17,7 @@
 import { clientFromEnv, submitMessage } from '@tab/hedera'
 import { MirrorClient, configureGlobalHttp, getUsdcBalance } from '@tab/mirror'
 import { format, micro, toWire, usdc } from '@tab/money'
-import { rampAfter } from '@tab/ledger'
+import { checkWindowSettledOnce, rampAfter, type Entry } from '@tab/ledger'
 import { describeParams, params, windowOf } from '@tab/params'
 import { encode, settlement as settlementMessage } from '@tab/protocol'
 import { replayEntries, unsettledWindows } from './entries.ts'
@@ -29,6 +29,7 @@ configureGlobalHttp({ connectTimeoutMs: 60_000 })
 
 const once = process.argv.includes('--once')
 const dryRun = process.argv.includes('--dry-run')
+const acknowledgeDuplicates = process.argv.includes('--acknowledge-duplicates')
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -99,13 +100,68 @@ async function pass(): Promise<number> {
   const nowSeconds = Math.floor(Date.now() / 1000)
   const currentWindow = windowOf(nowSeconds, windowSeconds)
 
+  /*
+   * BOTH topics. A window is settled when a settlement receipt exists, and
+   * those live on the settlements topic — not the receipts topic.
+   *
+   * Replaying only receipts made `unsettledWindows` blind to every settlement
+   * ever written, so every closed window looked unsettled forever and the
+   * worker re-settled and RE-PAID it on every run. It is not a slow leak: one
+   * extra pass double-pays, ten passes pay eleven times. Caught by noticing a
+   * window settle twice with two schedule ids and the tab holding 0.32 where
+   * 0.21 was owed.
+   */
   const replay = await replayEntries(mirror, receiptTopic)
-  const entries = replay.byTab.get(tabAccount) ?? []
+  const settlementReplay = await replayEntries(mirror, settlementTopic)
+
+  const entries = [
+    ...(replay.byTab.get(tabAccount) ?? []),
+    ...(settlementReplay.byTab.get(tabAccount) ?? []),
+  ]
   const pending = unsettledWindows(entries, currentWindow)
 
+  /*
+   * Check the books before touching them.
+   *
+   * A double settlement is real money paid twice and cannot be undone, so it
+   * is worth one cheap pass over the merged history before scheduling anything
+   * further. This is the check that would have caught the re-payment bug from
+   * the data alone, without anyone noticing two schedule ids for one window.
+   */
+  const audit = checkWindowSettledOnce(entries)
+  if (audit.length > 0) {
+    console.log(`\n  LEDGER VIOLATION — ${audit.length} window(s) settled more than once:\n`)
+    for (const v of audit) console.log(`    ${v.detail}`)
+
+    /*
+     * No money repair is written here, and that is deliberate.
+     *
+     * A clean settlement subtracts its net from the balance, so a window
+     * settled twice subtracts twice: the ledger ALREADY records the tab as
+     * owing the surplus back, and it nets out against future windows on its
+     * own. Writing a correcting repair on top would double-correct and take
+     * the money away twice.
+     *
+     * So the violation is a bug signature, not a mis-statement. It still stops
+     * the worker by default, because a duplicate means something upstream is
+     * broken and settling more windows while it is broken is how one duplicate
+     * becomes ten. Acknowledge it once the cause is fixed.
+     */
+    if (!acknowledgeDuplicates) {
+      console.log(
+        '\n  Stopping. The balance already accounts for the surplus — a clean settlement\n' +
+          '  subtracts its net, so a window settled twice subtracts twice and the tab is\n' +
+          '  recorded as owing the difference back. Nothing is lost and no repair is due.\n' +
+          '\n  Fix the cause, then re-run with --acknowledge-duplicates to continue.\n',
+      )
+      return 0
+    }
+    console.log('\n  Acknowledged (--acknowledge-duplicates). Continuing.\n')
+  }
+
   console.log(
-    `\n  window ${currentWindow} open · ${replay.replayed} receipt(s) replayed · ` +
-      `${pending.length} window(s) to settle`,
+    `\n  window ${currentWindow} open · ${replay.replayed} receipt(s) · ` +
+      `${settlementReplay.replayed} settlement(s) replayed · ${pending.length} window(s) to settle`,
   )
 
   if (pending.length === 0) {
@@ -120,12 +176,19 @@ async function pass(): Promise<number> {
   const floatBalance = await getUsdcBalance(mirror, floatAccount, tokenId)
   console.log(`  float balance   ${format(floatBalance)}`)
 
+  /*
+   * The merged history, advanced in place as windows settle.
+   *
+   * Settling window N writes a receipt that changes the ramp window N+1 opens
+   * with, so this has to grow as we go — a snapshot taken once would settle a
+   * whole backlog at the ramp in force before any of it, and every window
+   * after the first would record a rampFrom that never existed.
+   */
+  let history: Entry[] = entries
+
   let settled = 0
   for (const window of pending) {
-    // Replayed fresh per window: settling window N writes a receipt that
-    // changes the ramp window N+1 opens with, so a stale snapshot would settle
-    // the whole backlog at the ramp in force before any of it.
-    const current = replay.byTab.get(tabAccount) ?? []
+    const current = history
     const rampBp = rampAfter(current)
 
     const config = {
@@ -178,9 +241,9 @@ async function pass(): Promise<number> {
     const written = await submitMessage(hedera.client, settlementTopic, encode(message))
     console.log(`    receipt        seq ${written.sequenceNumber} on ${settlementTopic}\n`)
 
-    // Fold the new settlement into the in-memory replay so the next window in
-    // this same pass opens on the ramp this one just set.
-    replay.byTab.set(tabAccount, [
+    // Fold the new settlement in so the next window in this same pass opens on
+    // the ramp this one just set, and is not re-settled.
+    history = [
       ...current,
       {
         kind: 'settlement',
@@ -192,7 +255,7 @@ async function pass(): Promise<number> {
         rampToBp: result.plan.rampToBp,
         ...(result.transactionId ? { transactionId: result.transactionId } : {}),
       },
-    ])
+    ]
     settled++
   }
   return settled

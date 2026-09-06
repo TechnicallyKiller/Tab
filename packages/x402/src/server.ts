@@ -55,6 +55,31 @@ export function createEarnServer(params: {
           network: params.network,
           // A Hedera account id string, never an EVM address.
           payTo: route.payTo,
+          /*
+           * `upfront` settles BEFORE the handler runs, and the earn leg
+           * depends on that.
+           *
+           * The Hedera exact scheme supports `authorization` (default) and
+           * `upfront`. Under `authorization` the payment is only verified
+           * before the handler and settled in the response's `onSend` hook —
+           * so the money has NOT moved while the handler runs. The earn leg
+           * writes an attested credit receipt in the handler, which under that
+           * flow means asserting revenue for a payment that might still fail
+           * to settle, and leaves no transaction id to reconcile against.
+           *
+           * `upfront` makes the ordering the code already claimed: money
+           * first, then serve, then a credit that names the transaction which
+           * moved it. It also means a payment can be taken for a request the
+           * agent's endpoint then fails to serve — which is exactly the case
+           * `attested: false` exists for, rather than a reason to avoid it.
+           *
+           * The key is `paymentFlow`. `assetTransferMethod` is a different
+           * axis — it names the transfer mechanism (`default` for this scheme)
+           * and setting `upfront` there fails at boot with
+           * `unsupported_asset_transfer_method`, which is at least a loud
+           * failure rather than a silent fallback to the wrong flow.
+           */
+          extra: { paymentFlow: 'upfront' },
         },
       ],
       description: route.description,

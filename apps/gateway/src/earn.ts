@@ -50,11 +50,17 @@ export interface EarnResult {
 /**
  * Forward a paid request upstream and record the credit.
  *
- * Called only after x402 has verified and settled — the middleware refuses
- * anything unpaid before this runs.
+ * Called only after x402 has verified AND settled — which is true only because
+ * the route declares the `upfront` payment flow. Under x402's default
+ * `authorization` flow the payment is merely VERIFIED before the handler and
+ * settled in the response hook afterwards, and this function's whole premise
+ * would be false: it would write an attested credit for money that had not
+ * moved and might still fail to move. That was the actual behaviour until the
+ * flow was pinned in `@tab/x402`'s earn server, and nothing here would have
+ * revealed it.
  *
  * Ordering matters here too, and differently from the spend leg: the money has
- * ALREADY moved by the time we are called, so the request must be forwarded
+ * already moved by the time we are called, so the request must be forwarded
  * even if the receipt write fails. Refusing to serve a request the payer paid
  * for would be theft; a missing receipt is repairable by the reconciler.
  */

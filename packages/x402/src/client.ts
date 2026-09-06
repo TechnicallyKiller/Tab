@@ -85,10 +85,30 @@ export function createSpendClient(config: SpendClientConfig): SpendClient {
       // Clone before processResponse, which consumes the stream. The agent
       // needs the seller's body; we need the settlement receipt.
       const body = await response.clone().json().catch(() => null)
+      /*
+       * The settlement id lives in `header`, not `settlement`.
+       *
+       * This read `processed.settlement?.transaction`, which is a property
+       * `processResponse` has never returned — it returns
+       * `{ status, paymentStatus, body, header }`, where `header` is the
+       * decoded PAYMENT-RESPONSE. So `tx` was ALWAYS undefined and every debit
+       * receipt fell back to `unsettled:<holdId>`, which made the reconciler
+       * structurally unable to match a single spend against the chain. The cast
+       * is what hid it: an inline type asserts a shape rather than checking it,
+       * so the compiler had nothing to disagree with.
+       *
+       * Only trust the id when the payment actually settled. A `settle_failed`
+       * response can still carry a transaction id, and recording that as proof
+       * of a debit would assert a movement that failed.
+       */
       const processed = (await http.processResponse(response)) as {
-        settlement?: { transaction?: string }
+        paymentStatus?: 'none' | 'payment_required' | 'settled' | 'settle_failed'
+        header?: { success?: boolean; transaction?: string }
       }
-      const tx = processed.settlement?.transaction
+      const tx =
+        processed.paymentStatus === 'settled' && processed.header?.success
+          ? processed.header.transaction
+          : undefined
       return {
         status: response.status,
         body,

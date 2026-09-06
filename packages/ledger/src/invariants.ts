@@ -157,6 +157,36 @@ export function checkFloatInvariant(input: FloatInvariantInput): Violation[] {
 }
 
 /** Run every entry-level invariant. The float check needs chain data and is separate. */
+/**
+ * A window settles at most once.
+ *
+ * Written after the settlement worker paid the same window twice. It replayed
+ * only the receipts topic, so it never saw the settlement receipts that live on
+ * the settlements topic; every closed window looked unsettled forever and each
+ * pass paid it again. The money left the float and the tab held more than it
+ * was owed, and NOTHING in the ledger complained — the second settlement was a
+ * perfectly well-formed receipt.
+ *
+ * Cheap to check and impossible to argue with, which is what an invariant
+ * should be. A duplicate is always material: it is real money paid twice.
+ */
+export function checkWindowSettledOnce(entries: readonly Entry[]): Violation[] {
+  const seen = new Map<number, number>()
+  for (const entry of entries) {
+    if (entry.kind !== 'settlement') continue
+    seen.set(entry.window, (seen.get(entry.window) ?? 0) + 1)
+  }
+  return [...seen.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([window, count]) => ({
+      invariant: 'window_settled_once',
+      detail:
+        `window ${window} has ${count} settlement receipts — it was paid ${count} times. ` +
+        'Check that the worker replays the settlements topic, not only the receipts topic.',
+      material: true,
+    }))
+}
+
 export function checkLedger(
   entries: readonly Entry[],
   ceiling: MicroUsdc,
@@ -167,6 +197,7 @@ export function checkLedger(
     ...checkDebitsHaveHolds(entries),
     ...checkCommitAmountsMatch(entries),
     ...checkAvailableNonNegative(entries, ceiling, now),
+    ...checkWindowSettledOnce(entries),
   ]
   return {
     ok: violations.length === 0,
@@ -175,6 +206,7 @@ export function checkLedger(
       'debit_has_hold',
       'commit_amount_matches_hold',
       'available_non_negative',
+      'window_settled_once',
     ],
     violations,
   }
