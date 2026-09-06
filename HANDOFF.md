@@ -21,97 +21,220 @@ written.
 
 ## Current State
 
-**Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
-ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
+**Last updated:** 2026-09-07 by Claude · **19 of 27 packages · 165 tests · 5/5 guards**
 
-**Next action:** wire `apps/web` to live data. The dashboard is where the video lives, and a mocked
-dashboard on camera is a credibility risk — if a judge cross-references one number against HashScan
-and it does not match, every other claim becomes suspect. 4.5k lines of UI already exist; the
-wiring is a data layer over endpoints the gateway already serves.
+**Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
+agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
+gets refused when the ceiling shrinks, and every claim above is checkable from public data. The
+frontend is the last major surface still on mocks.
 
-**Last updated:** 2026-09-07 by Claude (v2 published; the CEILING_EXCEEDED refusal observed end to end)
+---
 
-### Written: 19 of 27 packages
+### What works, with the evidence
 
-`money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
-`gateway` · `honest-agent` · `bootstrap` · `probes`
-
-Still only a README: `params` · `scoring` · `graph` · `fastpath` · `cache` · `db` ·
-`observability` · `sdk` · `cli` · `agentkit-plugin` · `mcp` · `engine` · `settlement` ·
-`loop-attacker` · `verify`
-
-**47 unit tests** — money 13, protocol 9, ledger 25.
-
-### The demo that runs today
-
-```bash
-pnpm seller                                              # unmodified x402 seller
-pnpm agent:endpoint                                      # agent's own endpoint, no key
-AGENT_ENDPOINT_URL=http://localhost:4066 pnpm start:gateway
-pnpm demo:honest    # spend leg — tab goes negative
-pnpm demo:earn      # earn leg  — tab goes positive
-```
-
-Last run, and the receipt topic agrees to the micro-USDC:
-
-```
-spend   available 0.9200 -> 0.8400   two debits, seq 6 and 7
-earn    balance  -0.1600 -> -0.0600  two attested credits, seq 8 and 9
-replay  net -0.0600                  independent HCS reconstruction
-```
-
-### Proven on testnet
-
-| Capability | Re-run with | Result |
+| Capability | Command | Observed |
 |---|---|---|
-| **HCS** | `pnpm bootstrap` | 3 topics with submit keys; round-trips in ~2s |
-| **HTS** | `pnpm probe3` | mint, associate, transfer. Association failure shown *then* fixed |
-| **Mirror Node** | `pnpm --filter @tab/mirror test:live` | 7 checks |
-| **Schedule Service (HIP-423)** | `pnpm probe:schedule` | tick fires at expiry; we submit nothing |
-| **x402, both roles** | `pnpm probe:adapter` / `:hts` | HBAR ~2.2s · token ~39s |
-| **Typed receipts** | `pnpm probe:protocol` | written, read back, topic replayed |
-| **Cache latency** | `pnpm probe:latency` | co-located 1.5ms p99 · remote 499ms |
+| **Spend leg** — agent with no key pays a seller | `pnpm demo:honest` | hold + debit receipts, seller paid on chain |
+| **Earn leg** — agent gets paid through its own endpoint | `pnpm demo:earn` | attested credits, `paymentFlow: 'upfront'` |
+| **Write-ahead order, provable** | any spend | hold seq 28 → debit seq 29, same `holdId`, 36s apart |
+| **Settlement by consensus** (HIP-423) | `pnpm settle` | 4 receipts → 1 transfer of `+0.1100`, schedule `0.0.10390470` executed at `1788686819.057159551` |
+| **Reconciliation** | `pnpm reconcile` | `matched 1 · violations 0 · questions 0`; writes repairs with `--repair` |
+| **Ceiling engine** | `pnpm engine:once --publish` | 9 ceilings published, each with its canonical input hash |
+| **Underwriting is the binding constraint** | same | `ceiling 0.3528 bound by computed` — not by the grant |
+| **Loop attack caught** | `pnpm attack` | shill `0%` BLOCKED, `COMMON_FUNDER`, revenue `0.0720 → 0.0000` |
+| **Refusal from the real fast path** | see `docs/DEMO.md` | `CEILING_EXCEEDED`, shortfall `0.0500` |
+| **Verify, by a stranger** | `pnpm verify-tab` / `verify-ceiling` | 6 of 7 `tab-v1` ceilings pass under v1's frozen params, with v2 current |
+| **Transparency, checked from outside** | see `docs/NETWORK_IMPACT.md` | input hash recomputed in a throwaway Python script, no repo access — MATCH |
 
-Four native Hedera services; the track requires two.
+Four native Hedera services (HCS, HTS, Schedule Service, Mirror Node); the track requires two.
+Zero Solidity, enforced by `pnpm guard`.
+
+### Packages: 19 written, 8 not
+
+**Written.** `money` · `protocol` · `params` · `ledger` · `graph` · `scoring` · `mirror` ·
+`hedera` · `x402` · `testkit` · `gateway` · `settlement` · `engine` · `web` · `verify` ·
+`bootstrap` · `probes` · `honest-agent` · `loop-attacker`
+
+**Not written.** `db` · `cache` · `fastpath` · `observability` · `sdk` · `cli` ·
+`agentkit-plugin` · `mcp`
+
+**165 tests:** ledger 39 · scoring 28 · graph 27 · params 19 · engine 19 · money 13 · verify 11 ·
+protocol 9.
+
+### Parameters: v2 is in force
+
+`MODEL_ID = tab-v2`. One change from v1 — the starter floor `1.000000 → 0.250000` — because v1 made
+the product's central claim untestable: earned credit for one young customer is `0.2352` against a
+`1.0000` floor, so the grant dominated the earning for an agent's whole early life. `v1.ts` is
+byte-identical and stays forever. **`verify-ceiling` still passes every ceiling published under
+`tab-v1`.**
 
 ### Live testnet
 
 | | |
 |---|---|
-| Operator / hot float | [`0.0.8812188`](https://hashscan.io/testnet/account/0.0.8812188) · ED25519 · unlimited auto-association |
-| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) — **9 messages: 4 debits, 1 refusal, 2 credits, 2 pre-schema** |
-| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) — empty, nothing publishes ceilings yet |
-| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) — empty, no settlement worker |
-| Spend token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) · `TUSD` · 6 dp · **stand-in** for USDC |
-| x402 demo seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) · stock `@x402/hedera`, receives only |
-| Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) · **ECDSA** · also the faucet relay |
-| Demo payer | [`0.0.10385196`](https://hashscan.io/testnet/account/0.0.10385196) · independent, funded with TUSD |
+| Operator / hot float | [`0.0.8812188`](https://hashscan.io/testnet/account/0.0.8812188) — fronts every spend |
+| **Agent tab** | [`0.0.10390398`](https://hashscan.io/testnet/account/0.0.10390398) — **holds no key it needs**; receives, never signs |
+| Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) — **38 messages**: holds, debits, credits, refusals, repairs |
+| Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) — **9 published ceilings**, each hash-verifiable |
+| Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) — **5 settlement receipts** |
+| Token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) · `TUSD` · 6dp — **stand-in** for testnet USDC |
+| x402 seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) — stock `@x402/hedera`, unaware Tab exists |
+| Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) · **ECDSA** |
+| Direct customer | [`0.0.10385196`](https://hashscan.io/testnet/account/0.0.10385196) — funded by the operator, so `COMMON_FUNDER` blocks it |
+| Indirect customer | [`0.0.10393567`](https://hashscan.io/testnet/account/0.0.10393567) — via intermediary `0.0.10393561`, so **discounted (33%) not blocked** |
+| Attacker shills | `0.0.10392362`, `0.0.10393604` — funded directly, **0% BLOCKED** |
+| Executed schedules | `0.0.10390303` · `0.0.10390470` · `0.0.10390637` · `0.0.10392071` |
 
-**A working x402 payment needs THREE distinct accounts** — payer, `payTo`, and fee payer. x402
-rejects a transfer the fee payer is a party to
-(`invalid_exact_hedera_payload_fee_payer_transferring_funds`). `pnpm payer:create` and
-`pnpm seller:create` exist for this.
+**A working x402 payment needs THREE distinct accounts** — payer, `payTo`, fee payer. The scheme
+rejects a transfer the fee payer is party to. `pnpm payer:create` and `pnpm seller:create` exist
+for this.
+
+---
+
+### GAPS — ranked, because they are not equal
+
+**Correctness and security. Fix these before scaling anything.**
+
+1. **The independence graph FAILS OPEN.** It re-derives funding ancestry from Mirror Node's
+   transactions-by-account index, which is *intermittent* for new accounts — measured returning 5
+   transactions once and 0 both before and after, minutes apart. When the fetch fails the
+   counterparty is weighted **independent**. Not theoretical: **the loop attacker went uncaught on
+   its first full run because of exactly this.** The point-lookup on `created_timestamp` narrowed
+   the window; only `@tab/db` closes it, by recording the edge when observed and never forgetting.
+2. **"Bulk-minting agents to farm Starter Tabs" is listed *Caught* in the attack catalogue and is
+   NOT.** Nothing anywhere writes a `register` message — the schema exists, the flow does not. One
+   Starter Tab per funding root is unenforced. **This is a false claim in the README.**
+3. **The 40% concentration cap is in the SLOW path, not the fast path** as the plan states. It
+   discounts revenue at recompute time; it does not refuse a spend at request time. **Also a false
+   claim in the README.**
+4. **The double-settlement damage is still on the receipt topic.** `verify-tab` exits non-zero on
+   it, correctly — window 5962288 really was paid twice, by a bug since fixed. Live data state, not
+   a code bug.
+5. **`FLOAT_TOTAL_USDC` is on no topic**, so the full float invariant is not stranger-checkable.
+   Publish it at bootstrap.
+
+**Scaling. Named honestly in `docs/NETWORK_IMPACT.md`, none of it demo-blocking.**
+
+6. **The gateway is SINGLE INSTANCE** — holds live in process memory, so two instances would each
+   allow up to the ceiling. `@tab/cache` fixes it; measured p99 **1.5ms**, 33× inside the 50ms
+   budget.
+7. **Ceiling publication is not serialised.** Two workers publishing for one agent make the topic
+   ambiguous. Needs a job key per agent.
+8. **One hold message per attempted spend** triples topic volume. Production wants a rolling batch
+   commitment.
+9. **Replay cost grows with topic length** — every worker boot and every `verify-tab` replays from
+   sequence 1. Needs periodic checkpoints.
+
+**Test debt. 11,039 lines have zero tests; ~4,200 of them are load-bearing.**
+
+| Package | Untested | Why it matters |
+|---|---|---|
+| `mirror` | 1,060 | **The read path everything depends on.** Every bug found this session came through it |
+| `gateway` | 1,132 | Holds, refusals, both legs |
+| `settlement` | 961 | Money movement and netting |
+| `hedera` | 629 | Every chain write |
+| `x402` | 404 | Four separate bugs already hid here |
+
+**Presentation.**
+
+10. **`apps/web` is 100% mocked** — not one `fetch` in 4,468 lines.
+11. **No demo video, no user-testing evidence.** Only the user can produce these.
+12. **The plan's demo script is stale in two places**: it says the attack collapses the ceiling
+    (it does not — the fake revenue never inflates it), and "ramp 15% → 30%" (it reads 25% → 40%).
+    `docs/DEMO.md` has the corrected beats.
+
+---
+
+### What is next, in order
+
+1. **Wire `apps/web` to live data.** Highest visible value and the video depends on it. A mocked
+   dashboard on camera is a credibility risk — one number failing a HashScan cross-check makes every
+   other claim suspect. The UI exists; this is a data layer over endpoints the gateway already
+   serves.
+2. **Fix the two false attack-catalogue claims** (gaps 2 and 3). Ten minutes, and they are claims a
+   judge may test.
+3. **`@tab/db`** — closes the fail-open exposure properly.
+4. **Tests for `mirror`** — the highest-risk untested surface.
+5. **`@tab/sdk` → `@tab/mcp`** if time. MCP is the one with real demo value: Claude Desktop calling
+   a paid API through Tab, agent holding no key. `cli` and `agentkit-plugin` are not worth it.
+6. **Not worth building:** `fastpath`, `observability`. Their absence is documented as named limits
+   with causes, which reads better to a judge than a half-built version.
 
 ### Read these before you write code
 
-Three findings cost hours each and will cost them again if rediscovered:
+Each of these cost real hours and will cost them again if rediscovered.
+
+**Network and API behaviour**
 
 1. **Node's `fetch` has a 10s connect timeout no `AbortController` can extend.** Mirror Node needs
-   5–15s from a high-latency link. Every app and tool entry point must call `configureGlobalHttp()`
-   from `@tab/mirror` **before any HTTP**. Skip it and x402 reports
+   5–15s from a high-latency link. Every entry point must call `configureGlobalHttp()` from
+   `@tab/mirror` **before any HTTP**. Skip it and x402 reports
    `invalid_exact_hedera_payload_signature_invalid` — a signature error for a network problem.
-2. **Mirror Node returns empty pages mid-result-set.** Hit three times on three accounts. Stop only
-   on `links.next === null`; use `walk()`.
+2. **Mirror Node returns empty pages mid-result-set.** Stop only on `links.next === null`; use
+   `walk()`.
 3. **Never diff Mirror Node account balances to prove value moved** — they are snapshots. Fetch the
-   transaction and assert on `result` plus the transfer list. **`verify-tab` inherits this.**
+   transaction and assert on `result` plus the transfer list. Use `getBalanceSnapshot` when you need
+   the `asOf` timestamp, which any INVARIANT does.
+4. **`/transactions?account.id=` is INTERMITTENT for a new account** — not merely lagging. Measured
+   returning 5 rows once and 0 both before and after, minutes apart, while the balance endpoint was
+   correct throughout. **Never derive a security input from it.** Resolve ancestry by point lookup:
+   `/accounts/{id}` for `created_timestamp`, then `/transactions?timestamp=<exact>`.
+5. **Read a transaction's payer from the transaction ID's own prefix**, never from the transfer
+   list — fee collectors (`0.0.98`, `0.0.802`) appear there with POSITIVE amounts, so "most negative
+   entry" is a heuristic that works until it does not.
+6. **Schedule state comes from Mirror Node, not `ScheduleInfoQuery`** — a consensus node that did
+   not see the create returns `INVALID_SCHEDULE_ID`.
+
+**x402**
+
+7. **A payment needs THREE distinct accounts** — payer, `payTo`, fee payer. The scheme rejects a
+   transfer the fee payer is party to.
+8. **The Hedera exact scheme's default `authorization` flow settles AFTER the handler.** A resource
+   server that credits revenue in its handler is crediting a payment that has not settled. The earn
+   route declares `extra: { paymentFlow: 'upfront' }`. The key is `paymentFlow` —
+   `assetTransferMethod` is a different axis and fails at boot.
+9. **The settlement id is on `header.transaction`**, not `settlement.transaction`. Reading the
+   wrong one made every debit fall back to `unsettled:` for days, and an inline `as {...}` cast hid
+   it: **a cast asserts a shape rather than checking it.**
+10. **A hardcoded client-side spend cap silently rejects everything when the endpoint price
+    changes**, reported as `All payment requirements were rejected by spendControls` — which reads
+    like a protocol fault. Bit two demo runs.
+
+**Our own design, learned the hard way**
+
+11. **The agent's tab holds no key, so it can NEVER be a funder.** `FUNDED_BY_AGENT` is
+    structurally unreachable for a Tab agent; `COMMON_FUNDER` is the rule that fires.
+12. **A rule is not working just because it is written.** THREE control rules were unreachable
+    because nobody asked them: `FUNDED_BY_AGENT` (impossible), the tab's own ancestry (never
+    fetched), and `SHARED_FUNDING_ROOT` (facts only one hop deep). Verify a rule FIRES before
+    trusting it.
+13. **`MODEL_VERSION` covers the FORMULA, not only the parameter numbers.** Changing
+    `computeCeiling`'s behaviour without a bump makes published ceilings unreproducible.
+    `verify-ceiling` caught exactly that.
+14. **Anything replaying tab history must merge the receipts AND settlements topics.** Replaying
+    only receipts made every closed window look unsettled forever and re-paid it every pass.
+15. **A DEFAULT is zero; being NEW is the starter floor.** Keying the zero on `tier === 'Unrated'`
+    meant a brand-new agent could never earn its way up — no revenue → Unrated → ceiling 0 → cannot
+    spend → cannot earn.
+16. **`--dry-run` must move nothing.** Suppressing only the receipt write made a "dry run" execute a
+    real transfer and omit the receipt marking the window settled, leaving the next pass ready to
+    pay it twice.
+17. **On testnet nothing we create is genuinely independent** — every account descends from our
+    faucet account. The demo distinguishes direct control from indirect relation, not control from
+    true independence. Say so.
 
 ### Environment
 
 | | |
 |---|---|
 | `REDIS_URL` | set — Upstash **us-east-1**. Use a **local Redis for the demo** (`redis-server --port 6380`, already installed) or the 50ms claim is not demonstrable |
-| `DATABASE_URL` | **NOT SET** — blocks `db`, and therefore `engine` |
-| Real USDC | not obtained. Circle's faucet reported drips that never arrived. Proven not to block anything |
+| `DATABASE_URL` | set — Supabase **pooler, session mode 5432** (the direct host is IPv6-only and this machine has no IPv6). Still unused: `db` is unwritten |
+| `TAB_ACCOUNT_ID` | **required** by the gateway and the settlement worker, and must differ from the float |
+| `PER_CALL_CAP_USDC` / `STARTER_CEILING_USDC` | optional **overrides**; the defaults now come from `@tab/params` v2 |
+| `TRAILING_WINDOWS` | how many closed windows the revenue average spans. `1` for the demo |
+| `DEMO_PAYER_ACCOUNT_ID` / `_KEY` | written by `pnpm demo:payer`, never printed |
+| Real USDC | not obtained. Circle's faucet reported drips that never arrived. Proven not to block anything — `TUSD` stands in |
 
 ### Track board
 
@@ -119,59 +242,43 @@ Three findings cost hours each and will cost them again if rediscovered:
 *Claimed by* when you start and clear it when you stop, so two people never edit the same package in
 parallel. That is the only rule, and it is about merge conflicts, not authority.
 
-Tracks are dependency-ordered — see [docs/BUILD_ORDER.md](docs/BUILD_ORDER.md). Do not start a
-phase whose predecessor is unfinished; you would be building against an interface that does not
-exist yet.
-
-| Track | Scope | Phase | Claimed by | Status |
-|---|---|---|---|---|
-| **P0** | `tools/probes` → `docs/probes.md` | 0 | — | **all 5 answered + Probe 6.** Phase 0 complete |
-| **G** | `tools/guards` | 0 | — | **done** — 5 guards, negative-tested |
-| **F1** | `money` ✅ · `protocol` ✅ · `params` | 1 | — | only `params` left — `TIER_APR_BP` is squatting in `ledger` until it exists |
-| **F2** | `ledger` | 1 | — | **done** — 25 tests. No generative property tests yet |
-| **F3** | `scoring` · `graph` | 1 | — | open |
-| **A1** | `hedera` · `observability` | 2 | — | hedera: topics + HTS + accounts live. **Schedule (HIP-423) not written** |
-| **A2** | `mirror` ✅ · `db` | 2 | — | mirror done, 7 live checks green |
-| **A3** | `x402` | 2 | — | **done** — 3 roles, proven on testnet for HBAR and HTS. No `hold_id` threading yet |
-| **A4** | `cache` | 2 | — | **read Probe 5 first** — the LRU is not optional, and the hold reserve cannot be cached |
-| **FAST** | `fastpath` · `apps/gateway` | 3 | — | gateway: **both legs live**. `fastpath` unwritten — checks are inline in `spend.ts` |
-| **SLOW** | `apps/engine` · `apps/settlement` | 3 | — | open |
-| **S1** | `sdk` · `apps/cli` | 4 | — | open |
-| **S2** | `agentkit-plugin` | 4 | — | open |
-| **S3** | `apps/web` | 4 | — | open |
-| **S4** | `mcp` — scope it before building | 4 | — | open |
-| **D1** | `tools/verify` | 5 — pull earlier if you can | — | open |
-| **D2** | `agents/honest-agent` | 5 | — | **done** — zero dependencies, spends and earns |
-| **D3** | `agents/loop-attacker` | 5 | — | open |
-
-**Before Phase 1 is claimed:** agree the `@tab/protocol` message shapes together. Everything
-downstream reads and writes them, and changing them on day four touches every package.
-
-### Environment
-
-| Thing | Status | Value / where |
-|---|---|---|
-| Hedera testnet account | ⬜ | |
-| Supabase project | ⬜ | `DATABASE_URL` in `.env` |
-| Upstash Redis | ⬜ | `REDIS_URL` in `.env` — **note the region** |
-| HCS topics (3) | ⬜ | created by `pnpm bootstrap` |
-| Float accounts (2) | ⬜ | Treasury + Hot Float, see [docs/KEYS.md](docs/KEYS.md) |
-| Testnet USDC obtained | ⬜ | Probe 1 |
+| Track | Scope | Claimed by | Status |
+|---|---|---|---|
+| **P0** | `tools/probes` → `docs/probes.md` | — | **done** — all 5 answered plus Probe 6 (HIP-423) |
+| **G** | `tools/guards` | — | **done** — 5 guards, negative-tested, pre-commit hook |
+| **F1** | `money` · `protocol` · `params` | — | **done** — 41 tests. `params` at **v2**; v1 frozen beside it |
+| **F2** | `ledger` | — | **done** — 39 tests. No generative property tests yet |
+| **F3** | `scoring` · `graph` | — | **done** — 55 tests. The loop attack is caught by `graph` |
+| **A1** | `hedera` · `observability` | — | hedera **done** incl. HIP-423 schedules. `observability` unwritten and **not worth building** |
+| **A2** | `mirror` · `db` | — | mirror **done but UNTESTED (1,060 lines)** — highest-risk surface. `db` unwritten and **closes the fail-open exposure** |
+| **A3** | `x402` | — | **done** — both roles live on testnet. `paymentFlow: 'upfront'` on the earn leg |
+| **A4** | `cache` | — | unwritten. **Read Probe 5 first**: co-located p99 1.5ms; the hold reserve cannot be cached away |
+| **FAST** | `fastpath` · `apps/gateway` | — | gateway **done** — both legs, holds published, consumes ceilings from HCS. `fastpath` unwritten; checks are inline |
+| **SLOW** | `apps/engine` · `apps/settlement` | — | **both done and live.** No BullMQ/indexer; ceiling publication not serialised |
+| **S1** | `sdk` · `cli` | — | unwritten. `sdk` unlocks the rest cheaply; `cli` is **low value** |
+| **S2** | `agentkit-plugin` | — | unwritten. **The README falsely claims this exists** — build it or correct the line |
+| **S3** | `apps/web` | — | 4,468 lines built, **100% mocked**. THE next job |
+| **S4** | `mcp` | — | unwritten. The one agent-surface package with real demo value |
+| **D1** | `tools/verify` | — | **done** — 11 tests. Both commands run; caught two of our own mistakes |
+| **D2** | `agents/honest-agent` | — | **done** — zero dependencies, spends and earns |
+| **D3** | `agents/loop-attacker` | — | **done** — runs the attack live on public surfaces only |
 
 ### Blocked / open questions
 
 | What | Blocking whom | Owner |
 |---|---|---|
-| Test against a **third-party public** x402 seller — ours is stock, which tests "unmodified" but not a public facilitator accepting HTS | `x402`, `gateway` spend leg | — |
-| ~~Match `x402-hedera-receipts` or go bespoke?~~ | `protocol` | **decided: bespoke** — see log 2026-08-22 |
-| ~~Probe 5: fast-path latency~~ | `cache` | **answered: co-located 1.5ms, remote 499ms.** Demo must use local Redis |
+| **Demo video, user-testing evidence** — a large share of the rubric, still zero | submission | **needs the user** |
+| **Publish holds in batches, or keep one message per attempted spend?** One-per-spend triples topic volume and slows every replay | `protocol`, `gateway` | — |
+| **Publish `FLOAT_TOTAL_USDC` at bootstrap** so the float invariant is fully stranger-checkable | `bootstrap`, `protocol`, `verify` | — |
+| Test against a **third-party public** x402 seller — ours is stock, which tests "unmodified" but not a public facilitator accepting HTS | `x402`, `gateway` | — |
 | Standalone MCP server, or load our plugin into the official Agent Kit MCP server? | `mcp` scope | — |
-| Settlement schedule: provisional-amount-at-open, or short-expiry-near-close? | `apps/settlement` | — |
-| `AGE_FULL_DAYS` testnet value | `graph`, `params`, the config dump | — |
-| `DATABASE_URL` (Supabase) not set | `db` → `engine` | **needs the user** |
-| No demo video, no user-testing evidence, no network-impact doc — 45% of the rubric | submission | **needs the user** |
-| Refusal reason enum — the UI already renders 6 codes, `@tab/protocol` must match exactly | `protocol`, `fastpath`, `web` | — |
-| Ceiling input record shape — the CEILING view renders 9 rows and a canonical hash | `scoring`, `protocol`, `web` | — |
+| `AGE_FULL_DAYS` is tuned to 7 for testnet and said out loud in the config dump. Right value for mainnet? | `params` | — |
+| ~~`DATABASE_URL` not set~~ | `db` | **set** — Supabase pooler, session mode 5432 |
+| ~~Probe 5: fast-path latency~~ | `cache` | **answered** — co-located 1.5ms; the demo must use local Redis |
+| ~~Match `x402-hedera-receipts` or go bespoke?~~ | `protocol` | **decided: bespoke** — log 2026-08-22 |
+| ~~Settlement schedule timing~~ | `settlement` | **decided** — at window close, [ADR-0009](docs/adr/0009-settlement-schedule-timing.md) |
+| ~~Whether to publish holds at all~~ | `protocol` | **decided: yes** — the write-ahead order is now provable |
+| ~~Lower the starter floor?~~ | `params` | **decided: yes, as v2** — v1 made "credit is earned" untestable |
 
 ### Contract changes — read this before you assume a doc is current
 
@@ -279,6 +386,42 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (session close) — Claude — HANDOFF rewritten to match reality
+
+*Current State* had gone badly stale: it claimed **47 tests** (actually 165) and listed `params`,
+`scoring`, `graph`, `engine`, `settlement` and `verify` as "still only a README" when all six are
+written and live. It also said the ceiling and settlement topics were empty; they hold 9 and 5
+messages. A stale handoff is worse than none, because it gets trusted — so it is rewritten rather
+than patched.
+
+**What the rewrite adds, beyond correcting numbers:**
+
+- **A GAPS section, ranked**, because the gaps are not equal and treating them as a flat list hides
+  the two that matter. Correctness and security first, then scaling, then test debt, then
+  presentation.
+- **Two FALSE CLAIMS in the README, named as such.** "Bulk-minting agents to farm Starter Tabs" is
+  listed *Caught* in the attack catalogue and is not — nothing anywhere writes a `register`
+  message, so one Starter Tab per funding root is unenforced. And the 40% concentration cap is in
+  the SLOW path, not the fast path as the plan states. Both are claims a judge may test.
+- **The fail-open exposure stated as a live security gap**, not a footnote. The independence graph
+  re-derives ancestry from an index measured to be intermittent, and the loop attacker went uncaught
+  on its first full run because of it. Only `@tab/db` closes it.
+- **The findings list grew from 3 to 17**, grouped: network/API behaviour, x402, and our own design.
+  The most reusable of the new ones is #12 — *a rule is not working just because it is written.*
+  Three separate control rules were unreachable because nobody had asked whether they fired.
+- **The track board reflects what is actually done**, and marks `mirror` as done-but-untested with
+  1,060 lines, which is the highest-risk surface in the repo.
+- **Blocked/open questions now records six DECISIONS** that were previously open: bespoke receipts,
+  Probe 5, settlement timing, publishing holds, the v2 floor, and `DATABASE_URL`.
+
+**What is next, in order, with the reasoning in the doc:** wire `apps/web` to live data (the video
+depends on it, and a mocked dashboard on camera is a credibility risk); fix the two false claims;
+`@tab/db`; tests for `mirror`; `sdk` → `mcp` if time. `fastpath` and `observability` are marked
+**not worth building** — their absence is already documented as named limits with causes, which
+reads better to a judge than a half-built version.
+
+No code changed in this entry.
 
 ### 2026-09-07 (end of day) — Claude — v2 published, and the refusal OBSERVED
 
