@@ -24,12 +24,12 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** a demo-parameter pass so the attack produces a REFUSAL and not only a blocked
-counterparty; a faucet-funded independent customer so the honest demo is not itself inside our
-control cluster; then `apps/web` against live data. Also open: bump `MODEL_VERSION` before the next
-formula change, and decide whether holds get published.
+**Next action:** the **network-impact doc** — untouched, and the largest unclaimed share of the
+rubric. Then a demo-parameter pass so the attack produces a REFUSAL, a faucet-funded independent
+customer, and `apps/web` against live data. Still open: bump `MODEL_VERSION` before the next
+formula change.
 
-**Last updated:** 2026-09-07 by Claude (tools/verify — the trust artifact, which caught my own freeze-rule break)
+**Last updated:** 2026-09-07 by Claude (holds published — the write-ahead order is provable by a stranger)
 
 ### Written: 19 of 27 packages
 
@@ -188,6 +188,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-07 | **HOLDS ARE PUBLISHED, and the gateway AWAITS consensus on the hold before paying.** `reserve → pay → commit` is now verifiable by a stranger: same `holdId`, hold strictly before debit on the topic (proven live — seq 28 hold, seq 29 debit, 36s apart). **The await is the point** — publishing after the payment, or not awaiting, puts the two messages on the topic in an order that proves nothing. The spend FAILS CLOSED if the hold cannot be published: paying with no published authorisation produces exactly the debit-from-nowhere this removes | `gateway`, `protocol`, `ledger`, `verify` |
+| 2026-09-07 | **Cost of publishing holds, measured not guessed:** one extra message per attempted spend, ~2-4s of consensus on a spend path already taking 25-39s on x402 HTS settlement — about 10%. It does NOT touch the 50ms authorization budget, which is the cache read before it. At high volume this triples topic size and slows every replay; the production answer is a rolling batch commitment, not one message per hold | `gateway`, `fastpath`, `cache` |
+| 2026-09-07 | **`checkPublicLedger` takes `holdsPublishedFrom`, and debits before it are EXCLUDED from the hold rule and COUNTED.** Holds were added after receipts already existed, so asserting the new rule against old data marked every historical debit as having "bypassed reserve" — eleven red lines that were not defects and which buried the one finding that was. A stranger derives the cutover the same way `verify-tab` does: the consensus timestamp of the first `hold` message. With NO cutover given the rule is strict — an absent option must never silently disable a check | `verify`, `ledger` |
+| 2026-09-07 | **`LOCAL_ONLY_INVARIANTS` is now EMPTY**, and `verify-tab` still prints the line. "Nothing was skipped" is a claim a stranger needs made explicitly — silence is indistinguishable from a verifier that forgot to mention what it left out. If a future invariant needs private state, it goes back in that list | `verify`, `ledger` |
 | 2026-09-07 | **`MODEL_VERSION` COVERS THE FORMULA, NOT ONLY THE PARAMETER NUMBERS.** `verify-ceiling` caught me breaking this: I changed `computeCeiling`'s Unrated/`hasDefaulted` behaviour without a version bump, so ceiling seq 1 — published under `tab-v1` — no longer reproduces under today's `tab-v1`. Its hash still MATCHES, so the record is authentic; the code that produced it changed. **Any change to `computeCeiling`'s behaviour is a version bump, exactly like a parameter change** | `params`, `scoring`, `engine`, `verify` |
 | 2026-09-07 | **Two kinds of verify-ceiling failure, and they mean OPPOSITE things.** `hash_mismatch` — the published inputs do not hash to the published hash; the record contradicts itself, suspect the publisher. `not_reproducible` — the hash matches but today's code gives a different number; the record is genuine and OUR release process failed. Conflating them would send a reader to the wrong conclusion about whether to trust the topic | `verify`, `web` (the verify button) |
 | 2026-09-07 | **`checkLedger` CANNOT be run against an HCS replay — use `checkPublicLedger`.** `@tab/protocol` has no hold message: holds live in gateway memory and never reach a topic, so a replay has debits with no holds and `debit_has_hold` fails for EVERY debit on a correct ledger. `verify-tab` printed FAIL for all three tabs, which a stranger would read as fraud. The invariant set now splits public (assertable from receipts alone) from local (needs the in-process hold table), and `verify-tab` names what it cannot check instead of skipping it silently | `verify`, `ledger`, `gateway`, `engine` |
@@ -265,6 +269,63 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (night) — Claude — holds are published: the write-ahead order is now provable
+
+`reserve → pay → commit` was the safety property this rail rests on, and it was the one thing a
+stranger had to take on trust. `verify-tab` could not assert `debit_has_hold` because holds lived
+in the gateway's memory and never reached a topic — an HCS replay showed debits appearing from
+nowhere.
+
+Now they do, and the ordering is visible on the public record:
+
+```
+  seq 28  at 1788702544.843150104  ->  hold   h_fb2b25485a204c38  0.040000
+  seq 29  at 1788702580.124282517  ->  debit  h_fb2b25485a204c38 -0.040000
+```
+
+Same hold id, hold strictly first, 36 seconds apart — the x402 settlement in between.
+
+**The await is the whole point.** The gateway publishes the hold and waits for consensus BEFORE
+paying. Publishing after the payment, or firing and forgetting, would put both messages on the
+topic in an order that proves nothing. And it **fails closed**: if the hold cannot be published the
+spend is not attempted, because paying a seller with no published authorisation produces exactly
+the debit-from-nowhere this change exists to eliminate — and to a stranger it is indistinguishable
+from a gateway inventing debits.
+
+**The cost, measured rather than guessed.** I had said this landed "on the latency path the
+fast/slow split exists to protect", and that was wrong in a way that changed the decision: the 50ms
+budget is the AUTHORIZATION decision, a cache read that happens before this. The hold write sits
+between that and `pay`, and `pay` is a 25-39s x402 HTS settlement. So the real cost is ~2-4s on
+~30s — roughly 10%, not a 60x blowup. At high volume it triples topic size and slows every replay,
+so production wants a rolling batch commitment rather than one message per hold. Recorded, not
+pretended away.
+
+**Then it immediately over-fired, and that needed a bounded fix rather than an excuse.** Holds were
+added after receipts already existed, so every historical debit references a hold that was real but
+never published. `verify-tab` marked eleven of them as having "bypassed reserve" — red lines that
+were not defects, and which buried the one finding that was. So `checkPublicLedger` takes
+`holdsPublishedFrom`: debits before the cutover are excluded from the hold rule and **counted in
+the report**. A stranger derives that cutover the same way the tool does — the consensus timestamp
+of the first `hold` message — so the exclusion is checkable rather than asserted. With no cutover
+given the rule is strict, because an absent option must never silently disable a check.
+
+`verify-tab` now reads:
+
+```
+  holds published   from 1788702544.843150104   debits before this predate the rule
+  PASS  tab 0.0.8812188: 8 entr(ies) ... 4 debit(s) predate the first published hold
+  PASS  tab 0.0.10385196: 1 entr(ies) ... 1 debit(s) predate
+  FAIL  tab 0.0.10390398: window 5962288 has 2 settlement receipts — paid 2 times
+  PASS  every invariant in the set was checked — nothing skipped
+```
+
+`LOCAL_ONLY_INVARIANTS` is empty now, and the line still prints. "Nothing was skipped" is a claim a
+stranger needs made explicitly.
+
+161 tests, 5/5 guards.
+
+**Next:** the network-impact doc, which is untouched and the largest unclaimed share of the rubric.
 
 ### 2026-09-07 (evening) — Claude — tools/verify: the trust artifact, and it caught me first
 

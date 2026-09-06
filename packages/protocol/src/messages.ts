@@ -21,6 +21,46 @@ import { REFUSAL_CODES } from './refusal-codes.ts'
 /* ── receipts topic ─────────────────────────────────────────────────────── */
 
 /** Money left the float to pay a seller. The spend leg. */
+/**
+ * A hold, published BEFORE the payment it authorises.
+ *
+ * The write-ahead ordering — `reserve → pay → commit` — is the safety property
+ * this rail rests on, and it was the one thing a stranger had to take on trust:
+ * `verify-tab` could not assert `debit_has_hold` because holds lived only in
+ * the gateway's memory, so an HCS replay showed debits appearing from nowhere.
+ * Publishing the hold first is what makes the ordering auditable by someone
+ * who does not trust us, which is the entire no-contract argument.
+ *
+ * The cost, stated: one extra message per attempted spend, and the gateway
+ * AWAITS consensus on it before paying. That adds ~2-4s to a spend path
+ * already taking 25-39s on the x402 HTS settlement, so it is roughly 10% —
+ * and it does not touch the 50ms authorization budget, which is a cache read
+ * that happens before this.
+ *
+ * At high volume this triples topic size and slows every replay. The
+ * production answer is a rolling batch commitment — one message covering many
+ * holds — not one message per hold. Recorded rather than pretended away.
+ */
+export const holdReceipt = base.extend({
+  t: z.literal('hold'),
+  /** The idempotency key the debit will reference. */
+  hold: z.string().min(8).max(64),
+  /** The seller this hold is reserved against. */
+  cp: entityId,
+  /** POSITIVE here, unlike a debit: a hold reserves, it does not move money. */
+  amt: amount,
+  /**
+   * When this hold lapses.
+   *
+   * Published so a stranger can tell an EXPIRED hold from a stranded one. A
+   * hold with no expiry that never commits looks identical to a gateway that
+   * crashed holding an agent's ceiling hostage.
+   */
+  exp: consensusTimestamp,
+  /** Hash of the request being authorised, never the request itself. */
+  req: shortHash,
+})
+
 export const debitReceipt = base.extend({
   t: z.literal('debit'),
   /** The seller. Unmodified x402, unaware Tab exists. */
@@ -86,6 +126,7 @@ export const repairReceipt = base.extend({
 })
 
 export const receipt = z.discriminatedUnion('t', [
+  holdReceipt,
   debitReceipt,
   creditReceipt,
   refusalReceipt,
@@ -199,6 +240,7 @@ export const registration = base.extend({
 /* ── the union written to any topic ─────────────────────────────────────── */
 
 export const tabMessage = z.discriminatedUnion('t', [
+  holdReceipt,
   debitReceipt,
   creditReceipt,
   refusalReceipt,
@@ -211,6 +253,7 @@ export const tabMessage = z.discriminatedUnion('t', [
 export type DebitReceipt = z.infer<typeof debitReceipt>
 export type CreditReceipt = z.infer<typeof creditReceipt>
 export type RefusalReceipt = z.infer<typeof refusalReceipt>
+export type HoldReceipt = z.infer<typeof holdReceipt>
 export type RepairReceipt = z.infer<typeof repairReceipt>
 export type Receipt = z.infer<typeof receipt>
 export type CeilingInputs = z.infer<typeof ceilingInputs>

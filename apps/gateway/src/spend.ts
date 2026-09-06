@@ -116,6 +116,49 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   }
   state.push(request.tab, hold)
 
+  /*
+   * Publish the hold and AWAIT consensus, before paying anything.
+   *
+   * The await is the whole point. `reserve → pay → commit` is the safety
+   * property this rail rests on, and until holds were published it was the one
+   * thing a stranger had to take on trust: an HCS replay showed debits
+   * appearing from nowhere, so `verify-tab` could not assert `debit_has_hold`.
+   * Publishing it AFTER the payment, or not awaiting it, would put the two
+   * messages on the topic in an order that proves nothing.
+   *
+   * The cost is ~2-4s of consensus. It is affordable because it does not touch
+   * the 50ms authorization budget — that is the cache read above — and the pay
+   * step below is an x402 HTS settlement taking 25-39s, so this is roughly 10%
+   * on a path already dominated by the chain.
+   */
+  const holdWrite = await receipts
+    .write({
+      v: 1, t: 'hold', tab: request.tab, w: window,
+      hold: holdId, cp: seller, amt: toWire(request.max),
+      exp: expiresAt, req: requestHash(request.url, at),
+    })
+    .then((written) => ({ ok: true as const, written }))
+    .catch((error: unknown) => ({ ok: false as const, error }))
+
+  if (!holdWrite.ok) {
+    /*
+     * FAIL CLOSED. No hold on the topic means no spend.
+     *
+     * Proceeding would pay a seller with no published authorisation, producing
+     * exactly the debit-from-nowhere this change exists to eliminate — and it
+     * would be indistinguishable, to a stranger, from a gateway inventing
+     * debits. Refusing costs the agent one job; proceeding costs the ledger its
+     * only external proof of ordering.
+     */
+    return {
+      outcome: 'failed',
+      reason:
+        'could not publish the hold, so the spend was not attempted: ' +
+        (holdWrite.error instanceof Error ? holdWrite.error.message : String(holdWrite.error)),
+      holdId,
+    }
+  }
+
   // ── 2. PAY ───────────────────────────────────────────────────────────────
   const started = Date.now()
   let result

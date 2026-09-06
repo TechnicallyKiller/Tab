@@ -54,6 +54,12 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
     let entry: Entry | null = null
 
     switch (msg.t) {
+      case 'hold':
+        entry = {
+          kind: 'hold', at: message.consensusTimestamp, window: msg.w, holdId: msg.hold,
+          counterparty: msg.cp, amount: usdc(msg.amt), expiresAt: msg.exp,
+        }
+        break
       case 'debit':
         entry = {
           kind: 'debit', at: message.consensusTimestamp, window: msg.w, holdId: msg.hold,

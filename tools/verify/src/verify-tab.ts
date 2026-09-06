@@ -143,6 +143,28 @@ console.log(heading('checks'))
 const results: { ok: boolean; text: string }[] = []
 let outstandingTotal: MicroUsdc = micro(0n)
 
+/*
+ * When holds began being published, derived from the topic itself.
+ *
+ * A stranger can compute this the same way: the consensus timestamp of the
+ * first `hold` message. That makes the exclusion below checkable rather than
+ * something we assert — the difference between a bounded claim and a
+ * convenient one.
+ */
+const firstHold = [...byTab.values()]
+  .flat()
+  .filter((e) => e.kind === 'hold')
+  .map((e) => e.at)
+  .sort()[0]
+
+console.log(
+  field(
+    'holds published',
+    firstHold ? `from ${firstHold}` : 'never — the hold rule cannot be checked',
+    firstHold ? 'debits before this predate the rule' : '',
+  ),
+)
+
 for (const [tab, all] of byTab) {
   // Bounded to the snapshot, in consensus order.
   const entries = all.filter((e) => compareConsensus(e.at, asOf) <= 0)
@@ -150,24 +172,35 @@ for (const [tab, all] of byTab) {
   outstandingTotal = add(outstandingTotal, p.outstanding)
 
   /*
-   * PUBLIC invariants only.
+   * The public invariant set, which now includes the hold checks.
    *
-   * `checkLedger` also asserts `debit_has_hold`, which cannot hold here:
-   * `@tab/protocol` has no hold message, so holds never reach a topic and a
-   * replay has debits with no holds. Running it printed FAIL for all three
-   * tabs on a correct ledger — and a stranger would read that as fraud, which
-   * is the worst possible failure mode for the trust artifact.
+   * Kept as `checkPublicLedger` rather than `checkLedger` even though the two
+   * currently agree: the distinction is what stops a future invariant that
+   * needs private state from silently becoming a guaranteed FAIL here. That is
+   * how the hold checks got in — they were asserted against a replay that could
+   * not contain holds, and every tab failed on a correct ledger.
    */
-  const ledger = checkPublicLedger(entries, caps.starterCeiling, asOf)
+  const ledger = checkPublicLedger(entries, caps.starterCeiling, asOf, {
+    ...(firstHold ? { holdsPublishedFrom: firstHold } : {}),
+  })
 
   results.push({
     ok: ledger.ok,
     text: claim(
       ledger.ok,
       `tab ${tab}: ${entries.length} entr(ies) fold to balance ${format(p.balance)}, outstanding ${format(p.outstanding)}`,
-      ledger.ok
-        ? [`checked: ${ledger.checked.join(', ')}`]
-        : ledger.violations.map((v) => `${v.invariant}: ${v.detail}`),
+      [
+        ...(ledger.ok ? [`checked: ${ledger.checked.join(', ')}`] : []),
+        ...ledger.violations.map((v) => `${v.invariant}: ${v.detail}`),
+        // Reported whether it passed or failed. An exclusion nobody mentions is
+        // indistinguishable from a check nobody ran.
+        ...(ledger.predatingHolds > 0
+          ? [
+              `${ledger.predatingHolds} debit(s) predate the first published hold and are`,
+              'outside the hold rule — their holds were real but never published.',
+            ]
+          : []),
+      ],
     ),
   })
 }
@@ -182,21 +215,30 @@ if (byTab.size === 0) {
 for (const r of results) console.log(r.text)
 
 /*
- * Say what this command CANNOT check, and why.
+ * Say what this command cannot check — and say when that list is EMPTY.
  *
- * A verifier that quietly checks less than it appears to is worse than one
- * that checks less and admits it — the tool's whole value is that a stranger
- * can trust its statements about its own scope.
+ * It used to name `debit_has_hold` and `commit_amount_matches_hold`, because
+ * holds were never published and an HCS replay showed debits appearing from
+ * nowhere. Holds are on the topic now, so the write-ahead ordering is
+ * externally checkable and the list is empty.
+ *
+ * The line still prints. "Nothing was skipped" is a claim a stranger needs to
+ * hear made explicitly — silence there is indistinguishable from a verifier
+ * that forgot to mention what it left out.
  */
 console.log()
 console.log(
-  claim(true, `not checkable from the public record: ${LOCAL_ONLY_INVARIANTS.join(', ')}`, [
-    'Holds are not published to any topic, so a replay cannot show that a',
-    'reserve preceded a payment. The gateway asserts these against its own',
-    'hold table; nobody outside can, and this command does not pretend to.',
-    'Publishing holds would make the write-ahead ordering auditable too, at',
-    'the cost of an HCS message per ATTEMPTED spend on the latency path.',
-  ]),
+  LOCAL_ONLY_INVARIANTS.length === 0
+    ? claim(true, 'every invariant in the set was checked — nothing skipped', [
+        'Holds are published to the receipt topic, so `reserve → pay → commit`',
+        'is verifiable from the public record. A debit that references a hold',
+        'nobody published, or one whose amount exceeds what was reserved, fails',
+        'above rather than being quietly excused.',
+      ])
+    : claim(true, `not checkable from the public record: ${LOCAL_ONLY_INVARIANTS.join(', ')}`, [
+        'These need state that never reaches a topic. The gateway asserts them',
+        'against its own memory; nobody outside can, and this does not pretend to.',
+      ]),
 )
 
 /* ── the float invariant ────────────────────────────────────────────────── */

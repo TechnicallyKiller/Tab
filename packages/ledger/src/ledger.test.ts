@@ -6,7 +6,7 @@ import { inConsensusOrder } from './entries.ts'
 import { canReserve, position, resolveHolds } from './holds.ts'
 import { accrue } from './interest.ts'
 import { RAMP_START_BP, netWindow, planSettlement, rampAfter } from './netting.ts'
-import { checkFloatInvariant, checkLedger, checkWindowSettledOnce } from './invariants.ts'
+import { checkFloatInvariant, checkLedger, checkWindowSettledOnce, checkPublicLedger } from './invariants.ts'
 
 const CEILING = usdc('1.000000')
 const ts = (n: number) => `17886${String(90000 + n).padStart(5, '0')}.000000000`
@@ -380,4 +380,58 @@ test('checkLedger surfaces a double settlement', () => {
   assert.equal(result.ok, false)
   assert.ok(result.checked.includes('window_settled_once'))
   assert.ok(result.violations.some((v) => v.invariant === 'window_settled_once'))
+})
+
+/* ── holds are published, and the rule is bounded to when they were ─────── */
+
+test('a debit with a published hold passes the hold rule', () => {
+  const entries = [hold('h1', '0.040000', 1), debit('h1', '-0.040000', 2)]
+  const r = checkPublicLedger(entries, CEILING, NOW, { holdsPublishedFrom: ts(0) })
+  assert.equal(r.ok, true, JSON.stringify(r.violations))
+  assert.ok(r.checked.includes('debit_has_hold'))
+  assert.equal(r.predatingHolds, 0)
+})
+
+test('a debit with NO published hold fails — the rule has teeth', () => {
+  const entries = [debit('h1', '-0.040000', 2)]
+  const r = checkPublicLedger(entries, CEILING, NOW, { holdsPublishedFrom: ts(0) })
+  assert.equal(r.ok, false)
+  assert.ok(r.violations.some((v) => v.invariant === 'debit_has_hold'))
+})
+
+test('debits PREDATING the cutover are excluded and counted, not excused', () => {
+  // Holds were added to the protocol after receipts had already been written.
+  // Asserting the new rule against old data marked every historical debit as
+  // having bypassed reserve — red lines that were not defects, burying the one
+  // finding that was.
+  const entries = [
+    debit('old', '-0.040000', 1),
+    hold('h2', '0.040000', 5),
+    debit('h2', '-0.040000', 6),
+  ]
+  const r = checkPublicLedger(entries, CEILING, NOW, { holdsPublishedFrom: ts(4) })
+  assert.equal(r.ok, true, 'the post-cutover debit is properly paired')
+  assert.equal(r.predatingHolds, 1, 'and the excluded one is reported')
+})
+
+test('with no cutover given, every debit is held to the rule', () => {
+  // The default is strict. An absent cutover must not silently mean "excuse
+  // everything" — that would turn a missing option into a disabled check.
+  const r = checkPublicLedger([debit('old', '-0.040000', 1)], CEILING, NOW)
+  assert.equal(r.ok, false)
+  assert.equal(r.predatingHolds, 0)
+})
+
+test('the cutover compares nanoseconds, not just seconds', () => {
+  // Two events in the same second must still order correctly, or a hold and its
+  // debit written 200ms apart would compare equal.
+  const entries = [
+    { ...debit('h1', '-0.040000', 1), at: '1788702544.900000000' },
+    { ...hold('h1', '0.040000', 1), at: '1788702544.100000000' },
+  ]
+  const r = checkPublicLedger(entries, CEILING, NOW, {
+    holdsPublishedFrom: '1788702544.500000000',
+  })
+  assert.equal(r.predatingHolds, 0, 'the debit at .9 is after the cutover at .5')
+  assert.equal(r.ok, true)
 })

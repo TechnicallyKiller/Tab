@@ -236,32 +236,113 @@ export function checkLedger(
  * path the whole fast/slow split exists to protect. Worth a decision rather
  * than a default, and recorded as open.
  */
-export const LOCAL_ONLY_INVARIANTS = [
-  'debit_has_hold',
-  'commit_amount_matches_hold',
-] as const
+/**
+ * Invariants that STILL cannot be asserted from the public record.
+ *
+ * Empty, and that is the point of publishing holds.
+ *
+ * It used to hold `debit_has_hold` and `commit_amount_matches_hold`, because
+ * `@tab/protocol` had no hold message: holds lived in the gateway's memory and
+ * never reached a topic, so an HCS replay showed debits appearing from nowhere
+ * and `verify-tab` printed FAIL for every tab on a correct ledger. Holds are
+ * published now, so the write-ahead ordering — reserve BEFORE pay — is
+ * something a stranger can check rather than something they must take on
+ * trust.
+ *
+ * Kept as a named, empty list rather than deleted. If a future invariant needs
+ * private state, it belongs here and `verify-tab` will say so out loud — the
+ * alternative is a verifier that quietly checks less than it appears to.
+ */
+export const LOCAL_ONLY_INVARIANTS: readonly string[] = []
 
+/**
+ * The invariants a stranger can assert from the public record.
+ *
+ * Now the same set as `checkLedger` plus the settlement check, because every
+ * entry kind it needs is published. It stays a separate function so the
+ * DISTINCTION survives: the moment something is checkable only with private
+ * state, this is where the split gets made again.
+ */
+export interface PublicLedgerOptions {
+  /**
+   * The consensus timestamp from which holds began being PUBLISHED.
+   *
+   * Debits before it are excluded from the hold-pair checks, and the count is
+   * reported rather than swallowed.
+   *
+   * This is not an excuse mechanism. Holds were added to the protocol after
+   * receipts had already been written, so every earlier debit references a hold
+   * that was real but only ever existed in the gateway's memory. Asserting the
+   * new invariant against old data marked every historical debit as having
+   * "bypassed reserve" — eleven red lines that were not defects, and which
+   * buried the one finding that WAS.
+   *
+   * A stranger can derive this cutover themselves: it is the consensus
+   * timestamp of the first `hold` message on the topic. So the exclusion is
+   * checkable rather than asserted, which is the difference between a bounded
+   * claim and a convenient one.
+   */
+  holdsPublishedFrom?: ConsensusTimestamp
+}
+
+/**
+ * The invariants a stranger can assert from the public record.
+ *
+ * Kept separate from `checkLedger` even where the two now agree: the
+ * distinction is what stops a future invariant needing private state from
+ * silently becoming a guaranteed failure for every honest tab.
+ */
 export function checkPublicLedger(
   entries: readonly Entry[],
   ceiling: MicroUsdc,
   now: ConsensusTimestamp,
-): CheckResult & { notCheckable: readonly string[] } {
+  options: PublicLedgerOptions = {},
+): CheckResult & { notCheckable: readonly string[]; predatingHolds: number } {
+  const cutover = options.holdsPublishedFrom
+
+  /*
+   * Only debits the hold rule could apply to.
+   *
+   * Compared on the DEBIT's timestamp, not the hold's: a debit written before
+   * the cutover was authorised by a hold that was never published, and no
+   * amount of searching the topic will find it.
+   */
+  const holdEligible = cutover
+    ? entries.filter((e) => e.kind !== 'debit' || compare(e.at, cutover) >= 0)
+    : entries
+
+  const predatingHolds = entries.filter(
+    (e) => e.kind === 'debit' && cutover !== undefined && compare(e.at, cutover) < 0,
+  ).length
+
   const violations = [
     ...checkHoldsCommittedOnce(entries),
+    ...checkDebitsHaveHolds(holdEligible),
+    ...checkCommitAmountsMatch(holdEligible),
     ...checkAvailableNonNegative(entries, ceiling, now),
     ...checkWindowSettledOnce(entries),
   ]
+
   return {
     ok: violations.length === 0,
-    checked: ['hold_committed_once', 'available_non_negative', 'window_settled_once'],
+    checked: [
+      'hold_committed_once',
+      'debit_has_hold',
+      'commit_amount_matches_hold',
+      'available_non_negative',
+      'window_settled_once',
+    ],
     violations,
-    /*
-     * Named, not silently dropped.
-     *
-     * A verifier that quietly checks less than it appears to is worse than one
-     * that checks less and says so — the whole value of the tool is that its
-     * output can be trusted about its own scope.
-     */
     notCheckable: LOCAL_ONLY_INVARIANTS,
+    predatingHolds,
   }
+}
+
+/** Consensus-timestamp ordering. `1788702544.8` sorts before `1788702544.9`. */
+function compare(a: ConsensusTimestamp, b: ConsensusTimestamp): number {
+  const [as, an] = a.split('.')
+  const [bs, bn] = b.split('.')
+  const seconds = Number(as) - Number(bs)
+  if (seconds !== 0) return seconds
+  return Number((an ?? '0').padEnd(9, '0')) - Number((bn ?? '0').padEnd(9, '0'))
 }
