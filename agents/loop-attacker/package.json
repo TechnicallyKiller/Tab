@@ -1,0 +1,21 @@
+{
+  "name": "@tab/loop-attacker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "attack": "node --experimental-strip-types --env-file=../../.env src/run.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "catalog:",
+    "@tab/hedera": "workspace:*",
+    "@tab/mirror": "workspace:*",
+    "@tab/money": "workspace:*",
+    "@tab/x402": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
+}

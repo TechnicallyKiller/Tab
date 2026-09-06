@@ -154,7 +154,10 @@ export function recompute(inputs: RecomputeInputs): Recomputation {
     // `caps.starterCeiling` is already parsed money. Re-parsing the string
     // form by stripping the decimal point would work today and break silently
     // the moment a cap is written with a different number of decimals.
-    starterFloor: tier.tier === 'Unrated' ? micro(0n) : caps.starterCeiling,
+    // The floor applies to a new tab too. Withholding it from Unrated made a
+    // new agent unable to ever start — see computeCeiling.
+    starterFloor: caps.starterCeiling,
+    hasDefaulted: inputs.hasDefaulted,
   }
 
   return {

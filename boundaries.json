@@ -425,9 +425,14 @@
         "sdk",
         "money",
         "protocol",
-        "hedera"
+        "hedera",
+        "x402",
+        "mirror"
       ],
-      "why": "Demo adversary, operated by a second party. It DOES get the Hedera SDK, because standing up a seller it controls is the whole point of the attack."
+      "why": "Demo adversary, operated by a second party. Gets the Hedera SDK, @tab/x402 and @tab/mirror deliberately: the attack is an accounting lie told with GENUINE, signed, settled x402 payments, so an adversary that could not make real payments would be a strawman and prove nothing. Mirror Node is a PUBLIC surface \u2014 an attacker reading public chain data is realistic and is not a privileged channel. What it must never get is a test hook, a privileged gateway endpoint, or a seeded row: if the attack needs help from us to be caught, being caught means nothing.",
+      "externalAllowList": [
+        "@hiero-ledger/sdk"
+      ]
     }
   }
 }

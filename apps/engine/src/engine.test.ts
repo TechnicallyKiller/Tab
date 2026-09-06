@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { format, micro, usdc, type MicroUsdc } from '@tab/money'
 import { canonicalHash } from '@tab/protocol'
+import { caps } from '@tab/params'
 import { computeCeiling } from '@tab/scoring'
 import {
   onCleanSettlement, onMissedSettlement, transition, type CeilingState,
@@ -157,9 +158,23 @@ test('LOOP ATTACK: revenue from a seller the agent funded yields a ZERO ceiling'
   })
 
   assert.deepEqual(r.blocked, [SELLER])
-  assert.equal(r.ceiling.inputs.revenue, 0n, 'the revenue weighs nothing')
+  assert.equal(r.ceiling.inputs.revenue, 0n, 'the manufactured revenue weighs nothing')
   assert.equal(r.tier, 'Unrated')
-  assert.equal(r.ceiling.ceiling, 0n, 'and the starter floor does not rescue it')
+  /*
+   * Back to the STARTER FLOOR, not to zero — and that is the honest claim.
+   *
+   * The attack buys the attacker nothing: it is left with exactly the ceiling
+   * any brand-new tab has. Zero would be the wrong answer here, because zero is
+   * reserved for a tab that DEFAULTED, and manufacturing revenue is not the
+   * same as failing to pay. Confusing the two is what made a new agent unable
+   * to ever start.
+   *
+   * The refusal in the demo therefore comes from the SHRINK: an attacker that
+   * spent against an inflated ceiling finds the ceiling gone and the next spend
+   * refused. What it never gets is credit it did not earn.
+   */
+  assert.equal(r.ceiling.binding, 'starter_floor')
+  assert.equal(r.ceiling.ceiling, caps.starterCeiling)
 })
 
 test('the same revenue from an INDEPENDENT payer earns a real ceiling', () => {
@@ -222,6 +237,7 @@ test('the published input record hashes stably and carries every input', () => {
     rampBp: 4000,
     hardCap: usdc('1000.000000'),
     starterFloor: usdc('1.000000'),
+    hasDefaulted: false,
   })
 
   const record = ceilingInputRecord(result)
@@ -230,7 +246,7 @@ test('the published input record hashes stably and carries every input', () => {
   // verify-ceiling unable to reproduce the number.
   assert.deepEqual(
     Object.keys(record).sort(),
-    ['cap', 'floor', 'mult', 'ramp', 'rev', 'revAtt', 'revUnatt', 'tier'],
+    ['cap', 'def', 'floor', 'mult', 'ramp', 'rev', 'revAtt', 'revUnatt', 'tier'],
   )
   // Amounts are decimal STRINGS: JSON has no bigint and canonicalize refuses
   // floats outright.
@@ -242,7 +258,7 @@ test('two hashes of the same inputs match; a changed input changes the hash', as
   const base = {
     revenue: usdc('2.500000'), attested: usdc('2.500000'), unattested: usdc('0.000000'),
     tier: 'B' as const, multipleBp: 20_000, rampBp: 4000,
-    hardCap: usdc('1000.000000'), starterFloor: usdc('1.000000'),
+    hardCap: usdc('1000.000000'), starterFloor: usdc('1.000000'), hasDefaulted: false,
   }
   const a = await canonicalHash(ceilingInputRecord(computeCeiling(base)))
   const b = await canonicalHash(ceilingInputRecord(computeCeiling(base)))
@@ -260,7 +276,7 @@ test('a bigint never reaches the hashed record as a number', () => {
     computeCeiling({
       revenue: micro(1n) as MicroUsdc, attested: micro(1n) as MicroUsdc,
       unattested: micro(0n) as MicroUsdc, tier: 'C', multipleBp: 12_500, rampBp: 10_000,
-      hardCap: usdc('1000.000000'), starterFloor: usdc('1.000000'),
+      hardCap: usdc('1000.000000'), starterFloor: usdc('1.000000'), hasDefaulted: false,
     }),
   )
   for (const [key, value] of Object.entries(record)) {

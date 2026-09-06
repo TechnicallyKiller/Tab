@@ -114,14 +114,45 @@ export const ceilingInputs = z.object({
   ramp: basisPoints,
   /** Hard cap for the tier. */
   cap: amount,
-  /** Starter floor, applied unless Unrated. */
+  /** Starter floor. Applied to any non-defaulted tab, including a new one. */
   floor: amount,
+  /**
+   * Has this tab ever missed a settlement?
+   *
+   * An INPUT, not a derivation, and therefore published — it changes the output
+   * on its own. Optional only for backward compatibility with ceilings
+   * published before it existed; absent means false.
+   *
+   * It is separate from `tier` because two very different situations both read
+   * as Unrated: a tab with no history yet, and a tab that defaulted. The first
+   * gets the starter floor so it can make its first calls and earn its way up;
+   * the second gets exactly zero. Collapsing them made a brand-new agent
+   * unable to ever start — no revenue, so Unrated, so no ceiling, so no way to
+   * earn revenue.
+   */
+  def: z.boolean().optional(),
 })
 
 export const ceilingUpdate = base.extend({
   t: z.literal('ceiling'),
-  /** The ceiling now in force. */
+  /** The ceiling now in force — what the fast path enforces. */
   ceil: amount,
+  /**
+   * The formula's result, when the asymmetry rule is holding it back.
+   *
+   * Absent when it equals `ceil`, which is the normal case. Present when a
+   * GROWTH was computed and held for a clean settlement: `ceil` is then the
+   * lower value still in force and this is what the inputs recompute to.
+   *
+   * Without this the two claims on the message contradict each other. `ceil` is
+   * defined as in force, but `hash` is over `inputs`, and inputs recompute to
+   * the formula's result — so a held growth would make `verify-ceiling` report a
+   * mismatch between a published ceiling and its own published inputs. That
+   * looks exactly like fraud and is only the safety rule working.
+   *
+   * `verify-ceiling` therefore checks the inputs against `computed ?? ceil`.
+   */
+  computed: amount.optional(),
   /** Which constraint actually bound — the most useful fact on the screen. */
   bind: z.enum(['computed', 'hard_cap', 'starter_floor', 'unrated']),
   inputs: ceilingInputs,

@@ -28,8 +28,16 @@ export interface CeilingInputs {
   rampBp: number
   /** Hard cap for the tier. */
   hardCap: MicroUsdc
-  /** Starter floor, applied unless Unrated. */
+  /** Starter floor. Applied to any non-defaulted tab, including a new one. */
   starterFloor: MicroUsdc
+  /**
+   * Has this tab ever missed a settlement it was asked to make?
+   *
+   * The one input that forces a ceiling of exactly zero. Deliberately separate
+   * from `tier === 'Unrated'`, because being new and having defaulted are not
+   * the same thing and must not produce the same ceiling.
+   */
+  hasDefaulted: boolean
 }
 
 /**

@@ -15,14 +15,21 @@ import type { Binding, CeilingInputs, CeilingResult } from './inputs.ts'
  */
 export function computeCeiling(inputs: CeilingInputs): CeilingResult {
   /*
-   * Unrated is zero, and the floor does not rescue it.
+   * A DEFAULT is zero, and the floor does not rescue it.
    *
-   * The starter floor exists so a new agent can make its first calls before it
-   * has any revenue. Applying it to a DEFAULTED tab would hand back a working
-   * ceiling the moment after it proved it could not pay — turning the harshest
-   * rule in the product into a brief inconvenience.
+   * Keyed on `hasDefaulted`, NOT on `tier === 'Unrated'`, and the difference is
+   * not cosmetic. Both a defaulted tab and a brand-new one read as Unrated, and
+   * zeroing on the tier made a new agent unable to ever start: no revenue, so
+   * Unrated, so a ceiling of zero, so no way to spend, so no way to EARN the
+   * revenue that would rate it. The starter floor existed for exactly that case
+   * and was unreachable.
+   *
+   * Applying the floor to a defaulted tab would be the opposite error — handing
+   * back a working ceiling the moment after it proved it could not pay, turning
+   * the harshest rule in the product into a brief inconvenience. So: new tabs
+   * get the floor, defaulted tabs get zero.
    */
-  if (inputs.tier === 'Unrated') {
+  if (inputs.hasDefaulted) {
     return {
       ceiling: micro(0n),
       binding: 'unrated',

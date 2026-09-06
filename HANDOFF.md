@@ -24,13 +24,14 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** `agents/loop-attacker` — perform the attack against a live gateway and get refused
-on camera. The math is proven in tests and the engine publishes real ceilings; the demo moment
-itself is the missing piece. Then `tools/verify`.
+**Next action:** `tools/verify` — the stranger-recomputes-it claim, which now has a working manual
+example to codify. Then a demo-parameter pass so the attack produces a REFUSAL and not only a
+blocked counterparty, and an independent (faucet-funded) customer so the honest demo is not itself
+inside our control cluster.
 
-**Last updated:** 2026-09-07 by Claude (engine — a ceiling on HCS whose hash verifies from outside the repo)
+**Last updated:** 2026-09-07 by Claude (loop attack caught on live testnet — after three real defects)
 
-### Written: 17 of 27 packages
+### Written: 18 of 27 packages
 
 `money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
 `gateway` · `honest-agent` · `bootstrap` · `probes`
@@ -187,6 +188,12 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-06 | **`FUNDED_BY_AGENT` CAN NEVER FIRE FOR A TAB, and the hard block the design leaned on was dead code.** An agent's tab holds no key by design — it receives settlement payouts and signs nothing — so a tab cannot fund anybody. The reachable control shape is one operator behind both accounts, now `COMMON_FUNDER`: the same account funded the tab AND the counterparty. Hard block. Honest limitation documented in `clusters.ts`: if a public exchange funded both, it fires wrongly, which is defensible only because a Tab is funded by the gateway's float rather than an exchange | `graph`, `engine`, `web`, `verify` |
+| 2026-09-06 | **Mirror Node's `/transactions?account.id=` index is INTERMITTENT for a new account, not merely lagging.** Against a real attacker account it returned 5 transactions once and 0 both before and after, minutes apart, while `/accounts/{id}/tokens` showed the funded balance correctly the whole time. **The loop attacker ran end to end and was NOT CAUGHT because of it** — the engine fails open. Never derive a security input from that index | `engine`, `graph`, `verify`, `db` |
+| 2026-09-06 | **`funderOf` is a POINT LOOKUP now**: `/accounts/{id}` for `created_timestamp`, then `/transactions?timestamp=<exact>` for the CRYPTOCREATEACCOUNT, and the funder is the transaction id's own payer prefix. Read the payer from the ID, never from the transfer list — fee collectors (`0.0.98`, `0.0.802`) appear there with POSITIVE amounts and "most negative entry" is a heuristic that works until it does not. Also more correct: "who created this" ≠ "earliest inbound transfer" | `engine`, `verify`, `graph` |
+| 2026-09-06 | **A DEFAULT is zero; being NEW is the starter floor.** `computeCeiling` keys on `hasDefaulted`, not on `tier === 'Unrated'`. Zeroing on the tier meant a brand-new agent had no revenue → Unrated → ceiling 0 → could not spend → could never earn the revenue that would rate it. **The starter floor existed for exactly that case and was unreachable.** `hasDefaulted` is published as `def` in the ceiling inputs because it changes the output on its own | `scoring`, `engine`, `verify`, `web` |
+| 2026-09-06 | **The ceiling message carries `computed` when the asymmetry rule holds a growth back.** `ceil` is what the fast path enforces; `hash` is over `inputs`, which recompute to the formula's result. Without a separate field those two claims contradict each other and `verify-ceiling` would report a mismatch that looks like fraud but is only the safety rule working. **`verify-ceiling` checks the inputs against `computed ?? ceil`** | `protocol`, `engine`, `verify`, `web` |
+| 2026-09-06 | **The gateway CONSUMES published ceilings from HCS** (`replayCeilings`, polled every `CEILING_POLL_MS`, default 15s) and applies them to the fast path. Nothing private passes between engine and gateway — the ceiling in force is read from the same public record a stranger reads, which is what makes the attack demo mean anything | `gateway`, `engine`, `web` |
 | 2026-09-06 | **A CEILING IS PUBLISHED TO HCS AND THE HASH VERIFIES FROM OUTSIDE THE REPO.** Ceiling topic `0.0.10182697` seq 1. The hash was recomputed in a throwaway Python script from nothing but the on-chain message — no repo, no database — and matched. The canonical rule is keys sorted, no whitespace, amounts as decimal strings, rates as integer basis points. **Anything that changes `ceilingInputRecord` changes every future hash**, so build the record field by field, never by spreading `CeilingInputs` | `engine`, `verify`, `web` (the verify button), `protocol` |
 | 2026-09-06 | **v1 tier multiples CORRECTED to `A 30000 · B 20000 · C 10000 · Unrated 0`.** They were `C 12500 · Unrated 10000`, which contradicted the documented formula and made the engine print `Unrated ×1`. Nothing was mispriced — `computeCeiling` short-circuits Unrated to zero — but the published `mult` input claimed 1x for a tier that gets nothing. Legitimate to change because **no ceiling had ever been published under v1**; once one has, v1 is frozen and this would be a v2 | `params`, `scoring`, `verify` |
 | 2026-09-06 | **`entriesFromMessages` moved to `@tab/ledger`.** `apps/engine` importing `apps/settlement/src/entries.ts` is a cross-app dependency `boundaries.json` refuses, and rightly — two apps needing the same logic means it belongs in a package. The FETCH stays duplicated in both apps because ledger may not import `@tab/mirror`; five lines of `readTopic` twice is a far smaller cost than a pure accounting package that can make network requests | `engine`, `settlement`, `ledger`, `verify` |
@@ -252,6 +259,88 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (later) — Claude — the loop attack, caught on live testnet — after it wasn't
+
+`agents/loop-attacker` runs the attack against the live gateway using only public surfaces: no test
+hook, no privileged endpoint, no seeded row. It stands up a payer it funds, has that payer buy from
+the agent's endpoint with **genuine signed x402 payments**, and spends against the ceiling that
+revenue inflates.
+
+**The first full run was NOT CAUGHT.** The script reported it as a real result rather than a
+failure, which is what it was built to do:
+
+```
+  ── 4. wait for the graph to find the edge ──
+  ..........................................................................
+  NOT CAUGHT within 900s.
+```
+
+Three genuine defects sat behind that, and finding them is worth more than a demo that had worked
+first time.
+
+**1. `FUNDED_BY_AGENT` can never fire for a Tab agent.** The hard-block rule the whole design leaned
+on was dead code. An agent's tab holds no key — it receives settlement payouts and signs nothing —
+so **a tab cannot fund anybody**. The reachable control shape is one operator standing behind both
+accounts, which is now `COMMON_FUNDER`: the same account funded the tab and the counterparty. Its
+false-positive risk (a public exchange funding both) is documented in `clusters.ts` rather than
+hidden, and is defensible only because a Tab is funded by the gateway's float.
+
+**2. Mirror Node's `/transactions?account.id=` index is intermittent for a new account, not merely
+lagging.** Against the real attacker account it returned 5 transactions once and **0 both before and
+after**, minutes apart, while `/accounts/{id}/tokens` showed the funded balance correctly the whole
+time. Because the engine fails open, the attacker was weighted as independent. This is the
+fail-open risk I had written into `main.ts` as a comment, demonstrated live within the hour.
+
+**3. The engine never fetched the TAB's own ancestry**, so `sharedFundingRoot(tab, …)` returned
+false every time — the tab was not in the facts map at all. Neither the shared-root discount nor
+the common-funder block was wrong; neither was ever asked.
+
+`funderOf` is now a point lookup — `/accounts/{id}` for `created_timestamp`, then
+`/transactions?timestamp=<exact>` for the `CRYPTOCREATEACCOUNT` — and the funder is read from the
+transaction id's own payer prefix, never from the transfer list, because fee collectors appear
+there with positive amounts. It is both more reliable and more correct: "who created this account"
+is a different question from "who first paid it".
+
+**Then it caught the attack, on live data:**
+
+```
+  tab funded by 0.0.8812188
+
+  counterparties
+    0.0.10392362    0%  BLOCKED
+           COMMON_FUNDER: the same account funded both this counterparty and
+           the agent's tab — one operator on both sides of the trade
+
+  revenue         0.0000 per window     (0.0720 before the graph saw the edge)
+```
+
+Every one of those x402 payments was real, signed and settled. None of them counts.
+
+**And a fourth defect, found the same way.** The tab's ceiling was published as `0` — because
+`computeCeiling` zeroed on `tier === 'Unrated'`. But a brand-new agent has no revenue, so it is
+Unrated, so its ceiling is zero, so it cannot spend, so it can **never earn the revenue that would
+rate it**. The starter floor existed for exactly that case and was unreachable. It now keys on
+`hasDefaulted`: a default is zero, being new is the starter floor. `hasDefaulted` is published as
+`def` in the ceiling inputs, because it changes the output on its own.
+
+That also corrects the attack's outcome to something more honest than "the ceiling collapses to
+zero": the attack returns the agent to **exactly the ceiling any new tab has**. It buys the
+attacker nothing. Zero is reserved for a tab that failed to pay.
+
+**What the demo still needs, stated plainly:** a *refusal* on camera needs the attacker to have
+spent against an inflated ceiling before the collapse, and with the current parameters
+(0.05/call, 0.10/window revenue floor, 1.0000 starter floor) the manufactured revenue never lifts
+the ceiling above the floor — so the collapse has nothing to take away. Either the earn price rises
+for the demo or the run makes many more calls. **I have not tuned anything to force it**, and the
+attack script says so itself rather than adjusting until it looks good.
+
+**Also worth knowing:** by this same rule the *honest* demo payer is inside our control cluster too
+— the operator created it with `pnpm payer:create`. That is not a bug in the rule, it is a true
+statement about the demo setup, and a genuinely independent customer needs to be faucet-funded
+rather than created by our operator.
+
+145 tests, 5/5 guards, 18 of 27 packages.
 
 ### 2026-09-07 — Claude — apps/engine: a ceiling on HCS that a stranger can check
 

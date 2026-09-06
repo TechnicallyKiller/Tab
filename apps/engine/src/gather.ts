@@ -12,7 +12,7 @@
  * numbers and nothing that quietly influences them on the side.
  */
 import {
-  getAccount, getTransactions, toTransferEdges, type MirrorClient,
+  getAccount, getTransactionAt, getTransactions, toTransferEdges, type MirrorClient,
 } from '@tab/mirror'
 import { micro, usdc, type MicroUsdc } from '@tab/money'
 import { params, windowConsensusRange, windowOf } from '@tab/params'
@@ -97,31 +97,62 @@ export function revenueFromEntries(
 }
 
 /**
- * Funding ancestry for one account, one hop.
+ * Who created this account.
  *
- * Mirror Node does not expose "who funded this account" directly, so it is
- * derived: the account's earliest inbound CRYPTOTRANSFER is who paid to bring
- * it into existence. Only the earliest — later inbound transfers are ordinary
- * trade, and treating every payer as a funder would make every customer look
- * like a control relationship.
+ * Derived from the account's CREATING transaction, found by a point lookup on
+ * its `created_timestamp`. The transaction id's payer is the creator.
+ *
+ * ## Why not "the earliest inbound transfer"
+ *
+ * That was the first implementation and it failed live, twice over.
+ *
+ * It scanned `/transactions?account.id=X&transactiontype=CRYPTOTRANSFER`, and
+ * for a newly created account that index is not merely lagging — it is
+ * INTERMITTENT. Against a real attacker account it returned 5 transactions
+ * once and 0 both before and after, minutes apart, while
+ * `/accounts/{id}/tokens` correctly showed the funded balance the whole time.
+ * The loop attacker therefore ran end to end and was NOT caught: the engine
+ * fails open, so an account with no discoverable ancestry is weighted as
+ * independent.
+ *
+ * It was also less correct even when it worked. "Earliest inbound transfer"
+ * answers a different question from "who created this" — an account can be
+ * created by one party and first paid by another.
+ *
+ * The point lookup fixes both: `created_timestamp` comes from
+ * `/accounts/{id}`, which was reliable throughout, and one exact-timestamp
+ * query returns the CRYPTOCREATEACCOUNT itself.
+ *
+ * ## What it still does not fix
+ *
+ * Two requests per counterparty per pass, and a fresh lookup every time. The
+ * real answer is to record the edge WHEN IT IS OBSERVED and never forget it —
+ * which is what `@tab/db` is for, and this is the concrete justification for
+ * it: a security rule that fails open must not depend on re-deriving its
+ * inputs from an eventually-consistent index.
  */
 export async function funderOf(
   mirror: MirrorClient,
   account: AccountId,
 ): Promise<AccountId | undefined> {
-  const walk = await getTransactions(mirror, { accountId: account, pageSize: 25 })
-  // `getTransactions` orders ascending, so the first inbound is the earliest.
-  for (const tx of walk.items) {
-    for (const transfer of tx.transfers ?? []) {
-      if (transfer.account === account && Number(transfer.amount) > 0) {
-        const payer = (tx.transfers ?? []).find(
-          (t) => Number(t.amount) < 0 && t.account !== account,
-        )
-        if (payer) return payer.account
-      }
-    }
-  }
-  return undefined
+  const info = await getAccount(mirror, account)
+  const created = info.created_timestamp
+  if (!created) return undefined
+
+  const creating = await getTransactionAt(mirror, created)
+  if (!creating) return undefined
+
+  /*
+   * The payer is the id's own account prefix: `0.0.8812188-1788698157-659492670`.
+   *
+   * Read from the id rather than from the transfer list on purpose. The
+   * transfer list also contains fee collectors (`0.0.98`, `0.0.802`) with
+   * POSITIVE amounts and the payer with a negative one, so "the most negative
+   * entry" would work until a transaction where it does not — while the id's
+   * prefix is the payer by definition.
+   */
+  const payer = creating.transaction_id?.split('-')[0]
+  return payer && payer !== account ? payer : undefined
 }
 
 /**

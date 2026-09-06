@@ -12,7 +12,7 @@
  * decoration. There is no partial version of this property.
  */
 import { submitMessage, type TabClient } from '@tab/hedera'
-import { toWire } from '@tab/money'
+import { toWire, type MicroUsdc } from '@tab/money'
 import { canonicalHash, ceilingUpdate, encode } from '@tab/protocol'
 import type { CeilingResult } from '@tab/scoring'
 
@@ -54,6 +54,10 @@ export function ceilingInputRecord(result: CeilingResult): Record<string, unknow
     ramp: i.rampBp,
     cap: toWire(i.hardCap),
     floor: toWire(i.starterFloor),
+    // An input that changes the output on its own, so it is published. A new
+    // tab and a defaulted tab both read as Unrated and get very different
+    // ceilings; without this, verify-ceiling could not tell them apart.
+    def: i.hasDefaulted,
   }
 }
 
@@ -65,6 +69,17 @@ export interface PublishParams {
   result: CeilingResult
   cause: PublishCause
   modelId: string
+  /**
+   * What the fast path should enforce, when the asymmetry rule differs from the
+   * formula.
+   *
+   * Defaults to the computed ceiling. Passing the in-force value matters
+   * because the gateway CONSUMES this message: publishing the computed figure
+   * while a growth was being held would hand the fast path the increase the
+   * guard exists to withhold, and the asymmetry rule would be defeated by its
+   * own audit trail.
+   */
+  inForce?: MicroUsdc
 }
 
 /**
@@ -79,12 +94,18 @@ export async function publishCeiling(params: PublishParams): Promise<PublishedCe
   const inputs = ceilingInputRecord(params.result)
   const hash = await canonicalHash(inputs)
 
+  const inForce = params.inForce ?? params.result.ceiling
+  const held = inForce !== params.result.ceiling
+
   const message = ceilingUpdate.parse({
     v: 1,
     t: 'ceiling',
     tab: params.tab,
     w: params.window,
-    ceil: toWire(params.result.ceiling),
+    ceil: toWire(inForce),
+    // Only when they differ, so the common case stays a smaller message and a
+    // reader can tell "held" from "normal" without comparing two numbers.
+    ...(held ? { computed: toWire(params.result.ceiling) } : {}),
     bind: params.result.binding,
     inputs,
     model: params.modelId,

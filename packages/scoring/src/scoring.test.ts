@@ -21,6 +21,7 @@ function inputs(over: Partial<CeilingInputs> = {}): CeilingInputs {
     rampBp: 10_000,
     hardCap: NO_CAP,
     starterFloor: FLOOR,
+    hasDefaulted: false,
     ...over,
   }
 }
@@ -135,7 +136,7 @@ test('the formula multiplies revenue by the tier multiple and the ramp', () => {
 })
 
 test('an agent with revenue but a default gets EXACTLY zero, floor and all', () => {
-  const r = computeCeiling(inputs({ tier: 'Unrated', revenue: usdc('500.000000') }))
+  const r = computeCeiling(inputs({ tier: 'Unrated', revenue: usdc('500.000000'), hasDefaulted: true }))
   assert.equal(r.ceiling, 0n)
   assert.equal(r.binding, 'unrated')
   // The floor must not rescue a defaulted tab, or the harshest rule in the
@@ -236,4 +237,26 @@ test('a ceiling may NOT GROW mid-window', () => {
 
 test('an unchanged ceiling is not a growth', () => {
   assert.equal(mayApplyMidWindow(usdc('2.000000'), usdc('2.000000')).allowed, true)
+})
+
+test('A BRAND-NEW TAB CAN START: no revenue, Unrated, but gets the starter floor', () => {
+  // The bug this locks down: zeroing on `tier === Unrated` meant a new agent
+  // had no revenue, so was Unrated, so had a ceiling of zero, so could not
+  // spend, so could never earn the revenue that would rate it. The starter
+  // floor existed for exactly this case and was unreachable.
+  const r = computeCeiling(inputs({
+    tier: 'Unrated', revenue: usdc('0.000000'), multipleBp: 0, hasDefaulted: false,
+  }))
+  assert.equal(format(r.ceiling), '1.0000')
+  assert.equal(r.binding, 'starter_floor')
+})
+
+test('a DEFAULTED tab gets zero even though a new tab with identical inputs does not', () => {
+  // Same tier, same revenue, same floor. The only difference is the default,
+  // and it is the whole difference.
+  const base = { tier: 'Unrated' as const, revenue: usdc('0.000000'), multipleBp: 0 }
+  const fresh = computeCeiling(inputs({ ...base, hasDefaulted: false }))
+  const burned = computeCeiling(inputs({ ...base, hasDefaulted: true }))
+  assert.equal(format(fresh.ceiling), '1.0000')
+  assert.equal(burned.ceiling, 0n)
 })

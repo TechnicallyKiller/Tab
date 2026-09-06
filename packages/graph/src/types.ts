@@ -60,6 +60,7 @@ export interface AccountFacts {
 export const WEIGHT_REASONS = [
   'INDEPENDENT',
   'FUNDED_BY_AGENT',
+  'COMMON_FUNDER',
   'SOLE_COUNTERPARTY',
   'RECIPROCAL_FLOW',
   'SHARED_FUNDING_ROOT',
@@ -91,6 +92,9 @@ export interface Weight {
 export const WEIGHT_REASON_DETAIL: Record<WeightReason, string> = {
   INDEPENDENT: 'no funding relationship, no reciprocal flow, counted in full',
   FUNDED_BY_AGENT: 'the agent funded this account — revenue from it is the agent paying itself',
+  COMMON_FUNDER:
+    'the same account funded both this counterparty and the agent’s tab — one operator on both ' +
+    'sides of the trade, so the revenue is not independent demand',
   SOLE_COUNTERPARTY: 'the agent is this account’s only counterparty — it exists to trade with the agent',
   RECIPROCAL_FLOW: 'value flows back toward the agent — some of this revenue is circular',
   SHARED_FUNDING_ROOT: 'funded from the same root as the agent within the hop limit',

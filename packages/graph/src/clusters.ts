@@ -64,7 +64,39 @@ export function detectCluster(inputs: ClusterInputs): ClusterFinding {
     )
   }
 
-  // Rule 2 — the agent is its only counterparty. It exists to trade with us.
+  /*
+   * Rule 2 — the SAME account funded both sides.
+   *
+   * Written after discovering that Rule 1 can never fire in Tab's own model. An
+   * agent's tab holds no key by design: it receives settlement payouts and
+   * signs nothing. A tab that cannot sign cannot fund anybody, so
+   * "the agent funded the seller" is unreachable for a Tab agent, and the
+   * hard-block rule the design leaned on was dead code.
+   *
+   * The reachable control shape is one operator standing behind both accounts,
+   * which shows up as a shared IMMEDIATE funder. That is much tighter than
+   * "shares any root within N hops" — the loose version is what makes shared
+   * roots a discount rather than a block, because on a public network an
+   * exchange funds thousands of unrelated accounts.
+   *
+   * The honest limitation: if a public exchange funded both the tab and a
+   * genuine customer, this fires wrongly. It is a hard block, so that false
+   * positive costs a real agent real revenue. Two things make it defensible
+   * HERE and both would need revisiting on a network where tabs are funded from
+   * exchanges: a Tab is funded by the gateway's float, not by an exchange, and
+   * a counterparty funded by that same float is by construction inside our own
+   * control cluster.
+   */
+  const agentFunder = facts.get(agent)?.fundedBy?.[0]
+  const counterpartyFunder = facts.get(counterparty)?.fundedBy?.[0]
+  if (agentFunder && counterpartyFunder && agentFunder === counterpartyFunder) {
+    reasons.push('COMMON_FUNDER')
+    details.push(
+      `${agentFunder} funded both the tab and ${counterparty} — one operator on both sides`,
+    )
+  }
+
+  // Rule 3 — the agent is its only counterparty. It exists to trade with us.
   const others = new Set<AccountId>()
   for (const edge of edges) {
     if (edge.from === counterparty && edge.to !== agent) others.add(edge.to)

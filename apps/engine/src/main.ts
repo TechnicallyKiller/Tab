@@ -134,6 +134,24 @@ async function pass(): Promise<void> {
    */
   const facts = new Map<AccountId, AccountFacts>()
   const young = new Set<AccountId>()
+
+  /*
+   * The TAB's own ancestry, which was missing.
+   *
+   * Without an entry for the tab, `sharedFundingRoot(tab, counterparty, ...)`
+   * returns false every time — the tab simply is not in the map — so the shared
+   * -root discount and the common-funder block were both structurally
+   * impossible. Neither rule was wrong; neither was ever asked.
+   */
+  try {
+    const tabFunder = await funderOf(mirror, tabAccount)
+    facts.set(tabAccount, { id: tabAccount, ...(tabFunder ? { fundedBy: [tabFunder] } : {}) })
+    if (tabFunder) console.log(`    tab funded by ${tabFunder}`)
+  } catch {
+    facts.set(tabAccount, { id: tabAccount })
+    console.log('    WARNING  the tab’s own ancestry is unavailable — control rules cannot fire')
+  }
+
   for (const counterparty of counterparties) {
     try {
       const funder = await funderOf(mirror, counterparty)
@@ -221,6 +239,10 @@ async function pass(): Promise<void> {
     tab: tabAccount,
     window: currentWindow,
     result: result.ceiling,
+    // The IN-FORCE value, not the computed one. The gateway consumes this
+    // message, so publishing the formula's result while a growth was held
+    // would hand the fast path the very increase the asymmetry rule withholds.
+    inForce: move.next.inForce,
     cause: move.action === 'shrink_now' ? 'graph_change' : 'clean_settlement',
     modelId: MODEL_ID,
   })

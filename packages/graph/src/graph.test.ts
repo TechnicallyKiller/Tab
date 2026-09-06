@@ -255,3 +255,47 @@ test('weighting is deterministic under reordering of the same discounts', () => 
   assert.equal(a.bp, b.bp, 'same inputs, same ceiling, byte for byte')
   assert.deepEqual(a.reasons, b.reasons)
 })
+
+/* ── the control shape that is actually reachable ────────────────────────── */
+
+test('COMMON_FUNDER: one operator funded both the tab and the "customer"', () => {
+  // This is the realistic loop, and the reason it needed its own rule:
+  // FUNDED_BY_AGENT cannot fire in Tab's model, because an agent's tab holds no
+  // key and therefore cannot fund anything. The operator funds both sides.
+  const OPERATOR = '0.0.8000'
+  const graph = facts({ [AGENT]: [OPERATOR], [SELLER]: [OPERATOR] })
+  const finding = detectCluster({
+    agent: AGENT, counterparty: SELLER, edges: [], facts: graph, maxHops: 3,
+  })
+  assert.equal(finding.clustered, true)
+  assert.ok(finding.reasons.includes('COMMON_FUNDER'))
+  assert.match(finding.detail, /both the tab and/)
+})
+
+test('a tab that cannot sign can never be a funder — FUNDED_BY_AGENT stays silent', () => {
+  // Locks in WHY COMMON_FUNDER exists. The tab has no outgoing funding edge
+  // because it holds no key; only the operator does.
+  const OPERATOR = '0.0.8000'
+  const graph = facts({ [AGENT]: [OPERATOR], [SELLER]: [OPERATOR] })
+  assert.equal(fundedWithin(AGENT, SELLER, graph, 3).funded, false)
+})
+
+test('different funders are not a common funder', () => {
+  const graph = facts({ [AGENT]: ['0.0.8000'], [SELLER]: ['0.0.9001'] })
+  const finding = detectCluster({
+    agent: AGENT, counterparty: SELLER, edges: [], facts: graph, maxHops: 3,
+  })
+  assert.equal(finding.clustered, false)
+})
+
+test('an unknown funder on either side cannot trigger the block', () => {
+  // The rule must not fire on two `undefined`s comparing equal. An account whose
+  // ancestry we could not fetch is unknown, not "funded by nobody" — and
+  // blocking on missing data would refuse revenue for a Mirror Node outage.
+  const graph = facts({ [AGENT]: [], [SELLER]: [] })
+  assert.equal(
+    detectCluster({ agent: AGENT, counterparty: SELLER, edges: [], facts: graph, maxHops: 3 })
+      .clustered,
+    false,
+  )
+})
