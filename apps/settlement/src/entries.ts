@@ -63,6 +63,7 @@ export async function replayEntries(mirror: MirrorClient, topicId: string): Prom
         entry = {
           kind: 'settlement', at: message.consensusTimestamp, window: msg.w,
           net: usdc(msg.net), outcome: msg.outcome,
+          rampFromBp: msg.rampFrom, rampToBp: msg.rampTo,
           ...(msg.tx ? { transactionId: msg.tx } : {}),
         }
         break

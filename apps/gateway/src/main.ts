@@ -11,6 +11,7 @@ import { NETWORKS, createFacilitator, createSpendClient, tokenAsset } from '@tab
 import { loadEnv } from './env.ts'
 import { ReceiptWriter } from './receipts.ts'
 import { buildServer } from './server.ts'
+import { windowOf } from '@tab/params'
 import { LedgerState } from './state.ts'
 
 // Node's fetch dies after a 10s CONNECT timeout that no AbortController can
@@ -56,8 +57,16 @@ const client = createSpendClient({
   maxAtomicPerPayment: env.perCallCap,
 })
 
-// Windows are wall-clock buckets for now. The settlement worker will own this.
-const windowOf = () => Math.floor(Date.now() / 1000 / env.windowSeconds)
+/*
+ * Window bucketing comes from `@tab/params`, not from a local expression.
+ *
+ * The gateway and the settlement worker must agree on which window a receipt
+ * belongs to. Two copies of `Math.floor(now / windowSeconds)` — which is what
+ * this was — agree right up until one is handed milliseconds or reads a
+ * different WINDOW_SECONDS, and then the gateway files receipts into a window
+ * the worker never settles and the tab silently never settles at all.
+ */
+const currentWindow = () => windowOf(Math.floor(Date.now() / 1000), env.windowSeconds)
 
 // The earn leg needs its own facilitator — we self-facilitate inbound, which
 // is what lets the credit receipt be written in the same code path that
@@ -71,7 +80,7 @@ const app = buildServer(
     state,
     client,
     receipts: new ReceiptWriter(tab, env.receiptTopic),
-    window: windowOf,
+    window: currentWindow,
   },
   agentUpstream
     ? {
@@ -83,7 +92,7 @@ const app = buildServer(
           feePayerKey: PrivateKey.fromStringDer(env.feePayerKey.replace(/^0x/, '')),
         }),
         endpoint: {
-          tab: env.operatorId,
+          tab: env.tabAccountId,
           upstream: agentUpstream,
           atomicPrice: env.perCallCap,
           description: 'The agent’s own paid endpoint',
@@ -97,7 +106,7 @@ console.log(
   `  earn leg        ${agentUpstream ? `fronting ${agentUpstream} at /v1/earn` : 'off (set AGENT_ENDPOINT_URL)'}`,
 )
 console.log(`\n  listening       http://localhost:${env.port}`)
-console.log(`  window          ${windowOf()} (${env.windowSeconds}s buckets)\n`)
+console.log(`  window          ${currentWindow()} (${env.windowSeconds}s buckets)\n`)
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {

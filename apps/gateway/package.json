@@ -9,15 +9,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hiero-ledger/sdk": "catalog:",
     "@tab/hedera": "workspace:*",
     "@tab/ledger": "workspace:*",
     "@tab/mirror": "workspace:*",
     "@tab/money": "workspace:*",
+    "@tab/params": "workspace:*",
     "@tab/protocol": "workspace:*",
     "@tab/x402": "workspace:*",
-    "fastify": "catalog:",
-    "@hiero-ledger/sdk": "catalog:",
-    "@x402/fastify": "catalog:"
+    "@x402/fastify": "catalog:",
+    "fastify": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

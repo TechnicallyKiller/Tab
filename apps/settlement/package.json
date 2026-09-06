@@ -15,7 +15,11 @@
     "@tab/ledger": "workspace:*",
     "@tab/mirror": "workspace:*",
     "@tab/money": "workspace:*",
+    "@tab/params": "workspace:*",
     "@tab/protocol": "workspace:*"
   },
-  "devDependencies": { "@types/node": "^22.15.0", "typescript": "^5.9.0" }
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
 }

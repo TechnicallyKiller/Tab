@@ -14,6 +14,17 @@ export interface GatewayEnv {
   operatorKey: string
   /** The spend token. Read from config — never hardcode a token id. */
   tokenId: string
+  /**
+   * The agent's tab — its identity on the rail, and where a positive net is
+   * paid OUT to.
+   *
+   * MUST differ from the hot float. It used to default to the operator id,
+   * which made the tab and the float one account: settlement then scheduled a
+   * transfer from `0.0.x` to `0.0.x`, consensus executed it, and the worker
+   * reported CLEAN having moved nothing between two parties. The settlement
+   * worker now refuses that outright, so this is required.
+   */
+  tabAccountId: string
   receiptTopic: string
   ceilingTopic: string
   settlementTopic: string
@@ -44,6 +55,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): GatewayEnv {
     operatorId: required('HEDERA_OPERATOR_ID', source['HEDERA_OPERATOR_ID'], missing),
     operatorKey: required('HEDERA_OPERATOR_KEY', source['HEDERA_OPERATOR_KEY'], missing),
     tokenId: required('USDC_TOKEN_ID', source['USDC_TOKEN_ID'], missing),
+    tabAccountId: required(
+      'TAB_ACCOUNT_ID',
+      source['TAB_ACCOUNT_ID'] ?? source['PAYER_ACCOUNT_ID'],
+      missing,
+    ),
     receiptTopic: required('TOPIC_RECEIPTS', source['TOPIC_RECEIPTS'], missing),
     ceilingTopic: required('TOPIC_CEILINGS', source['TOPIC_CEILINGS'], missing),
     settlementTopic: required('TOPIC_SETTLEMENTS', source['TOPIC_SETTLEMENTS'], missing),

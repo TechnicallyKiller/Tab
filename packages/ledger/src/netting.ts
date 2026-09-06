@@ -144,3 +144,26 @@ export function netWindows(entries: readonly Entry[], windows: readonly number[]
 }
 
 export { sub }
+
+/** Where a brand-new tab starts. Earned, not granted — see the ramp steps. */
+export const RAMP_START_BP = 2500
+
+/**
+ * The ramp in force now, replayed from settlement history.
+ *
+ * A tab's credit ramp is not stored anywhere but the receipt topic, so it is
+ * derived rather than remembered: the last settlement's `rampToBp` is the ramp
+ * the next window opens with. A tab with no settlements yet starts at
+ * `RAMP_START_BP`.
+ *
+ * Deliberately reads the LAST settlement rather than folding every step. The
+ * steps are already applied and recorded; re-deriving them from outcomes would
+ * double-apply the history and disagree with what the topic says happened.
+ */
+export function rampAfter(entries: readonly Entry[], startBp = RAMP_START_BP): number {
+  let latest: Extract<Entry, { kind: 'settlement' }> | undefined
+  for (const entry of inConsensusOrder(entries)) {
+    if (entry.kind === 'settlement') latest = entry
+  }
+  return latest?.rampToBp ?? startBp
+}

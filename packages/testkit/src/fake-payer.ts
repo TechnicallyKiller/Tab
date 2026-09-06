@@ -47,7 +47,16 @@ console.log(`\npayer · buying from the agent's endpoint\n`)
 console.log(`  payer     ${payerId}`)
 console.log(`  gateway   ${GATEWAY}/v1/earn`)
 
-const tab = env('HEDERA_OPERATOR_ID')
+/*
+ * The AGENT's tab, not the operator.
+ *
+ * This read the operator id, which is the hot float — so the before/after lines
+ * reported a completely different tab's balance while the credits landed on the
+ * agent's. It printed `−0.0200 → −0.0200` through three successful payments,
+ * which reads as "earning changed nothing" when in fact the agent had gone
+ * from −0.0400 to +0.1100.
+ */
+const tab = env('TAB_ACCOUNT_ID')
 const state = async () => {
   const r = await fetch(`${GATEWAY}/v1/tabs/${tab}`)
   return (await r.json()) as Record<string, string>

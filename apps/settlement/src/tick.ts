@@ -1,7 +1,8 @@
 import {
-  TIER_APR_BP, accrue, netWindow, planSettlement, position,
+  accrue, netWindow, planSettlement, position,
   type Entry, type SettlementPlan,
 } from '@tab/ledger'
+import { aprBpFor, type Tier } from '@tab/params'
 import { bp, format, micro, usdc, type MicroUsdc } from '@tab/money'
 import { buildSettlementTransfer, scheduleSettlement, type TabClient } from '@tab/hedera'
 import { getSchedule, waitForScheduleExecution, type MirrorClient } from '@tab/mirror'
@@ -24,7 +25,7 @@ export interface TickConfig {
   floatAccount: string
   /** Ramp in force before this window, basis points. */
   rampBp: number
-  tier: 'A' | 'B' | 'C' | 'Unrated'
+  tier: Tier
   /** Balance available in the float to cover a payout. */
   floatBalance: MicroUsdc
 }
@@ -37,6 +38,8 @@ export interface TickResult {
   /** Set once consensus has executed it. */
   executedAt?: string
   transactionId?: string
+  /** True when a transfer WOULD have been made but `execute: false` held it. */
+  planOnly?: boolean
 }
 
 /**
@@ -50,12 +53,24 @@ export async function tick(
   deps: { hedera: TabClient; mirror: MirrorClient },
   entries: readonly Entry[],
   config: TickConfig,
+  opts: { execute?: boolean } = {},
 ): Promise<TickResult> {
+  /*
+   * `execute: false` computes the plan and moves NOTHING.
+   *
+   * This exists because the first version of the worker had a `--dry-run` flag
+   * that suppressed only the receipt write — so a "dry run" scheduled and
+   * executed a real transfer on testnet, and then omitted the receipt that
+   * marks the window settled, leaving the next real pass ready to pay it a
+   * second time. A dry run that moves money is worse than no dry run at all,
+   * because the flag is what convinced you it was safe.
+   */
+  const execute = opts.execute ?? true
   const now = `${Math.floor(Date.now() / 1000)}.000000000`
   const before = position(entries, config.ceiling, now)
 
   // Interest on what was already owed entering this window.
-  const aprBp = TIER_APR_BP[config.tier] ?? bp(1200)
+  const aprBp = bp(aprBpFor(config.tier))
   const interest = accrue({
     outstanding: before.outstanding,
     aprBp,
@@ -87,6 +102,27 @@ export async function tick(
   // missed one moves nothing — in both cases there is no transfer to schedule.
   if (plan.outcome !== 'clean' || plan.transfer <= 0n) {
     return { plan, interest }
+  }
+
+  if (!execute) return { plan, interest, planOnly: true }
+
+  /*
+   * A settlement from the float to itself is not a settlement.
+   *
+   * The demo ran exactly this: `apps/gateway` used the operator id as the tab
+   * id, so the tab and the hot float were one account and the scheduled
+   * transfer moved 0.1000 TUSD from 0.0.8812188 to 0.0.8812188. Hedera accepted
+   * it, consensus executed it, and the tick printed CLEAN with a schedule id —
+   * a settlement that looked perfect on camera and moved nothing between two
+   * parties. Refuse it loudly instead: the tab is the agent's account, and if
+   * it equals the float then the configuration is wrong, not the transfer.
+   */
+  if (config.tab === config.floatAccount) {
+    throw new Error(
+      `Refusing to settle: the tab (${config.tab}) and the hot float are the same account, ` +
+        'so the transfer would be a self-transfer that moves nothing while reporting CLEAN. ' +
+        'Set TAB_ACCOUNT_ID to the agent\'s own account — it must differ from the float.',
+    )
   }
 
   // Scheduled at CLOSE, once the net is known. See ADR-0009: the tick is
@@ -126,7 +162,7 @@ export function describeTick(result: TickResult, config: TickConfig): string[] {
     `  window ${config.window}`,
     `    credits        ${format(plan.net.credits, { sign: 'always' })}`,
     `    debits         ${format(plan.net.debits, { sign: 'always' })}`,
-    `    interest       ${format(micro(-result.interest), { sign: 'always' })}  (${config.tier} @ ${config.tier === 'Unrated' ? '12' : ''}${TIER_APR_BP[config.tier] ?? 1200} bp APR)`,
+    `    interest       ${format(micro(-result.interest), { sign: 'always' })}  (${config.tier} @ ${aprBpFor(config.tier)} bp APR)`,
     `    ${'─'.repeat(40)}`,
     `    net            ${format(plan.net.net, { sign: 'always' })}`,
     `    receipts       ${plan.net.receiptCount} → ${plan.outcome === 'clean' ? '1 transfer' : '0 transfers'}`,
@@ -135,6 +171,9 @@ export function describeTick(result: TickResult, config: TickConfig): string[] {
     `    ramp           ${plan.rampFromBp / 100}% → ${plan.rampToBp / 100}%`,
     `    outstanding    ${format(plan.outstandingAfter)}`,
   ]
+  if (result.planOnly) {
+    lines.push(`    transfer       ${format(plan.transfer)} WOULD MOVE — held by --dry-run`)
+  }
   if (result.scheduleId) {
     lines.push(`    schedule       ${result.scheduleId}`)
     lines.push(`    executed       ${result.executedAt ?? 'pending'}  (by consensus, not by us)`)

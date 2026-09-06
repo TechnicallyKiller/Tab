@@ -13,16 +13,17 @@ import { mulBp, type BasisPoints, type MicroUsdc } from '@tab/money'
  * hard to trace. It is fixed here, once.
  */
 
-/** Base APR per tier, in basis points. 600 = 6%. */
-export const TIER_APR_BP: Record<string, BasisPoints> = {
-  A: 600 as BasisPoints,
-  B: 850 as BasisPoints,
-  C: 1200 as BasisPoints,
-  // Unrated has no ceiling, so it can hold no new outstanding — but a tab that
-  // collapsed to Unrated may still be carrying a balance from before, and that
-  // balance still accrues at the worst rate.
-  Unrated: 1200 as BasisPoints,
-}
+/*
+ * The APR table used to live here. It now lives in `@tab/params`, which is
+ * where every tunable number belongs — parameters are versioned because
+ * `verify-ceiling` must recompute a published ceiling from byte-identical
+ * inputs, and this package cannot import params (boundaries.json: ledger sees
+ * only money and protocol).
+ *
+ * That boundary is the point, not an obstacle: `accrue` takes `aprBp` as an
+ * ARGUMENT. Ledger does the arithmetic and never decides the policy, so a rate
+ * change is a params version bump and touches no math.
+ */
 
 export const SECONDS_PER_YEAR = 31_536_000n
 

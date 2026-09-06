@@ -63,6 +63,8 @@ export interface Reconciliation {
   matched: number
   /** Violations a previous run already wrote a repair for. Not re-reported. */
   alreadyRepaired: number
+  /** Float outflows matched to a settlement receipt rather than a debit. */
+  settlementsMatched: number
   /**
    * Debit receipts carrying an `unsettled:` placeholder instead of a settlement
    * transaction id. These CANNOT be reconciled — there is no id to match — so
@@ -88,6 +90,15 @@ export function reconcile(
   entries: readonly Entry[],
   chainEdges: readonly { transactionId: string; amount: MicroUsdc; to: string }[],
   floatAccount: string,
+  /**
+   * Settlement transaction ids from the settlements topic.
+   *
+   * A settlement payout is an outflow from the float WITH a receipt — it is
+   * just filed on a different topic. Without this the reconciler listed every
+   * clean settlement as an unreceipted outflow, so the healthier the rail, the
+   * more open questions its own audit tool raised about it.
+   */
+  settlementTxs: ReadonlySet<string> = new Set(),
 ): Reconciliation {
   const debits = entries.filter(
     (e): e is Extract<Entry, { kind: 'debit' }> => e.kind === 'debit',
@@ -121,9 +132,16 @@ export function reconcile(
   let matched = 0
   let unreconcilable = 0
   let alreadyRepaired = 0
+  let settlementsMatched = 0
 
   for (const edge of outbound) {
-    const receipt = byTx.get(normalizeTransactionId(edge.transactionId))
+    const edgeKey = normalizeTransactionId(edge.transactionId)
+    if (settlementTxs.has(edgeKey)) {
+      // A window's netted payout, receipted on the settlements topic.
+      settlementsMatched++
+      continue
+    }
+    const receipt = byTx.get(edgeKey)
     if (!receipt) {
       questions.push({
         kind: 'unreceipted_outflow',
@@ -199,6 +217,7 @@ export function reconcile(
     checked: outbound.length,
     matched,
     alreadyRepaired,
+    settlementsMatched,
     unreconcilable,
     violations,
     questions,
@@ -211,19 +230,39 @@ export function reconcile(
 
 const tokenId = process.env['USDC_TOKEN_ID']
 const receiptTopic = process.env['TOPIC_RECEIPTS']
+const settlementTopic = process.env['TOPIC_SETTLEMENTS']
 if (!tokenId || !receiptTopic) throw new Error('USDC_TOKEN_ID and TOPIC_RECEIPTS are required')
+
+/*
+ * The TAB's receipts, not the float's.
+ *
+ * This read the operator id and so reconciled a tab that no longer has any
+ * receipts: it reported `0 of 8 in range` and then honestly refused to draw a
+ * conclusion. Receipts are keyed by the agent's tab, which is a different
+ * account from the float by design — the two were collapsed until now, and
+ * every place that assumed otherwise has to be corrected, not just the worker.
+ */
+const tabAccount = process.env['TAB_ACCOUNT_ID']
+if (!tabAccount) {
+  throw new Error(
+    'TAB_ACCOUNT_ID is required. Receipts are keyed by the agent\'s tab, which must ' +
+      'differ from the hot float — run `pnpm tab:create` if it is not set.',
+  )
+}
 
 const hedera = clientFromEnv()
 const mirror = new MirrorClient({ network: hedera.network, timeoutMs: 45_000, maxRetries: 4, maxPages: 12 })
 const floatAccount = hedera.operatorId.toString()
 
 console.log(`\nReconciliation · Mirror Node vs receipt topic\n`)
-console.log(`  float account   ${floatAccount}`)
+console.log(`  float account   ${floatAccount}   (outbound transfers checked)`)
+console.log(`  tab             ${tabAccount}   (whose receipts these are)`)
 console.log(`  token           ${tokenId}`)
-console.log(`  receipt topic   ${receiptTopic}\n`)
+console.log(`  receipt topic   ${receiptTopic}`)
+console.log(`  settlements     ${settlementTopic ?? 'not set — settlement payouts will read as questions'}\n`)
 
 const replay = await replayEntries(mirror, receiptTopic)
-const entries = replay.byTab.get(floatAccount) ?? []
+const entries = replay.byTab.get(tabAccount) ?? []
 console.log(`  replayed        ${replay.replayed} entries · ${replay.skipped} skipped (pre-schema)`)
 
 /**
@@ -259,10 +298,32 @@ const fromSeconds = seconds(from)
 const inRange = entries.filter((e) => seconds(e.at) >= fromSeconds)
 console.log(`  receipts        ${inRange.length} of ${entries.length} in range`)
 
+/*
+ * Settlement transaction ids, so a netted payout is not mistaken for a mystery.
+ *
+ * Read from the settlements topic rather than inferred from the amount: two
+ * windows can net to the same figure, and matching those by value would pair
+ * them arbitrarily and hide a real discrepancy behind a coincidence. The
+ * transaction id is the only safe key.
+ */
+const settlementTxs = new Set<string>()
+if (settlementTopic) {
+  const settlements = await replayEntries(mirror, settlementTopic)
+  for (const list of settlements.byTab.values()) {
+    for (const entry of list) {
+      if (entry.kind === 'settlement' && entry.transactionId) {
+        settlementTxs.add(normalizeTransactionId(entry.transactionId))
+      }
+    }
+  }
+  console.log(`  settlements     ${settlementTxs.size} payout(s) on record`)
+}
+
 const result = reconcile(
   inRange,
   edges.map((e) => ({ transactionId: e.transactionId, amount: e.amount, to: e.to })),
   floatAccount,
+  settlementTxs,
 )
 
 /*
@@ -273,10 +334,10 @@ const result = reconcile(
  * it included the very receipt under repair, so the report said "has a matching
  * on-chain transfer" about the one receipt that provably does not.
  */
-const verified = result.matched + result.alreadyRepaired
+const verified = result.matched + result.alreadyRepaired + result.settlementsMatched
 
 console.log(`
-  checked ${result.checked} outbound · matched ${result.matched} · violations ${result.violations.length} · questions ${result.questions.length}${
+  checked ${result.checked} outbound · matched ${result.matched} · settlements ${result.settlementsMatched} · violations ${result.violations.length} · questions ${result.questions.length}${
     result.alreadyRepaired > 0 ? ` · ${result.alreadyRepaired} already repaired` : ''
   }
 
@@ -297,7 +358,7 @@ if (verified === 0 && result.violations.length === 0) {
 } else if (result.violations.length === 0) {
   console.log(`
   CLEAN — no debit receipt in range claims a movement the chain does not show.
-  ${result.matched} confirmed against an on-chain transfer to the micro-USDC${
+  ${result.matched} debit(s) and ${result.settlementsMatched} settlement payout(s) confirmed against an on-chain transfer${
     result.alreadyRepaired > 0 ? `, ${result.alreadyRepaired} corrected by an earlier repair` : ''
   }.`)
 } else {

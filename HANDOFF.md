@@ -24,14 +24,13 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** the `unsettled:` defect in `apps/gateway/src/spend.ts:143` — it is the one thing
-blocking the reconciler from making a single positive match, and reconciliation is a demo artifact.
-Then wire the window tick (`tick.ts` is written and tested but never invoked; there is no
-`apps/settlement/src/main.ts`). Then `graph` + `scoring`, which is what the attack demo needs.
+**Next action:** the `unsettled:` defect in `apps/gateway/src/spend.ts:143` — the one thing still
+blocking the reconciler from matching a debit, and reconciliation is a demo artifact. Then `graph`
++ `scoring`, which is what the attack demo needs.
 
-**Last updated:** 2026-09-06 by Claude (reconciler — live on testnet, one real violation repaired)
+**Last updated:** 2026-09-06 by Claude (the loop closes — consensus paid the agent 0.1100 on testnet)
 
-### Written: 13 of 27 packages
+### Written: 14 of 27 packages
 
 `money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
 `gateway` · `honest-agent` · `bootstrap` · `probes`
@@ -188,6 +187,14 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-06 | **THE TAB IS ITS OWN ACCOUNT.** `TAB_ACCOUNT_ID` is now required by the gateway and the settlement worker, and it MUST differ from the hot float. It used to default to the operator id, which made the tab and the float one account: settlement scheduled a transfer from `0.0.8812188` to `0.0.8812188`, consensus executed it, and the worker printed CLEAN with a schedule id having moved nothing between two parties. `tick` now throws rather than build a self-transfer. Four accounts are distinct and each has a reason — float fronts and pays out · tab receives · payer is the agent's CUSTOMER · fee payer co-signs. `pnpm tab:create` makes one | `gateway`, `settlement`, `testkit`, `bootstrap`, any demo |
+| 2026-09-06 | **`@tab/params` exists, and window bucketing lives there.** `windowOf(epochSeconds, windowSeconds)` is the single source; the gateway's inline `Math.floor(now / windowSeconds)` is gone. Two copies agree until one is handed milliseconds, and then the gateway files receipts into a window the worker never settles. `windowOf` throws on a millisecond timestamp for that reason | `gateway`, `settlement`, `fastpath`, `web` |
+| 2026-09-06 | **`TIER_APR_BP` moved from `@tab/ledger` to `@tab/params`** (`aprBpFor(tier)`). Ledger cannot import params by design — it takes `aprBp` as an argument, so it does the arithmetic and never decides the policy. A rate change is now a params version bump touching no math. `RAMP_*` steps stay in ledger because `planSettlement` uses them internally | `ledger`, `settlement`, `scoring`, `verify` |
+| 2026-09-06 | **v1 parameters are FROZEN and hash-pinned.** `packages/params/src/params.test.ts` fails if any v1 number changes — that is the test working, not a test to update. A ceiling published under v1 must stay recomputable by `verify-ceiling` forever. Add `v2.ts` and bump `MODEL_VERSION` instead | everyone; `verify` especially |
+| 2026-09-06 | **`SettlementEntry` carries `rampFromBp` / `rampToBp`**, and `rampAfter(entries)` derives the ramp in force from the last settlement. The ramp lives nowhere but the receipt topic, so a replay that dropped it silently reset every agent's earned credit to the starting ramp on each worker deploy | `ledger`, `settlement`, `web`, `scoring` |
+| 2026-09-06 | **A dry run must move nothing.** `tick` takes `{ execute }`; `--dry-run` passes `false`. The first version suppressed only the receipt write, so a "dry run" scheduled and executed a real transfer AND omitted the receipt that marks the window settled — leaving the next real pass ready to pay it a second time. A dry run that moves money is worse than none, because the flag is what convinced you it was safe | `settlement`, anyone adding a `--dry-run` |
+| 2026-09-06 | **The reconciler reads the SETTLEMENTS topic too.** A netted payout is an outflow from the float that is receipted on a different topic; without this every clean settlement was listed as an unreceipted outflow, so the healthier the rail, the more open questions its own audit tool raised. Matched by transaction id, never by amount — two windows can net to the same figure | `settlement`, `verify` |
+| 2026-09-06 | **A placeholder env value is UNSET.** `process.env.X ?? fallback` accepts `0.0.xxxxx` because it is a non-empty string; the worker announced `float 0.0.xxxxx`. Check `includes('xxxxx')` the way `requireEnv` does | everyone reading .env directly |
 | 2026-09-06 | **`repairReceipt.why` gained `missing_transfer`**, and **`@tab/ledger` now routes a repair by the SIGN of its amount**, not by kind. A `missing_transfer` repair REVERSES a debit, so its amount is positive; the old code filed every repair under `debits`, which is documented negative. The net came out right, so a window would have misreported silently | `protocol`, `ledger`, `settlement`, `web` (window display) |
 | 2026-09-06 | **The reconciler is idempotent, and must stay that way.** It skips a debit that already has a `missing_transfer` repair on the topic. Without that check `--repair` rewrites a reversal on every run — a −0.04 error becomes +0.36 after ten runs. **If you add a repair kind, add its already-repaired check in the same commit** | `settlement` |
 | 2026-09-06 | **An unreceipted float outflow is a QUESTION, not a violation.** The float legitimately makes operational transfers (funding a payer, topping up an account) that correctly have no debit receipt. Only the reverse — a debit receipt with no on-chain transfer — is a hard invariant. Reporting the first as a violation made the reconciler's first run cry wolf 16 times on a healthy ledger | `settlement`, `verify`, `web` |
@@ -235,6 +242,67 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-06 (evening) — Claude — the loop closes: an agent with no key earned, and consensus paid it
+
+**The settlement worker runs, and the full credit loop completed on testnet.** One window, start to
+finish:
+
+```
+  window 5962288
+    credits        +0.1500      3 calls to the agent's endpoint
+    debits         −0.0400      1 call the agent bought
+    net            +0.1100
+    receipts       4 → 1 transfer
+    outcome        CLEAN
+    ramp           25% → 40%
+    schedule       0.0.10390470
+    executed       1788686819.057159551  (by consensus, not by us)
+```
+
+`0.11 TUSD` is in the agent's tab account `0.0.10390398` on testnet, and the agent holds no key.
+That is the product's central claim, demonstrated rather than described.
+
+Getting there required fixing something embarrassing. **The first settlement moved nothing.** The
+gateway used the operator id as the tab id, so the tab and the hot float were the same account and
+the scheduled transfer went from `0.0.8812188` to `0.0.8812188`. Hedera accepted it, consensus
+executed it, and the worker printed `CLEAN` with a real schedule id. A settlement that looks
+flawless on camera and moves zero between two parties is the worst possible bug to ship into a
+demo, and nothing in the output would have given it away. `tick` now refuses a self-transfer
+outright, `TAB_ACCOUNT_ID` is required, and `pnpm tab:create` makes an account that is deliberately
+funded with **nothing** — every micro-USDC in it has to arrive as earnings or a payout, or the
+demo would be quietly undermining its own claim.
+
+**`--dry-run` was worse.** It suppressed only the receipt write, so the dry run scheduled and
+executed a real transfer — and then omitted the receipt that marks the window settled, leaving the
+next real pass ready to pay it again. A dry run that moves money is worse than no dry run, because
+the flag is what convinced you it was safe. `tick` now takes `{ execute }`.
+
+**`@tab/params` is written** (14 tests), which was the honest fix for a duplication I kept
+stepping over: the gateway and the worker each computed `Math.floor(now / windowSeconds)` inline.
+Those agree right up until one is handed milliseconds, and then the gateway files receipts into a
+window the worker never settles and the tab silently never settles at all. `windowOf` throws on a
+millisecond timestamp for exactly that reason. `TIER_APR_BP` moved there from `ledger`; v1 is
+frozen behind a hash-pinned snapshot test so `verify-ceiling` can recompute historical ceilings
+forever.
+
+**The ramp now survives a restart.** `SettlementEntry` carries `rampFromBp`/`rampToBp` and
+`rampAfter()` derives the ramp in force from the last settlement. The ramp lives nowhere but the
+receipt topic; a replay that dropped it reset every agent's earned credit to the starting ramp on
+every worker deploy, which would have been invisible and would have made the core credit mechanic
+a lie.
+
+**The reconciler reads the settlements topic now**, so a netted payout is verified rather than
+listed as a mystery. It reports `settlements 1` against this window's transfer. Before that, the
+healthier the rail, the more open questions its own audit tool raised about it — every clean
+settlement read as an unreceipted outflow.
+
+**Still open, and unchanged:** `matched 0` for debits. The two spends in this window carry
+`unsettled:<holdId>` instead of a settlement transaction id, so they remain unreconcilable. The
+reconciler now attributes them correctly instead of hiding them, but the fix is still in
+`apps/gateway/src/spend.ts:143`. **This is the next thing.**
+
+67 tests, 5/5 guards, 14 of 27 packages.
 
 ### 2026-09-06 (later) — Claude — the reconciler, and the four bugs it found in itself
 

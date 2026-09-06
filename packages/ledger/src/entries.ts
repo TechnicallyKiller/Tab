@@ -100,6 +100,16 @@ export interface SettlementEntry extends EntryBase {
   net: MicroUsdc
   transactionId?: string
   outcome: 'clean' | 'missed' | 'carried'
+  /**
+   * The credit ramp before and after this window, basis points.
+   *
+   * Carried on the entry because the ramp is the core credit mechanic and it
+   * has to survive a restart. The receipt topic is the only durable state we
+   * have, so a replay that dropped these would silently reset every agent's
+   * earned credit to the starting ramp on every worker deploy.
+   */
+  rampFromBp: number
+  rampToBp: number
 }
 
 export type Entry =

@@ -4,8 +4,8 @@ import { bp, format, micro, usdc, type MicroUsdc } from '@tab/money'
 import type { Entry } from './entries.ts'
 import { inConsensusOrder } from './entries.ts'
 import { canReserve, position, resolveHolds } from './holds.ts'
-import { accrue, TIER_APR_BP } from './interest.ts'
-import { netWindow, planSettlement } from './netting.ts'
+import { accrue } from './interest.ts'
+import { RAMP_START_BP, netWindow, planSettlement, rampAfter } from './netting.ts'
 import { checkFloatInvariant, checkLedger } from './invariants.ts'
 
 const CEILING = usdc('1.000000')
@@ -136,7 +136,7 @@ test('hand-computed window: odd micro-amounts net exactly', () => {
 test('interest is simple, pro-rated, and truncated in the agent’s favour', () => {
   // 1.000000 at 12% APR for 600s = 1e6 * 1200/10000 * 600 / 31_536_000
   //                              = 120000 * 600 / 31536000 = 2.283... -> 2
-  const owed = accrue({ outstanding: usdc('1.000000'), aprBp: TIER_APR_BP['C']!, seconds: 600 })
+  const owed = accrue({ outstanding: usdc('1.000000'), aprBp: bp(1200), seconds: 600 })
   assert.equal(owed, 2n, 'truncated down, never up')
 })
 
@@ -322,4 +322,30 @@ test('a missing_transfer repair reverses the debit without corrupting debits', (
 test('a reversing repair returns the tab balance to zero', () => {
   const entries = [debit('h1', '-0.040000', 1), repair('0.040000', 2, 'missing_transfer')]
   assert.equal(format(position(entries, CEILING, NOW).balance), '0.0000')
+})
+
+/* ── the ramp survives a restart ─────────────────────────────────────────── */
+
+function settled(window: number, at: number, from: number, to: number): Entry {
+  return {
+    kind: 'settlement', at: ts(at), window, net: usdc('0.100000'),
+    outcome: 'clean', rampFromBp: from, rampToBp: to,
+  }
+}
+
+test('a tab with no settlements starts at the opening ramp', () => {
+  assert.equal(rampAfter([]), RAMP_START_BP)
+  assert.equal(rampAfter([debit('h1', '-0.040000', 1)]), RAMP_START_BP)
+})
+
+test('the ramp is the last settlement rampTo, not a re-fold of the outcomes', () => {
+  // Three clean windows were already stepped when they settled. Re-applying
+  // +1500 per clean outcome here would double-count and disagree with the topic.
+  const history = [settled(146, 1, 2500, 4000), settled(147, 2, 4000, 5500), settled(148, 3, 5500, 7000)]
+  assert.equal(rampAfter(history), 7000)
+})
+
+test('the ramp reads in consensus order, not array order', () => {
+  const out = [settled(148, 3, 5500, 7000), settled(146, 1, 2500, 4000)]
+  assert.equal(rampAfter(out), 7000)
 })

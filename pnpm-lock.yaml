@@ -90,6 +90,9 @@ importers:
       '@tab/money':
         specifier: workspace:*
         version: link:../../packages/money
+      '@tab/params':
+        specifier: workspace:*
+        version: link:../../packages/params
       '@tab/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -127,6 +130,9 @@ importers:
       '@tab/money':
         specifier: workspace:*
         version: link:../../packages/money
+      '@tab/params':
+        specifier: workspace:*
+        version: link:../../packages/params
       '@tab/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -227,6 +233,22 @@ importers:
         version: 5.9.3
 
   packages/money:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/params:
+    dependencies:
+      '@tab/money':
+        specifier: workspace:*
+        version: link:../money
+      zod:
+        specifier: 'catalog:'
+        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

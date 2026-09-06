@@ -34,7 +34,6 @@ export {
 
 export {
   SECONDS_PER_YEAR,
-  TIER_APR_BP,
   accrue,
   accrueWindow,
   type AccrualInput,
@@ -45,9 +44,11 @@ export {
   RAMP_MAX_BP,
   RAMP_MIN_BP,
   RAMP_MISSED_STEP_BP,
+  RAMP_START_BP,
   netWindow,
   netWindows,
   planSettlement,
+  rampAfter,
   type SettlementOutcome,
   type SettlementPlan,
   type WindowNet,
