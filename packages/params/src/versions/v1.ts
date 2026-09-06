@@ -20,8 +20,23 @@ export const v1: ParameterSet = parameterSet.parse({
   // unknown agent to a cheap rate would hand a fresh account the best terms.
   aprBp: { A: 600, B: 850, C: 1200, Unrated: 1200 },
 
-  // Ceiling as a multiple of attested earnings. 10000bp = 1x.
-  tierMultipleBp: { A: 30_000, B: 20_000, C: 12_500, Unrated: 10_000 },
+  /*
+   * Ceiling as a multiple of attested earnings. 10000bp = 1x.
+   *
+   * Unrated is ZERO, which is what makes a default absolute: the multiple is
+   * the term the ceiling is proportional to, so zero means zero credit however
+   * much revenue an agent has. `computeCeiling` also short-circuits Unrated to
+   * zero, and both belong — the short-circuit is the guarantee, this is the
+   * arithmetic agreeing with it.
+   *
+   * The first version of this table had `C: 12_500, Unrated: 10_000`, which
+   * contradicted the documented formula and made the engine print `Unrated ×1`.
+   * The ceiling was still zero because of the short-circuit, so nothing was
+   * mispriced — but the published `mult` input said 1x for a tier that gets
+   * nothing, and an audit record that disagrees with the model is worse than no
+   * audit record.
+   */
+  tierMultipleBp: { A: 30_000, B: 20_000, C: 10_000, Unrated: 0 },
 
   ramp: {
     startBp: 2500,

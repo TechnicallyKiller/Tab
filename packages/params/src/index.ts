@@ -16,6 +16,18 @@ import { v1 } from './versions/v1.ts'
 /** The set in force. Bumped on ANY parameter change. */
 export const MODEL_VERSION = 1
 
+/**
+ * The version as a published identifier.
+ *
+ * Every HCS ceiling message carries this so a historical ceiling stays
+ * recomputable, and `@tab/protocol` types the field as a string of 3-32 chars —
+ * so a bare `1`, or `v1`, will not validate. Deliberately not just the number:
+ * a ceiling that says `model: "tab-v1"` names the parameter SET it was computed
+ * under, where `model: 1` could be read as a schema version, an API version, or
+ * anything else a year from now.
+ */
+export const MODEL_ID = `tab-v${MODEL_VERSION}`
+
 const SETS: Record<number, ParameterSet> = { 1: v1 }
 
 export const params: ParameterSet = v1

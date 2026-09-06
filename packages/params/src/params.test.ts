@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createHash } from 'node:crypto'
 import {
-  MODEL_VERSION, aprBpFor, caps, describeParams, params, paramsForVersion, tierMultipleBpFor, v1,
+  MODEL_ID, MODEL_VERSION, aprBpFor, caps, describeParams, params, paramsForVersion, tierMultipleBpFor, v1,
 } from './index.ts'
 import { parameterSet } from './schema.ts'
 import { windowConsensusRange, windowEnd, windowOf, windowStart } from './window.ts'
@@ -29,7 +29,7 @@ function canonical(value: unknown): string {
 
 test('v1 is frozen — this hash may never change', () => {
   const hash = createHash('sha256').update(canonical(v1)).digest('hex')
-  assert.equal(hash, 'feb21f1ba7375373238310bfee39e3a90289d99a6ce7d945f8ced05bec829d26')
+  assert.equal(hash, '59b1d9f691cd7fe6dce030f5fc5750583fcc3ab5c42aad6f051534874d3ccb0f')
 })
 
 test('the schema rejects a version that omits a field', () => {
@@ -114,4 +114,12 @@ test('window bounds are half-open, so a boundary receipt is counted once', () =>
 test('the consensus range is what Mirror Node expects', () => {
   const range = windowConsensusRange(2_981_090, 600)
   assert.deepEqual(range, { from: '1788654000.000000000', to: '1788654600.000000000' })
+})
+
+test('MODEL_ID satisfies the protocol’s model field (3-32 chars)', () => {
+  // A bare version number, or "v1", would fail the schema at publish time —
+  // after the ceiling had already been computed.
+  assert.ok(MODEL_ID.length >= 3 && MODEL_ID.length <= 32, MODEL_ID)
+  assert.match(MODEL_ID, /^tab-v\d+$/)
+  assert.ok(MODEL_ID.endsWith(String(MODEL_VERSION)))
 })

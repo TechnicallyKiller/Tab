@@ -24,13 +24,13 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** `apps/engine` — wire `graph` + `scoring` to Mirror Node and publish ceilings to
-HCS, then `agents/loop-attacker` to demonstrate the refusal on camera. The underwriting math is
-written and tested; nothing yet calls it against live data.
+**Next action:** `agents/loop-attacker` — perform the attack against a live gateway and get refused
+on camera. The math is proven in tests and the engine publishes real ceilings; the demo moment
+itself is the missing piece. Then `tools/verify`.
 
-**Last updated:** 2026-09-06 by Claude (graph + scoring — the underwriting is real, 119 tests)
+**Last updated:** 2026-09-07 by Claude (engine — a ceiling on HCS whose hash verifies from outside the repo)
 
-### Written: 16 of 27 packages
+### Written: 17 of 27 packages
 
 `money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
 `gateway` · `honest-agent` · `bootstrap` · `probes`
@@ -187,6 +187,12 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-06 | **A CEILING IS PUBLISHED TO HCS AND THE HASH VERIFIES FROM OUTSIDE THE REPO.** Ceiling topic `0.0.10182697` seq 1. The hash was recomputed in a throwaway Python script from nothing but the on-chain message — no repo, no database — and matched. The canonical rule is keys sorted, no whitespace, amounts as decimal strings, rates as integer basis points. **Anything that changes `ceilingInputRecord` changes every future hash**, so build the record field by field, never by spreading `CeilingInputs` | `engine`, `verify`, `web` (the verify button), `protocol` |
+| 2026-09-06 | **v1 tier multiples CORRECTED to `A 30000 · B 20000 · C 10000 · Unrated 0`.** They were `C 12500 · Unrated 10000`, which contradicted the documented formula and made the engine print `Unrated ×1`. Nothing was mispriced — `computeCeiling` short-circuits Unrated to zero — but the published `mult` input claimed 1x for a tier that gets nothing. Legitimate to change because **no ceiling had ever been published under v1**; once one has, v1 is frozen and this would be a v2 | `params`, `scoring`, `verify` |
+| 2026-09-06 | **`entriesFromMessages` moved to `@tab/ledger`.** `apps/engine` importing `apps/settlement/src/entries.ts` is a cross-app dependency `boundaries.json` refuses, and rightly — two apps needing the same logic means it belongs in a package. The FETCH stays duplicated in both apps because ledger may not import `@tab/mirror`; five lines of `readTopic` twice is a far smaller cost than a pure accounting package that can make network requests | `engine`, `settlement`, `ledger`, `verify` |
+| 2026-09-06 | **`@tab/mirror` and `@tab/graph` BOTH export a type called `TransferEdge` and they are not the same shape** — mirror has `consensusTimestamp`, graph wants `at`. A spread compiles fine and hands the graph an edge with an undefined timestamp, which nothing downstream notices because the time-based graph rules fail open. Map field by field | `engine`, `verify`, anyone joining the two |
+| 2026-09-06 | **The engine holds ceiling state in process and Mirror-derived ancestry FAILS OPEN.** An account whose funding ancestry cannot be fetched is treated as independent, which is the unsafe direction; and ceiling state does not survive a restart. Both are consequences of `@tab/db` not existing yet, both are named in `main.ts`, and both are fixed by a persisted graph rather than by more retries | `engine`, `db`, `graph` |
+| 2026-09-06 | **`MODEL_ID` (`tab-v1`) is the published model identifier**, not `MODEL_VERSION`. The protocol types the field as a string of 3-32 chars, so a bare `1` or `v1` fails validation — at publish time, after the ceiling was already computed | `params`, `engine`, `verify` |
 | 2026-09-06 | **A WINDOW SETTLES AT MOST ONCE — `checkWindowSettledOnce` is now a ledger invariant, and the worker refuses to run when it fires.** The worker replayed only the receipts topic, so it never saw the settlement receipts that live on the SETTLEMENTS topic: every closed window looked unsettled forever and each pass re-paid it. Not a slow leak — one extra pass double-pays, ten passes pay eleven times. It really happened on testnet (window 5962288, two schedule ids, 0.1100 paid twice). **Anything replaying tab history must merge BOTH topics** | `settlement`, `gateway`, `verify`, `web`, `engine` |
 | 2026-09-06 | **A duplicate settlement needs NO money repair.** A clean settlement subtracts its net, so a window settled twice subtracts twice and the ledger already records the tab as owing the surplus back — it nets out against future windows. Writing a correcting repair would double-correct. The violation is a bug signature, not a mis-statement; `--acknowledge-duplicates` continues once the cause is fixed | `settlement`, `verify` |
 | 2026-09-06 | **The earn route declares `extra: { paymentFlow: 'upfront' }`.** x402's default `authorization` flow VERIFIES before the handler and SETTLES in the response hook afterwards — so `earn.ts`'s stated premise ("the money has ALREADY moved by the time we are called") was FALSE, and it wrote attested credits for payments that had not settled. `upfront` settles first, which is what the code always assumed. Note the key is `paymentFlow`; `assetTransferMethod` is a different axis and setting `upfront` there fails at boot | `x402`, `gateway` |
@@ -246,6 +252,71 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 — Claude — apps/engine: a ceiling on HCS that a stranger can check
+
+**The transparency claim is no longer a claim.** The engine published a ceiling to topic
+`0.0.10182697`, and I verified it the way an outsider would: a throwaway Python script, given
+nothing but the on-chain message — no repo, no database, no access to anything of ours —
+recomputed the input hash and matched it.
+
+```
+canonical inputs : {"cap":"100.000000","floor":"0.000000","mult":0,"ramp":7000,
+                    "rev":"0.000000","revAtt":"0.000000","revUnatt":"0.000000","tier":"Unrated"}
+recomputed hash  : 788a5f6a…dda1b57
+published hash   : 788a5f6a…dda1b57   MATCH
+```
+
+That is the property `verify-ceiling` is supposed to deliver, demonstrated before the tool exists.
+
+**The engine runs against live testnet data.** One pass: replay both topics, derive each
+counterparty's funding ancestry and account age from Mirror Node, weight, score, publish. On real
+data it produced:
+
+```
+  revenue         0.0120 per window  (attested 0.0720 · unattested 0.0000)
+  tier            Unrated  ×0
+  counterparties
+    0.0.10385196   48%  counted
+           YOUNG_ACCOUNT: account is newer than the age threshold
+           CONCENTRATED: over the single-counterparty share cap
+```
+
+The arithmetic is checkable by hand, which is the point: 0.15 raw attested, weighted to 48%
+(young 0.6 × concentrated 0.8) = 0.072, averaged over 6 windows = 0.012 per window, below the
+0.10 floor, so Unrated and a ceiling of zero.
+
+**Two real bugs, both found by running it rather than by reading it:**
+
+1. **The trailing span was one window short.** `<= oldest` collected N−1 windows while
+   `effectiveRevenue` still divided by N, so the oldest window's revenue was silently dropped and
+   every agent's run-rate was understated by a fixed fraction. It surfaced only because
+   `TRAILING_WINDOWS=1` collected *nothing* — a smaller span made a bigger noise.
+2. **v1's tier multiples contradicted the documented formula** (`C 12500 · Unrated 10000` against a
+   spec of `C 1.0 · Unrated 0`), which made the engine print `Unrated ×1`. Nothing was mispriced,
+   because `computeCeiling` short-circuits Unrated to zero — but the *published* `mult` said 1x for
+   a tier that gets nothing, and an audit record that disagrees with the model is worse than none.
+   Correcting v1 was legitimate only because no ceiling had ever been published under it. Once one
+   has, that same fix is a v2.
+
+**`guard:money` caught me too**, in display code: `(weight.bp / 100).toFixed(0)`. Harmless in
+itself, and the guard is still right — basis points are integers exactly so display never routes a
+rate through a float, and the one place a float is harmless today is the place someone copies it
+from tomorrow. `@tab/money` already had `formatBpPercent`/`formatBpMultiple`.
+
+**Deferred, and said out loud in `main.ts` rather than buried:** the README specifies a BullMQ
+worker over a Postgres graph writing a Redis snapshot. This runs the same compute against Mirror
+Node directly, because `@tab/db` and `@tab/cache` do not exist yet. Two honest costs — ceiling state
+does not survive a restart, and **Mirror-derived funding ancestry fails OPEN**, so an account whose
+ancestry cannot be fetched is treated as independent. That is the unsafe direction, and the fix is a
+persisted graph, not more retries. What is NOT deferred is correctness of the published numbers:
+they come from the same pure packages a stranger reruns, over the same public data.
+
+19 tests here, 139 total, 5/5 guards, 17 of 27 packages.
+
+**Next:** `agents/loop-attacker` — the math is proven in tests and the engine runs, but nothing yet
+performs the attack against a live gateway and gets refused on camera. Then `tools/verify`, which
+now has a working example to codify.
 
 ### 2026-09-06 (late) — Claude — @tab/graph and @tab/scoring: the underwriting is real
 

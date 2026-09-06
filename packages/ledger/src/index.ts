@@ -66,3 +66,9 @@ export {
   type FloatInvariantInput,
   type Violation,
 } from './invariants.ts'
+
+export {
+  entriesFromMessages,
+  type Replay,
+  type TopicMessage,
+} from './replay.ts'

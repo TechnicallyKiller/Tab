@@ -56,7 +56,9 @@
     "payer:create": "pnpm --filter @tab/bootstrap payer:create",
     "settle": "pnpm --filter @tab/settlement tick",
     "reconcile": "pnpm --filter @tab/settlement reconcile",
-    "tab:create": "pnpm --filter @tab/bootstrap tab:create"
+    "tab:create": "pnpm --filter @tab/bootstrap tab:create",
+    "engine": "pnpm --filter @tab/engine start",
+    "engine:once": "pnpm --filter @tab/engine recompute"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

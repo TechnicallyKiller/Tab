@@ -1,0 +1,27 @@
+{
+  "name": "@tab/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
+    "recompute": "node --experimental-strip-types --env-file=../../.env src/main.ts --once",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "catalog:",
+    "@tab/graph": "workspace:*",
+    "@tab/hedera": "workspace:*",
+    "@tab/ledger": "workspace:*",
+    "@tab/mirror": "workspace:*",
+    "@tab/money": "workspace:*",
+    "@tab/params": "workspace:*",
+    "@tab/protocol": "workspace:*",
+    "@tab/scoring": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
+}
