@@ -52,7 +52,9 @@
     "probe:schedule": "pnpm --filter @tab/probes probe:schedule",
     "probe:adapter": "pnpm --filter @tab/probes probe:adapter",
     "probe:adapter:hts": "pnpm --filter @tab/probes probe:adapter:hts",
-    "probe:protocol": "pnpm --filter @tab/probes probe:protocol"
+    "probe:protocol": "pnpm --filter @tab/probes probe:protocol",
+    "start:gateway": "pnpm --filter @tab/gateway start",
+    "seller": "pnpm --filter @tab/testkit seller"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

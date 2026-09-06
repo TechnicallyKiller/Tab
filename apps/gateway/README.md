@@ -1,83 +1,75 @@
 # @tab/gateway
 
-**Deployable · Fastify · latency-critical · stateless**
+**Deployable · Fastify · the piece that makes a tab a tab**
 
-The service that sits in front of the agent on both legs of its economic life. Three roles in one
-process, because they share the hot float signer and the receipt writer.
+The service that sits in front of the agent. **The spend leg works end to end on Hedera testnet.**
 
-| Role | Leg | Uses |
-|---|---|---|
-| x402 **client** | spend — pays sellers from hot float | `@x402/hedera/exact/client` |
-| x402 **resource server** | earn — fronts the agent's endpoint | `@x402/hedera/exact/server` |
-| x402 **facilitator** | earn — verifies and settles inbound | `@x402/hedera/exact/facilitator` |
-
-## Spend leg
-
-```
-agent → gateway → fastpath.check(price, seller)  [cache only, <50ms]
-                    ↓ ALLOW + hold_id
-                  HTTP request to seller
-                    ↓ 402 Payment Required
-                  pay USDC from hot float        [signs per request]
-                    ↓ 200 + content
-                  debit receipt → HCS
-                    ↓
-                  content → agent
+```bash
+pnpm seller        # unmodified x402 seller
+pnpm dev:gateway
+pnpm demo:honest
 ```
 
-The seller sees an ordinary x402 customer and does not know Tab exists. **Nothing on the seller
-side changes.** The README calls this the strongest line in the project and says it must not be
-traded away — so no Tab-specific header, no credential, no negotiation reaches a seller. Ever.
+## What runs today
 
-## Earn leg
-
-The gateway returns a 402, the payer pays into the hot float, the request is forwarded to the
-agent's endpoint, and an **attested** credit receipt goes to HCS — carrying the request hash,
-payer and amount.
-
-Attestation means one specific thing: an inbound payment corresponded to a request the gateway
-actually served. Because we self-facilitate, settlement and receipt-writing happen in the same
-code path, which is what makes the claim tight. It does **not** prove the payer was independent —
-that is [@tab/graph](../../packages/graph/)'s job, and the README is right to state both limits.
-
-## Contents
-
-| Path | Holds |
+| Endpoint | Does |
 |---|---|
-| `src/routes/spend.ts` | spend leg |
-| `src/routes/earn/*.ts` | earn leg: 402, forward, respond |
-| `src/routes/facilitator/*.ts` | `/verify`, `/settle`, `/supported` |
-| `src/routes/state.ts` | balance, ceiling, receipts, refusals for the SDK |
-| `src/routes/stream.ts` | SSE receipt stream for the dashboard |
-| `src/holds.ts` | reserve → pay → commit, and hold expiry |
-| `src/receipts.ts` | HCS receipt writer |
-| `src/env.ts` | env schema, validated at boot. Refuse to start on a missing value |
+| `POST /v1/spend` | the spend leg: check → reserve → pay → commit |
+| `GET /v1/tabs/:tab` | balance, outstanding, holds, available, ceiling |
+| `GET /v1/tabs/:tab/holds` | every hold with its state |
+| `GET /v1/tabs/:tab/entries` | the ledger, as replayed from HCS |
+| `GET /health` | network, token, window |
 
-## Invariants
+## The order is enforced, not described
 
-- **`reserve → pay → commit`, in that order, always.** Never pay without a reservation; never
-  record a debit without a payment. A crash between pay and commit is repaired by the reconciler
-  from a Mirror Node diff — which is why the order is fixed rather than convenient.
-- **`hold_id` is the idempotency key on the payment.** A retry with the same key must not double-pay.
-- **Fails closed.** Redis down, snapshot stale, breaker on → refuse. No path turns an error into
-  an allow.
-- **Every refusal is published to HCS with the rule that fired.** Refusals are the product
-  demonstrating that it works, not an error log.
-- **Only the hot float key lives here.** Cold Treasury signs nothing inside a request.
-  See [ADR-0003](../../docs/adr/0003-two-account-float.md).
-- **HBAR balance is monitored.** We pay gas on the earn leg because we facilitate it. Running out
-  stops inbound payments while the USDC float still looks healthy.
-- **Never log an earn-leg request body.** We front someone's endpoint; those are its customers'
-  data. Log the hash.
+```
+1. RESERVE   hold id issued, available drops IMMEDIATELY
+2. PAY       x402 pays the seller, hold id as idempotency key
+3. COMMIT    hold becomes a debit, receipt written to HCS
+```
 
-## Failure behaviour
+A crash between 1 and 2 is harmless — the hold expires and releases exactly what it reserved. A
+crash between 2 and 3 leaves a transfer with no receipt, which the reconciler repairs from a Mirror
+Node diff. **The hold is never released on a payment failure**: we cannot know whether the seller
+was paid, and releasing would let the agent spend the same headroom twice.
 
-Each row is a claim in the README's failure matrix and must actually behave this way:
+## HCS is the source of truth, and the gateway proves it
 
-| Failure | Behaviour |
-|---|---|
-| Seller takes payment, never delivers | Debit stands, dispute flagged to HCS. v1 does not arbitrate |
-| Crash mid-spend | Hold expires by TTL; reconciler repairs from the Mirror diff |
-| Redis lost | Refuse all spends. **Never fails open** |
-| Facilitator down (spend leg) | Clean refusal, typed error, distinct from a ceiling refusal |
-| Mirror Node lagging | No effect. The fast path never reads it |
+On boot it replays the receipt topic and rebuilds its position:
+
+```
+replaying HCS   4 entries · 2 skipped · 1 tab(s)
+  0.0.8812188   balance −0.1600 · outstanding 0.1600 · available 0.8400 · ceiling 1.0000
+```
+
+The two skipped are `bootstrap.hello` messages written before the schema existed. A replay must
+survive them, and it does. Restart the gateway and it lands on the same position — the in-memory
+projection is exactly what `@tab/db` will also be (ADR-0007).
+
+## Three HTTP status decisions
+
+- **A refusal is `200`** with a discriminated body. Handling refusal is the agent developer's main
+  job; forcing every consumer into a `try/catch` to read the rule would make the Refusals view
+  harder to build. Refusal is the product working.
+- **A transport failure is `502`**, deliberately distinct. It must never pollute the Refusals view,
+  which is a correctness demonstration.
+- **A malformed request is `400`** with an example, not a schema dump.
+
+## Known gaps, honestly
+
+- **SINGLE INSTANCE ONLY.** Holds live in process memory, so two gateways would each allow up to the
+  ceiling. `@tab/cache` fixes this, and Probe 5 explains why that hop cannot be optimised away — a
+  hold reserve must be atomic across instances.
+- **~31s per spend**, almost all of it the seller's facilitator doing Mirror Node preflight and
+  signature verification from a high-latency link. The ceiling check itself is in-memory arithmetic.
+- **The ceiling is a fixed config value.** `@tab/scoring` and `@tab/graph` do not exist, so there is
+  no attested revenue, no tier, no ramp and no control-cluster check. Two of the six fast-path
+  checks are implemented: per-call cap and ceiling headroom.
+- **The earn leg is not built.** No 402 challenge, no forwarding, no attested credit receipts — so a
+  tab can only go more negative. `@tab/x402` already has `createEarnServer`; nothing calls it here.
+- **No settlement.** Windows are wall-clock buckets; nothing nets or transfers. `@tab/ledger` has
+  `planSettlement` ready and unused.
+- **`@tab/fastpath` is bypassed.** The checks are inline in `spend.ts`. They belong in the package
+  that `boundaries.json` bans from reaching Mirror Node.
+- **The seller account is read from a `payTo` query parameter.** A real deployment resolves it from
+  the 402 challenge.

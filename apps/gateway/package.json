@@ -1,0 +1,25 @@
+{
+  "name": "@tab/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --watch --env-file=../../.env src/main.ts",
+    "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tab/hedera": "workspace:*",
+    "@tab/ledger": "workspace:*",
+    "@tab/mirror": "workspace:*",
+    "@tab/money": "workspace:*",
+    "@tab/protocol": "workspace:*",
+    "@tab/x402": "workspace:*",
+    "fastify": "catalog:",
+    "@hiero-ledger/sdk": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
+}

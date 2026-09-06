@@ -241,9 +241,19 @@
         "hedera",
         "mirror",
         "db",
-        "cache"
+        "cache",
+        "x402"
       ],
-      "why": "Fixtures, a fake unmodified x402 seller, a fake payer, deterministic clocks, and testcontainers helpers. Dev-only; never a runtime dependency of an app."
+      "why": "Fixtures, a fake unmodified x402 seller, a fake payer, deterministic clocks, and testcontainers helpers. Dev-only; never a runtime dependency of an app.",
+      "externalAllowList": [
+        "express",
+        "@x402/express",
+        "@x402/core",
+        "@x402/hedera",
+        "@hiero-ledger/sdk",
+        "vitest",
+        "zod"
+      ]
     },
     "gateway": {
       "allow": [
@@ -254,11 +264,21 @@
         "fastpath",
         "cache",
         "hedera",
+        "mirror",
         "x402",
         "observability",
         "db"
       ],
-      "why": "Deployable. Fastify: spend leg (x402 client), earn leg (x402 resource server), self-hosted facilitator, HCS receipt writer, hold manager."
+      "why": "Deployable. Fastify: spend leg (x402 client), earn leg (x402 resource server), self-hosted facilitator, HCS receipt writer, hold manager.",
+      "externalAllowList": [
+        "fastify",
+        "@hiero-ledger/sdk",
+        "zod",
+        "pino",
+        "ioredis",
+        "postgres",
+        "drizzle-orm"
+      ]
     },
     "engine": {
       "allow": [
@@ -381,9 +401,12 @@
         "protocol"
       ],
       "externalDenyList": [
-        "@hiero-ledger/sdk"
+        "@hiero-ledger/sdk",
+        "@hashgraph/sdk",
+        "@x402/hedera"
       ],
-      "why": "Demo agent. The SDK-only rule is the demo's central claim: this agent holds no key and signs nothing, so it must not even be able to import the Hedera SDK."
+      "why": "Demo agent. The SDK-only rule is the demo's central claim: this agent holds no key and signs nothing, so it must not even be able to import the Hedera SDK. It currently talks to the gateway over plain HTTP because @tab/sdk does not exist yet; it imports @tab/x402 only to stand up the unmodified seller it buys from, which is a demo fixture rather than agent code.",
+      "externalAllowList": []
     },
     "loop-attacker": {
       "allow": [

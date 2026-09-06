@@ -1,0 +1,67 @@
+import { usdc, type MicroUsdc } from '@tab/money'
+
+/**
+ * Environment, validated at boot.
+ *
+ * A service that starts with a missing topic id and dies on its first write is
+ * far harder to diagnose than one that refuses to start. So this throws, and it
+ * names everything that is wrong at once rather than one variable per restart.
+ */
+
+export interface GatewayEnv {
+  network: 'testnet' | 'mainnet' | 'previewnet'
+  operatorId: string
+  operatorKey: string
+  /** The spend token. Read from config — never hardcode a token id. */
+  tokenId: string
+  receiptTopic: string
+  ceilingTopic: string
+  settlementTopic: string
+  /** Facilitator fee payer. Funded ECDSA, separate from the seller. */
+  feePayerId: string
+  feePayerKey: string
+  port: number
+  windowSeconds: number
+  demoMode: boolean
+  /** Until @tab/scoring exists, the ceiling is a fixed configured value. */
+  starterCeiling: MicroUsdc
+  perCallCap: MicroUsdc
+  holdTtlSeconds: number
+}
+
+function required(name: string, value: string | undefined, missing: string[]): string {
+  if (!value || value.includes('xxxxx')) {
+    missing.push(name)
+    return ''
+  }
+  return value
+}
+
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): GatewayEnv {
+  const missing: string[] = []
+  const env: GatewayEnv = {
+    network: (source['HEDERA_NETWORK'] ?? 'testnet') as GatewayEnv['network'],
+    operatorId: required('HEDERA_OPERATOR_ID', source['HEDERA_OPERATOR_ID'], missing),
+    operatorKey: required('HEDERA_OPERATOR_KEY', source['HEDERA_OPERATOR_KEY'], missing),
+    tokenId: required('USDC_TOKEN_ID', source['USDC_TOKEN_ID'], missing),
+    receiptTopic: required('TOPIC_RECEIPTS', source['TOPIC_RECEIPTS'], missing),
+    ceilingTopic: required('TOPIC_CEILINGS', source['TOPIC_CEILINGS'], missing),
+    settlementTopic: required('TOPIC_SETTLEMENTS', source['TOPIC_SETTLEMENTS'], missing),
+    feePayerId: required('FAUCET_ACCOUNT_ID', source['FAUCET_ACCOUNT_ID'], missing),
+    feePayerKey: required('FAUCET_ACCOUNT_KEY', source['FAUCET_ACCOUNT_KEY'], missing),
+    port: Number(source['GATEWAY_PORT'] ?? 8080),
+    windowSeconds: Number(source['WINDOW_SECONDS'] ?? 600),
+    demoMode: source['DEMO_MODE'] === 'true',
+    starterCeiling: usdc(source['STARTER_CEILING_USDC'] ?? '1.000000'),
+    perCallCap: usdc(source['PER_CALL_CAP_USDC'] ?? '0.050000'),
+    holdTtlSeconds: Number(source['HOLD_TTL_SECONDS'] ?? 60),
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Gateway cannot start. Missing from .env:\n  ${missing.join('\n  ')}\n\n` +
+        'Run `pnpm chain:status` to see what is configured. See docs/ENVIRONMENT.md.',
+    )
+  }
+  return env
+}
