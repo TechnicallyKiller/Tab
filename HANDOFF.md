@@ -24,12 +24,13 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** `graph` + `scoring` — the loop-attack detection, which is the differentiator and
-the largest remaining build. Both legs, settlement and reconciliation are now proven end to end.
+**Next action:** `apps/engine` — wire `graph` + `scoring` to Mirror Node and publish ceilings to
+HCS, then `agents/loop-attacker` to demonstrate the refusal on camera. The underwriting math is
+written and tested; nothing yet calls it against live data.
 
-**Last updated:** 2026-09-06 by Claude (reconciler proves a spend; double-payment bug found and fixed)
+**Last updated:** 2026-09-06 by Claude (graph + scoring — the underwriting is real, 119 tests)
 
-### Written: 14 of 27 packages
+### Written: 16 of 27 packages
 
 `money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
 `gateway` · `honest-agent` · `bootstrap` · `probes`
@@ -245,6 +246,65 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-06 (late) — Claude — @tab/graph and @tab/scoring: the underwriting is real
+
+The two packages the differentiator rests on. 49 new tests, 119 total.
+
+**`@tab/graph` — the independence engine.** Funding ancestry, control clusters in BOTH directions,
+counterparty weights, the 40% share cap. The spend-leg direction is the one that catches the loop
+attacker and the one almost nobody implements: a lender asks whether the PAYER is independent, and
+Tab asks the same of the SELLER, because an agent that funds a seller, buys from it, and books the
+seller's income as proof of its own creditworthiness has built a circle out of the lender's float.
+Every payment in that circle is real, signed and settled — checking payers alone never sees it.
+
+Decisions worth not re-litigating:
+
+- **Traversal is breadth-first**, so `hops` is the shortest path. "Funded within 3 hops" is a claim
+  about the closest relationship; depth-first arriving the long way round makes a related account
+  look independent.
+- **Cycles terminate two ways** — hop limit AND visited set — and it is tested. A→B→C→A is ordinary
+  for accounts under one operator and is exactly what an attacker builds. Unbounded here is a hang,
+  and a hang in the demo is indistinguishable from a crash.
+- **Discounts multiply, they do not take the minimum.** Taking the min lets an attacker stack flaws
+  that each sit under the largest and pay for none of them.
+- **Integer basis points everywhere.** There is a test for a share of exactly 40% against a 40% cap,
+  because `0.4` has no binary representation and a float comparison can fall either side of it on
+  identical inputs. A rule that decides differently on the same facts is worse than no rule.
+- **Every weight carries a reason, `INDEPENDENT` included** — counting in full is a decision that
+  should be as auditable as discounting one. A blocked counterparty reports only its blocking
+  reasons, so the dashboard shows the line that explains the refusal rather than noise around it.
+
+**`@tab/scoring` — effective revenue → tier → ceiling.** Purity is the product requirement:
+`verify-ceiling` says a stranger recomputes a published ceiling from HCS, the public Mirror Node and
+this repo. They do not have our Postgres and they do not have our clock. `CeilingInputs` is the
+contract — if a number is not in that type it may not affect the output — and there is a test that
+recomputes a ceiling from its own published inputs and hash-matches.
+
+Two bugs caught while writing it, both mine, both in the first draft:
+
+1. **Tier fall-through was wrong.** Failing A's requirements returned "the tier below" without
+   checking that tier's own requirements — so a tab with A-grade revenue and *zero* settlement
+   history would have been awarded B, which needs a streak of 4. Exactly the profile the streak
+   requirement exists to exclude. Now it walks bands high to low and awards the first one FULLY met.
+2. **Two divisions instead of one.** `revenue × multiple × ramp` divided by 10000 twice truncates
+   twice, and the loss is asymmetric — it lands harder on a low ramp than a high one, for no reason
+   visible in the published inputs. One division at the end.
+
+Also pinned: **the asymmetry rule.** `mayApplyMidWindow` — a ceiling may SHRINK mid-window
+instantly, and may never GROW mid-window. If growth were allowed the loop attacker's fastest path
+is to fake revenue, watch the ceiling rise inside the same window, spend against it before anything
+settles, and repeat. Growth waits for a settlement that actually cleared. `apps/engine` enforces
+the transition; scoring only supplies the predicate.
+
+**The honest gap, stated in `@tab/graph`'s module doc and staying stated:** a non-reciprocal
+collusion ring defeats this engine. Value never flows back, funding roots genuinely separate,
+nothing fires — the accounts look independent because on-chain they are, and the relationship lives
+somewhere this data cannot see. The claim is that attestation plus independence raises the COST of
+faking revenue, not that it reduces it to zero.
+
+**Next:** `apps/engine` wires these to Mirror Node and publishes ceilings to HCS, then
+`agents/loop-attacker` demonstrates the refusal on camera.
 
 ### 2026-09-06 (night) — Claude — the reconciler finally proves a spend, and a double-payment bug
 
