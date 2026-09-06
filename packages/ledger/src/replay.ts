@@ -1,4 +1,4 @@
-import { usdc } from '@tab/money'
+import { usdc, type MicroUsdc } from '@tab/money'
 import { decode } from '@tab/protocol'
 import { inConsensusOrder, type Entry } from './entries.ts'
 
@@ -106,4 +106,56 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
 
   for (const [tab, entries] of byTab) byTab.set(tab, inConsensusOrder(entries))
   return { byTab, replayed, skipped }
+}
+
+/** The ceiling in force for a tab, as published. */
+export interface PublishedCeiling {
+  tab: string
+  ceiling: MicroUsdc
+  /** The formula's result, when the asymmetry rule held a growth back. */
+  computed?: MicroUsdc
+  window: number
+  binding: string
+  cause: string
+  at: string
+  model: string
+  hash: string
+}
+
+/**
+ * Latest published ceiling per tab.
+ *
+ * Here rather than in an app because THREE readers wanted it — the gateway
+ * enforces it, the engine seeds its asymmetry state from it, and a fourth
+ * (`tools/verify`) deliberately does not use this one, because it needs the
+ * `inputs` object VERBATIM to rehash and a typed round-trip would risk
+ * changing key order. That difference is real, so verify keeps its own reader.
+ *
+ * "Latest" by consensus timestamp, strictly later only. An equal timestamp
+ * cannot occur on one topic, and treating "not earlier" as "later" would let a
+ * re-read flip between two messages depending on page boundaries.
+ */
+export function ceilingsFromMessages(
+  messages: readonly TopicMessage[],
+): Map<string, PublishedCeiling> {
+  const byTab = new Map<string, PublishedCeiling>()
+  for (const message of messages) {
+    const result = decode(utf8.decode(message.payload))
+    if (!result.ok || result.message.t !== 'ceiling') continue
+    const msg = result.message
+    const snapshot: PublishedCeiling = {
+      tab: msg.tab,
+      ceiling: usdc(msg.ceil),
+      ...(msg.computed ? { computed: usdc(msg.computed) } : {}),
+      window: msg.w,
+      binding: msg.bind,
+      cause: msg.cause,
+      at: message.consensusTimestamp,
+      model: msg.model,
+      hash: msg.hash,
+    }
+    const existing = byTab.get(msg.tab)
+    if (!existing || snapshot.at > existing.at) byTab.set(msg.tab, snapshot)
+  }
+  return byTab
 }

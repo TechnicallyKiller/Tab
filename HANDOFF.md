@@ -24,12 +24,12 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** **a decision, then `apps/web`.** The decision is whether to publish a `v2`
-parameter set with a lower starter floor (`0.250000`) so earned credit becomes visible early and the
-refusal beat is demonstrable — see the two options in [docs/DEMO.md](docs/DEMO.md). It changes every
-future ceiling, so it is not mine to make. Then wire `apps/web` to live data.
+**Next action:** wire `apps/web` to live data. The dashboard is where the video lives, and a mocked
+dashboard on camera is a credibility risk — if a judge cross-references one number against HashScan
+and it does not match, every other claim becomes suspect. 4.5k lines of UI already exist; the
+wiring is a data layer over endpoints the gateway already serves.
 
-**Last updated:** 2026-09-07 by Claude (demo doc — the attack does not collapse the ceiling, and why that is the stronger claim)
+**Last updated:** 2026-09-07 by Claude (v2 published; the CEILING_EXCEEDED refusal observed end to end)
 
 ### Written: 19 of 27 packages
 
@@ -188,6 +188,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-07 | **`@tab/params` v2 IS THE SET IN FORCE (`tab-v2`). One change from v1: the starter floor `1.000000 → 0.250000`.** v1 made the product's central claim untestable — earned credit for one young customer is `0.2352` against a `1.0000` floor, so the GRANT dominated the EARNING for an agent's whole early life. `v1.ts` is byte-identical and stays forever; its frozen hash test is unchanged. **`pnpm verify-ceiling` still PASSES all six ceilings published under `tab-v1`**, because it resolves each message's own `model` field — the frozen-set claim demonstrated, not asserted | `params`, `scoring`, `engine`, `verify` |
+| 2026-09-07 | **The gateway's starter ceiling now comes from `@tab/params`, not a local env default.** It read `STARTER_CEILING_USDC ?? '1.000000'`, a SECOND source of truth for a policy number params exists to own — and it showed immediately: v2 lowered the floor to 0.25 and the gateway kept granting 1.0. Same for the per-call cap. The env vars remain as explicit demo overrides | `gateway`, `params` |
+| 2026-09-07 | **The engine RESUMES its in-force ceiling from the ceiling topic on a cold start.** It used to seed from its own fresh computation, which was a hole in the asymmetry rule: a restart accepted whatever it had just computed, so a growth the running engine would have HELD became effective simply because the process bounced. The published ceiling is the durable record of what is in force | `engine`, `verify` |
+| 2026-09-07 | **`ceilingsFromMessages` lives in `@tab/ledger`** — the gateway enforces the ceiling and the engine seeds from it, and both had a copy. `tools/verify` deliberately keeps a FOURTH reader, because it needs the `inputs` object verbatim to rehash and a typed round-trip risks changing key order. That difference is real and is not consolidated away | `ledger`, `gateway`, `engine`, `verify` |
 | 2026-09-07 | **THE ATTACK DOES NOT CAUSE A CEILING COLLAPSE, and the plan's 1:10 beat is wrong about why.** Manufactured revenue is worth ZERO from the first engine pass that can see the funding edge, so the ceiling never inflates and there is nothing to collapse. The detector is faster than the demo script assumed. The honest beat is "the manufactured revenue counts for zero and the ceiling does not move — the attack buys nothing" | `web`, demo, `loop-attacker` |
 | 2026-09-07 | **`SHARED_FUNDING_ROOT` was unreachable — the THIRD rule of that family.** `facts` only held one `fundedBy` per account, so the traversal saw one hop each side and never the chain between. `apps/engine` now walks ancestry to `params.fundingAncestryHops`, memoised. Verified live: the indirect customer went from 48% (young × concentrated) to **33%** (0.7 × 0.6 × 0.8) once the shared root was visible | `engine`, `graph`, `verify` |
 | 2026-09-07 | **v1's STARTER FLOOR PINS A NEW AGENT'S CEILING.** Earned credit for one young customer is `1.0000 × 0.336 × 1.0 × 0.70 = 0.2352`, against a floor of `1.0000` — so the floor, not the underwriting, decides the ceiling for an agent's whole early life. Beating it needs **>4.25 raw revenue** (~9 calls at 0.50) from a single customer. **Lowering the floor is a `v2`, not an edit** — ceilings are already published under `tab-v1`. User's decision, laid out in `docs/DEMO.md` | `params`, `scoring`, demo |
@@ -275,6 +279,68 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (end of day) — Claude — v2 published, and the refusal OBSERVED
+
+Two things asked for, both done and both measured.
+
+**1. `@tab/params` v2.** One change from v1: the starter floor `1.000000 → 0.250000`.
+
+The reason is not the demo, it is that **v1 made the product's central claim untestable.** Tab's
+thesis is that credit is EARNED. Earned credit for one young customer computes to
+`1.0000 × 0.336 × 1.0 × 0.70 = 0.2352`, against a `1.0000` floor — so the grant dominated the
+earning for an agent's entire early life, and no amount of honest revenue could move the number.
+
+`v1.ts` is byte-identical and stays forever; its frozen hash test is unchanged at
+`59b1d9f6…`. The decisive check afterwards: **`pnpm verify-ceiling` still passes all six ceilings
+published under `tab-v1`**, because it resolves each message's own `model` rather than using
+whatever is current. That is the frozen-set claim demonstrated rather than asserted, and it is a
+demo beat in its own right.
+
+Two second-sources-of-truth fell out of it. The gateway read
+`STARTER_CEILING_USDC ?? '1.000000'` — so v2 lowered the floor and the gateway carried on granting
+`1.0000`. Now from params, with the env var kept as an explicit override. Same for the per-call cap.
+
+**2. The refusal, observed end to end.**
+
+```
+CEILING_EXCEEDED — Spend of 0.3000 refused. Outstanding 0.0000 plus holds 0.0000
+plus the request would pass the 0.2500 ceiling.   shortfall 0.0500
+```
+
+The sequence, with the numbers as they appeared:
+
+| Step | Measured |
+|---|---|
+| 4 calls at 0.5000 | 2.0000 raw revenue |
+| window closes, engine recomputes | revenue `0.5040` (1.50 raw × 0.336) |
+| **earned credit exceeds the floor** | ceiling **`0.3528` bound by `computed`** |
+| gateway polls HCS | `1.0000 → 0.3528`, seq 8 |
+| agent spends into the headroom | `0.3000` paid, receipt 37 |
+| next window, revenue ages out | revenue `0.0000`, tier `Unrated` |
+| shrink applies immediately | `shrink 0.3528 → 0.2500` |
+| next spend | **`CEILING_EXCEEDED`, shortfall `0.0500`** |
+
+**`bound by computed` is the line that matters.** It means the ceiling was decided by what the agent
+EARNED. Under v1 that read `bound by starter_floor` for every agent, always.
+
+**What produced the refusal, stated precisely: NOT the attack.** The ceiling fell because the
+revenue that justified it aged out of the trailing window. That is a real product behaviour and it
+is the mechanism to name on camera. Conflating it with the attack is the one dishonest move
+available here, and the attack's own beat — "the manufactured revenue counts for zero and the
+ceiling does not move" — is strong enough without it.
+
+**A third hole closed on the way.** The engine now resumes its in-force ceiling from the topic on a
+cold start (`resumed in-force 0.3528 from 0.0.10182697`). It used to seed from its own fresh
+computation, so a restart accepted whatever it had just computed — a growth the running engine would
+have held became effective simply because the process bounced. And `ceilingsFromMessages` moved into
+`@tab/ledger`, since the gateway and the engine both had a copy; `tools/verify` keeps its own
+deliberately, because it needs the `inputs` object verbatim to rehash.
+
+165 tests, 5/5 guards. `docs/DEMO.md` now marks the refusal beat RUNS, OBSERVED.
+
+**Next:** wire `apps/web` to live data — the dashboard is where the video lives, and a mocked
+dashboard on camera is a credibility risk if any number fails a HashScan cross-check.
 
 ### 2026-09-07 (later still) — Claude — the demo refusal: reachable, and NOT where the plan put it
 

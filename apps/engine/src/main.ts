@@ -26,7 +26,7 @@ import { clientFromEnv } from '@tab/hedera'
 import { MirrorClient, configureGlobalHttp } from '@tab/mirror'
 import { bp, format, formatBpMultiple, formatBpPercent, usdc } from '@tab/money'
 import { MODEL_ID, describeParams, params, windowOf } from '@tab/params'
-import { rampAfter } from '@tab/ledger'
+import { ceilingsFromMessages, checkWindowSettledOnce, rampAfter, type Entry } from '@tab/ledger'
 import { WEIGHT_REASON_DETAIL, type AccountFacts, type AccountId } from '@tab/graph'
 import {
   entriesFromMessages, readTopic, reassembleChunks,
@@ -245,7 +245,28 @@ async function pass(): Promise<void> {
     }
   }
 
-  // The asymmetry rule. Shrink now; hold growth for a clean settlement.
+  /*
+   * The asymmetry rule. Shrink now; hold growth for a clean settlement.
+   *
+   * On a cold start the prior in-force value is read from the TOPIC, not seeded
+   * from the fresh computation. Seeding from the computation was a hole in the
+   * rule: a restart would accept whatever it had just computed, so a growth the
+   * running engine would have held became immediately effective simply because
+   * the process had been restarted. The published ceiling is the durable record
+   * of what is in force, so it is the right thing to resume from.
+   */
+  if (!ceilingState) {
+    const published = ceilingsFromMessages(
+      reassembleChunks((await readTopic(mirror, { topicId: ceilingTopic })).items).assembled,
+    ).get(tabAccount)
+    if (published) {
+      ceilingState = { inForce: published.ceiling, window: published.window }
+      console.log(
+        `    resumed in-force ${format(published.ceiling)} from ${ceilingTopic} (window ${published.window})`,
+      )
+    }
+  }
+
   const previous: CeilingState = ceilingState ?? {
     inForce: result.ceiling.ceiling,
     window: currentWindow,

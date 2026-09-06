@@ -1,4 +1,5 @@
 import { usdc, type MicroUsdc } from '@tab/money'
+import { caps } from '@tab/params'
 
 /**
  * Environment, validated at boot.
@@ -68,8 +69,21 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): GatewayEnv {
     port: Number(source['GATEWAY_PORT'] ?? 8080),
     windowSeconds: Number(source['WINDOW_SECONDS'] ?? 600),
     demoMode: source['DEMO_MODE'] === 'true',
-    starterCeiling: usdc(source['STARTER_CEILING_USDC'] ?? '1.000000'),
-    perCallCap: usdc(source['PER_CALL_CAP_USDC'] ?? '0.050000'),
+    /*
+     * From `@tab/params`, not from a local default.
+     *
+     * This read `STARTER_CEILING_USDC ?? '1.000000'`, which made it a SECOND
+     * source of truth for a policy number params exists to own — and it showed:
+     * v2 lowered the floor to 0.250000 and the gateway kept granting 1.0000 to
+     * an unknown tab. The env var stays as an explicit override for a demo, but
+     * the default now tracks the versioned set.
+     */
+    starterCeiling: source['STARTER_CEILING_USDC']
+      ? usdc(source['STARTER_CEILING_USDC'])
+      : caps.starterCeiling,
+    perCallCap: source['PER_CALL_CAP_USDC']
+      ? usdc(source['PER_CALL_CAP_USDC'])
+      : caps.perCall,
     holdTtlSeconds: Number(source['HOLD_TTL_SECONDS'] ?? 60),
   }
 

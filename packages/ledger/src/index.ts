@@ -70,7 +70,9 @@ export {
 } from './invariants.ts'
 
 export {
+  ceilingsFromMessages,
   entriesFromMessages,
+  type PublishedCeiling,
   type Replay,
   type TopicMessage,
 } from './replay.ts'

@@ -14,6 +14,12 @@ PER_CALL_CAP_USDC=0.500000    # raised from 0.05 so a few calls move the numbers
 TRAILING_WINDOWS=1            # revenue averages over one closed window
 ```
 
+Parameters come from `@tab/params` **v2** (`MODEL_ID = tab-v2`). The only difference from v1 is the
+starter floor, `1.000000 → 0.250000`, and it is the difference between a demo where the ceiling can
+be seen to rise and one where the floor decides everything. `v1.ts` stays byte-identical beside it,
+and `pnpm verify-ceiling` still passes every ceiling published under `tab-v1` — which is the frozen
+-set claim demonstrated rather than asserted.
+
 Client-side caps are separate and belong to the payers, because a customer decides what it will
 pay: `PAYER_MAX_PER_CALL_USDC` and `ATTACK_MAX_PER_CALL_USDC`. Both were hardcoded once and
 silently rejected every call when the endpoint price changed, reported by x402 as
@@ -61,7 +67,7 @@ independence. That is worth saying out loud rather than letting a viewer assume 
 Tab `0.0.10390398` holds no key it needs, and `pnpm tab:create` funds it with nothing. It calls an
 unmodified x402 seller and gets an answer. The seller is paid on chain; the agent signed nothing.
 
-Starter ceiling `1.0000`, bound by `starter_floor`.
+Starter ceiling `0.2500` under v2, bound by `starter_floor`.
 
 ### 1:10 — the attack · **RUNS, with a corrected claim**
 
@@ -129,8 +135,8 @@ skipped.
 still on the topic. And the full float invariant needs `FLOAT_TOTAL_USDC`, which is on no topic, so
 a stranger must be told that one number. Both are visible in the output. Leave them visible.
 
-**The plan says "ramp 15% → 30%".** v1 parameters start the ramp at 25%, so it reads `25% → 40%`.
-The parameters are right and the plan's line is stale.
+**The plan says "ramp 15% → 30%".** The parameter sets start the ramp at 25%, so it reads
+`25% → 40%`. The parameters are right and the plan's line is stale.
 
 ### 4:30 — what is not solved · **RUNS**
 
@@ -140,37 +146,49 @@ published, and one hold message per attempted spend not being viable at volume.
 
 ---
 
-## The refusal beat — **NOT YET OBSERVED**
+## The refusal beat — **RUNS, OBSERVED**
 
-A `CEILING_EXCEEDED` refusal is reachable but has not been run, and the reason is a parameter fact
-worth deciding on rather than working around.
-
-With v1 parameters, a new agent's ceiling is **pinned at the starter floor**:
-
+```json
+{
+  "refused": {
+    "rule": "CEILING_EXCEEDED",
+    "reason": "Spend of 0.3000 refused. Outstanding 0.0000 plus holds 0.0000 plus the request would pass the 0.2500 ceiling.",
+    "evidence": { "requested": "0.3000", "ceiling": "0.2500", "shortfall": "0.0500" },
+    "guidance": "Earn first, or wait for settlement to clear outstanding.",
+    "retryable": true
+  }
+}
 ```
-  earned ceiling = revenue × weight × tier multiple × ramp
-                 = 1.0000 × 0.336 × 1.0 × 0.70
-                 = 0.2352        ← well below the 1.0000 starter floor
-```
 
-For earned credit to beat the floor, a single young customer must generate **> 4.25** of raw
-revenue — about **9 calls** at the demo price. So the floor, not the underwriting, decides a new
-agent's ceiling for its entire early life, and a ceiling that never rises cannot visibly fall.
+From the real fast path, reading a ceiling the real engine published to HCS. The full observed
+sequence, with the numbers as they appeared:
 
-Two honest ways forward, both the user's call:
+| Step | What happened | Measured |
+|---|---|---|
+| 1 | Customer makes 4 calls at 0.5000 | 2.0000 raw revenue |
+| 2 | Window closes; engine recomputes | revenue `0.5040` (1.50 raw × 0.336 weight) |
+| 3 | Earned credit now exceeds the floor | ceiling **`0.3528` bound by `computed`** — not by the floor |
+| 4 | Engine publishes; gateway polls | seq 8, gateway moves `1.0000 → 0.3528` |
+| 5 | Agent spends into the headroom | `0.3000` paid, receipt 37 |
+| 6 | Next window: the revenue ages out of the trailing average | revenue `0.0000`, tier `Unrated` |
+| 7 | Ceiling falls back to the floor, **shrink applies immediately** | `shrink 0.3528 → 0.2500` |
+| 8 | The next spend | **`CEILING_EXCEEDED`, shortfall `0.0500`** |
 
-1. **Lower the starter floor in a `v2` parameter set** (say `0.250000`), so earned credit becomes
-   visible after a handful of calls. This is a **v2, not an edit** — ceilings have already been
-   published under `tab-v1`, and `verify-ceiling` catches a formula or parameter change made
-   without a version bump. It caught exactly that once already.
-2. **Keep v1 and demonstrate floor-pinning as the intended conservative behaviour**, then show the
-   refusal from a different real cause: outstanding accrued against a ceiling that later shrinks
-   when revenue ages out of the trailing window, or when a missed settlement takes the ramp −30%.
+**What produced the refusal, stated precisely.** Not the attack — the ceiling fell because *the
+revenue that justified it aged out of the trailing window*. That is a real product behaviour and it
+is the mechanism to name on camera. Conflating it with the attack would be the one dishonest move
+available here, and the attack's own beat is strong enough without it.
 
-Either is defensible. What is not defensible is showing a refusal without saying which mechanism
-produced it.
+**Step 3 is the beat that matters most, and it only exists because of v2.** `bound by computed`
+means the ceiling was decided by what the agent EARNED, not by what it was granted. Under v1 that
+line read `bound by starter_floor` for every agent, forever — the grant dominated the earning and
+the product's central claim was untestable.
 
----
+**Step 7 also proves the restart hole is closed.** The engine logged
+`resumed in-force 0.3528 from 0.0.10182697 (window 5962359)` — it read the ceiling in force from
+the topic rather than seeding from its own fresh computation. Seeding from the computation was a
+hole in the asymmetry rule: a restart would accept whatever it had just computed, so a growth the
+running engine would have held became effective simply because the process bounced.
 
 ## Reproducing the independence table
 

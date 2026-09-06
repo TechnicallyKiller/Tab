@@ -12,9 +12,10 @@
 import { usdc, type MicroUsdc } from '@tab/money'
 import type { ParameterSet, Tier } from './schema.ts'
 import { v1 } from './versions/v1.ts'
+import { v2 } from './versions/v2.ts'
 
 /** The set in force. Bumped on ANY parameter change. */
-export const MODEL_VERSION = 1
+export const MODEL_VERSION = 2
 
 /**
  * The version as a published identifier.
@@ -28,9 +29,18 @@ export const MODEL_VERSION = 1
  */
 export const MODEL_ID = `tab-v${MODEL_VERSION}`
 
-const SETS: Record<number, ParameterSet> = { 1: v1 }
+/*
+ * Every version ever published, forever.
+ *
+ * A ceiling published under v1 must stay recomputable in week three, so
+ * versions are added and never removed. `paramsForVersion` throws on an unknown
+ * one rather than falling back to the current set — verifying a v1 ceiling
+ * against v2 numbers would report a mismatch that looks exactly like fraud and
+ * is only a lookup bug.
+ */
+const SETS: Record<number, ParameterSet> = { 1: v1, 2: v2 }
 
-export const params: ParameterSet = v1
+export const params: ParameterSet = v2
 
 /**
  * The parameter set a historical ceiling was computed under.
@@ -100,6 +110,7 @@ export function describeParams(set: ParameterSet = params): string[] {
 
 export { parameterSet, tier, type ParameterSet, type Tier } from './schema.ts'
 export { v1 } from './versions/v1.ts'
+export { v2 } from './versions/v2.ts'
 export {
   windowConsensusRange,
   windowEnd,

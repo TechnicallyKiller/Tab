@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import {
   MODEL_ID, MODEL_VERSION, aprBpFor, caps, describeParams, params, paramsForVersion, tierMultipleBpFor, v1,
 } from './index.ts'
+import { v2 } from './versions/v2.ts'
 import { parameterSet } from './schema.ts'
 import { windowConsensusRange, windowEnd, windowOf, windowStart } from './window.ts'
 
@@ -28,8 +29,42 @@ function canonical(value: unknown): string {
 }
 
 test('v1 is frozen — this hash may never change', () => {
+  // Ceilings are published under tab-v1 and verify-ceiling recomputes them from
+  // these numbers forever. If this fails, historical ceilings just became
+  // unverifiable — that is not a test to update.
   const hash = createHash('sha256').update(canonical(v1)).digest('hex')
   assert.equal(hash, '59b1d9f691cd7fe6dce030f5fc5750583fcc3ab5c42aad6f051534874d3ccb0f')
+})
+
+test('v2 is frozen — this hash may never change', () => {
+  const hash = createHash('sha256').update(canonical(v2)).digest('hex')
+  assert.equal(hash, '5c08590b49a03e568326546b9ddf257c474247a4f52684dc49f5707e5687a7f9')
+})
+
+test('v2 differs from v1 in EXACTLY one field', () => {
+  // One deliberate change per version. A version that moved several numbers at
+  // once is one nobody can reason about after the fact.
+  const differing = Object.keys(v1).filter(
+    (k) => canonical(v1[k as keyof typeof v1]) !== canonical(v2[k as keyof typeof v2]),
+  )
+  assert.deepEqual(differing.sort(), ['caps', 'version'])
+  const { starterCeilingUsdc: a, ...restV1 } = v1.caps
+  const { starterCeilingUsdc: b, ...restV2 } = v2.caps
+  assert.deepEqual(restV1, restV2, 'only the starter floor moved inside caps')
+  assert.equal(a, '1.000000')
+  assert.equal(b, '0.250000')
+})
+
+test('the v2 floor lets earned credit become visible, which v1 did not', () => {
+  // The reason v2 exists, as arithmetic. Earned credit for one young customer
+  // is revenue x weight x multiple x ramp = 1.0 x 0.336 x 1.0 x 0.70.
+  const earned = 0.2352
+  assert.ok(earned < Number(v1.caps.starterCeilingUsdc), 'v1: the grant dominates the earning')
+  const threeCalls = 1.5 * 0.336 * 1.0 * 0.7
+  assert.ok(
+    threeCalls > Number(v2.caps.starterCeilingUsdc),
+    'v2: three calls at 0.50 clear the floor, so the ceiling can be seen to rise',
+  )
 })
 
 test('the schema rejects a version that omits a field', () => {
@@ -40,6 +75,14 @@ test('the schema rejects a version that omits a field', () => {
 })
 
 /* ── version lookup ─────────────────────────────────────────────────────── */
+
+test('every published version stays resolvable, not just the current one', () => {
+  // v1 must remain recomputable forever, or every ceiling published under it
+  // becomes unverifiable.
+  assert.equal(paramsForVersion(1).version, 1)
+  assert.equal(paramsForVersion(2).version, 2)
+  assert.notEqual(paramsForVersion(1).caps.starterCeilingUsdc, paramsForVersion(2).caps.starterCeilingUsdc)
+})
 
 test('the current set is the one MODEL_VERSION names', () => {
   assert.equal(params.version, MODEL_VERSION)
@@ -68,6 +111,7 @@ test('a better tier earns a higher ceiling multiple', () => {
 test('caps parse to money without going through a float', () => {
   assert.equal(caps.perCall, 50_000n)
   assert.equal(caps.perWindow, 1_000_000n)
+  assert.equal(caps.starterCeiling, 250_000n, 'v2 lowered the starter floor')
   assert.equal(typeof caps.starterCeiling, 'bigint')
 })
 
@@ -78,7 +122,9 @@ test('the ramp is asymmetric — trust is slower to earn than to lose', () => {
 test('the config dump names the testnet age tuning out loud', () => {
   const dump = describeParams().join('\n')
   assert.match(dump, /TUNED DOWN FOR TESTNET/)
-  assert.match(dump, /model version {8}1/)
+  // Tracks MODEL_VERSION rather than pinning a literal, so a version bump does
+  // not fail a test about the age tuning.
+  assert.match(dump, new RegExp(`model version {8}${MODEL_VERSION}`))
 })
 
 /* ── window bucketing ───────────────────────────────────────────────────── */

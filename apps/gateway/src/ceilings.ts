@@ -13,40 +13,34 @@
  * snapshot the real engine wrote. If the gateway needed a private nudge to
  * refuse, the demo would prove nothing.
  */
-import { decodeUtf8, readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
-import { format, usdc, type MicroUsdc } from '@tab/money'
-import { decode } from '@tab/protocol'
+import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
+import { format } from '@tab/money'
+import { ceilingsFromMessages, type PublishedCeiling } from '@tab/ledger'
 
-export interface CeilingSnapshot {
-  tab: string
-  /** What to enforce. */
-  ceiling: MicroUsdc
-  /** Present when the asymmetry rule is holding a computed growth back. */
-  computed?: MicroUsdc
-  window: number
-  binding: string
-  cause: string
-  /** Consensus timestamp of the message this came from. */
-  at: string
-  model: string
-  hash: string
-}
+/*
+ * The decode lives in `@tab/ledger`, not here.
+ *
+ * Three readers wanted it — this one enforces the ceiling, `apps/engine` seeds
+ * its asymmetry state from it, and both had their own copy. `tools/verify`
+ * deliberately keeps a fourth, because it needs the `inputs` object VERBATIM to
+ * rehash and a typed round-trip risks changing key order; that difference is
+ * real, so it is not consolidated away.
+ */
+export type CeilingSnapshot = PublishedCeiling
 
 export interface CeilingReplay {
-  /** Latest ceiling per tab, by consensus order. */
+  /** Latest ceiling per tab, in consensus order. */
   byTab: Map<string, CeilingSnapshot>
   read: number
-  skipped: number
 }
 
 /**
  * Replay the ceiling topic and keep the LATEST per tab.
  *
- * "Latest" by consensus timestamp, not by arrival: HCS orders messages and that
- * order is the only one that matters. Two engines publishing for one agent would
- * make this ambiguous, which is exactly why the README requires ceiling
- * publication to be serialised per agent — this reader cannot repair that, it
- * can only pick the last one and be wrong deterministically.
+ * Two engines publishing for one agent would make this ambiguous, which is why
+ * the README requires ceiling publication to be serialised per agent — this
+ * reader cannot repair that, only pick the last one and be wrong
+ * deterministically.
  */
 export async function replayCeilings(
   mirror: MirrorClient,
@@ -54,41 +48,8 @@ export async function replayCeilings(
 ): Promise<CeilingReplay> {
   const walk = await readTopic(mirror, { topicId })
   const { assembled } = reassembleChunks(walk.items)
-
-  const byTab = new Map<string, CeilingSnapshot>()
-  let read = 0
-  let skipped = 0
-
-  for (const message of assembled) {
-    const result = decode(decodeUtf8(message.payload))
-    if (!result.ok) {
-      skipped++
-      continue
-    }
-    if (result.message.t !== 'ceiling') continue
-    const msg = result.message
-
-    const snapshot: CeilingSnapshot = {
-      tab: msg.tab,
-      ceiling: usdc(msg.ceil),
-      ...(msg.computed ? { computed: usdc(msg.computed) } : {}),
-      window: msg.w,
-      binding: msg.bind,
-      cause: msg.cause,
-      at: message.consensusTimestamp,
-      model: msg.model,
-      hash: msg.hash,
-    }
-
-    const existing = byTab.get(msg.tab)
-    // Strictly later only. An equal timestamp cannot happen on one topic, and
-    // treating "not earlier" as "later" would let a re-read flip between two
-    // messages depending on page boundaries.
-    if (!existing || snapshot.at > existing.at) byTab.set(msg.tab, snapshot)
-    read++
-  }
-
-  return { byTab, read, skipped }
+  const byTab = ceilingsFromMessages(assembled)
+  return { byTab, read: assembled.length }
 }
 
 /**
