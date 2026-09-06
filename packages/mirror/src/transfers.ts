@@ -126,3 +126,24 @@ export function hbarNetFor(tx: MirrorTransaction, accountId: EntityId): bigint {
   }
   return net
 }
+
+/**
+ * Normalise a Hedera transaction id.
+ *
+ * The same transaction has two spellings depending on where you read it:
+ *
+ *   SDK / receipts   0.0.10379287@1788620574.542753968
+ *   Mirror Node      0.0.10379287-1788620574-542753968
+ *
+ * Comparing them raw makes every transfer look unreceipted, which is exactly
+ * how the reconciler first reported 16 phantom discrepancies against a
+ * perfectly reconciled ledger. Always normalise before matching.
+ */
+export function normalizeTransactionId(id: string): string {
+  return id.replace('@', '-').replace(/\.(?=\d+$)/, '-')
+}
+
+/** True when two ids refer to the same transaction, whichever spelling. */
+export function sameTransaction(a: string, b: string): boolean {
+  return normalizeTransactionId(a) === normalizeTransactionId(b)
+}

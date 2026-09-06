@@ -22,7 +22,7 @@ export interface WindowNet {
   receiptCount: number
   /** Refusals are counted but never summed — they moved nothing. */
   refusalCount: number
-  /** Repairs are folded into debits, and surfaced so a clean window is visible. */
+  /** Repairs fold into debits or credits by sign, and are surfaced so a clean window is visible. */
   repairCount: number
 }
 
@@ -51,7 +51,12 @@ export function netWindow(entries: readonly Entry[], window: number): WindowNet 
         debitAmounts.push(entry.amount)
         break
       case 'repair':
-        debitAmounts.push(entry.amount)
+        // Route by SIGN, not by kind. A `missing_transfer` repair reverses a
+        // debit for a movement that never happened, so its amount is positive;
+        // filing that under debits would break the documented `debits <= 0`
+        // invariant and misreport the window even though the net came out right.
+        if (entry.amount < 0n) debitAmounts.push(entry.amount)
+        else creditAmounts.push(entry.amount)
         repairCount++
         break
       case 'interest':

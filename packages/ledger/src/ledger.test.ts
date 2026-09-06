@@ -282,3 +282,44 @@ test('holds resolve to pending, committed or expired', () => {
   const byId = Object.fromEntries(resolveHolds(entries, ts(10)).map((h) => [h.holdId, h.state]))
   assert.deepEqual(byId, { pending: 'pending', committed: 'committed', expired: 'expired' })
 })
+
+/* ── repairs are routed by sign ──────────────────────────────────────────── */
+
+function repair(
+  amt: string,
+  at: number,
+  reason: 'missing_debit' | 'missing_transfer',
+): Entry {
+  return {
+    kind: 'repair', counterparty: '0.0.5120033', amount: usdc(amt),
+    at: ts(at), window: 148, transactionId: `tx-r${at}`, reason,
+  }
+}
+
+test('a missing_debit repair adds a debit', () => {
+  const net = netWindow([debit('h1', '-0.040000', 1), repair('-0.040000', 2, 'missing_debit')], 148)
+  assert.equal(format(net.debits), '−0.0800')
+  assert.equal(format(net.credits), '0.0000')
+  assert.equal(format(net.net), '−0.0800')
+  assert.equal(net.repairCount, 1)
+})
+
+test('a missing_transfer repair reverses the debit without corrupting debits', () => {
+  // The receipt claimed 0.04 moved; Mirror Node has no such transaction. The
+  // repair cancels it, and the window must read as if the debit never happened.
+  const net = netWindow(
+    [debit('h1', '-0.040000', 1), repair('0.040000', 2, 'missing_transfer')],
+    148,
+  )
+  assert.equal(format(net.net), '0.0000')
+  // The reversal is a credit, so `debits` stays negative as documented.
+  assert.equal(format(net.debits), '−0.0400')
+  assert.ok(net.debits <= 0n, 'debits must never go positive')
+  assert.equal(format(net.credits), '0.0400')
+  assert.equal(net.repairCount, 1)
+})
+
+test('a reversing repair returns the tab balance to zero', () => {
+  const entries = [debit('h1', '-0.040000', 1), repair('0.040000', 2, 'missing_transfer')]
+  assert.equal(format(position(entries, CEILING, NOW).balance), '0.0000')
+})

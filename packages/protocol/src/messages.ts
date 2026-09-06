@@ -73,8 +73,16 @@ export const repairReceipt = base.extend({
   cp: entityId,
   amt: amount,
   tx: z.string().min(8).max(80),
-  /** Why the reconciler had to write this. */
-  why: z.enum(['missing_debit', 'orphan_hold', 'amount_mismatch']),
+  /**
+   * Why the reconciler had to write this.
+   *
+   * `missing_transfer` is the strict direction and was missing from the first
+   * version of this enum: a debit receipt naming a transfer that never reached
+   * consensus. Its repair REVERSES the debit (positive `amt`), where the other
+   * three add or adjust one. See @tab/ledger's netting, which routes a repair
+   * by the sign of its amount for exactly this reason.
+   */
+  why: z.enum(['missing_debit', 'missing_transfer', 'orphan_hold', 'amount_mismatch']),
 })
 
 export const receipt = z.discriminatedUnion('t', [

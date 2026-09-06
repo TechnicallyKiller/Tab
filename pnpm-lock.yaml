@@ -110,6 +110,34 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  apps/settlement:
+    dependencies:
+      '@hiero-ledger/sdk':
+        specifier: 2.87.0
+        version: 2.87.0(bn.js@5.2.3)
+      '@tab/hedera':
+        specifier: workspace:*
+        version: link:../../packages/hedera
+      '@tab/ledger':
+        specifier: workspace:*
+        version: link:../../packages/ledger
+      '@tab/mirror':
+        specifier: workspace:*
+        version: link:../../packages/mirror
+      '@tab/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@tab/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   apps/web:
     dependencies:
       '@tab/money':

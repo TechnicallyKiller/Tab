@@ -24,13 +24,14 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** settlement. `planSettlement` is written and tested, HIP-423 is proven, and the tab
-is sitting at `−0.0600` waiting to be netted into one transfer. Then `graph` + `scoring`, which is
-what the attack demo needs.
+**Next action:** the `unsettled:` defect in `apps/gateway/src/spend.ts:143` — it is the one thing
+blocking the reconciler from making a single positive match, and reconciliation is a demo artifact.
+Then wire the window tick (`tick.ts` is written and tested but never invoked; there is no
+`apps/settlement/src/main.ts`). Then `graph` + `scoring`, which is what the attack demo needs.
 
-**Last updated:** 2026-09-06 by Claude (earn leg — the tab now swings positive)
+**Last updated:** 2026-09-06 by Claude (reconciler — live on testnet, one real violation repaired)
 
-### Written: 12 of 27 packages
+### Written: 13 of 27 packages
 
 `money` · `protocol` · `ledger` · `mirror` · `hedera` · `x402` · `testkit` · `web`
 `gateway` · `honest-agent` · `bootstrap` · `probes`
@@ -187,6 +188,12 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-06 | **`repairReceipt.why` gained `missing_transfer`**, and **`@tab/ledger` now routes a repair by the SIGN of its amount**, not by kind. A `missing_transfer` repair REVERSES a debit, so its amount is positive; the old code filed every repair under `debits`, which is documented negative. The net came out right, so a window would have misreported silently | `protocol`, `ledger`, `settlement`, `web` (window display) |
+| 2026-09-06 | **The reconciler is idempotent, and must stay that way.** It skips a debit that already has a `missing_transfer` repair on the topic. Without that check `--repair` rewrites a reversal on every run — a −0.04 error becomes +0.36 after ten runs. **If you add a repair kind, add its already-repaired check in the same commit** | `settlement` |
+| 2026-09-06 | **An unreceipted float outflow is a QUESTION, not a violation.** The float legitimately makes operational transfers (funding a payer, topping up an account) that correctly have no debit receipt. Only the reverse — a debit receipt with no on-chain transfer — is a hard invariant. Reporting the first as a violation made the reconciler's first run cry wolf 16 times on a healthy ledger | `settlement`, `verify`, `web` |
+| 2026-09-06 | **A Hedera transaction id is spelled two ways**: `0.0.x@s.n` in our receipts, `0.0.x-s-n` by Mirror Node. Use `normalizeTransactionId` / `sameTransaction` from `@tab/mirror` on BOTH sides of any comparison | `mirror`, `settlement`, `verify`, `engine` |
+| 2026-09-06 | **`reconcile` is window-bounded** (`--since=<seconds.nanos>`, else `RECONCILE_LOOKBACK_SECONDS`, default 3600). Walking the float's full history hung at 5–15s/page and gets slower forever; the spec's unit is the window | `settlement` |
+| 2026-09-06 | **OPEN DEFECT — the spend path writes `unsettled:<holdId>` as the debit's transaction id** whenever the x402 facilitator returns no settlement transaction. Those debits can never be reconciled: there is no id to match. The reconciler counts them as `unreconcilable` rather than skipping them, but **the fix belongs in `apps/gateway`** — write the real id once the transfer lands, or emit a follow-up receipt carrying it. Until then the reconciler has never made a single positive match, so the demo's proof-of-reconciliation is not yet demonstrated | `gateway`, `x402`, `settlement`, demo |
 | 2026-09-06 | **An x402 payment needs THREE distinct accounts** — payer, `payTo`, fee payer. The scheme rejects a transfer the fee payer is a party to. Same rule that bit us on the seller, now general | `x402`, `gateway`, `testkit`, any demo |
 | 2026-09-06 | **The earn leg forwards even if the receipt write fails.** The money has already moved by then — refusing to serve a request the payer paid for would be theft; a missing receipt is repairable. A payment taken but not served is `attested: false` | `gateway`, `settlement` reconciler |
 | 2026-09-06 | **The gateway is SINGLE INSTANCE.** Holds live in process memory, so two instances would each allow up to the ceiling. `@tab/cache` fixes it; Probe 5 says why the hop cannot be removed | `gateway`, `cache`, deployment |
@@ -228,6 +235,70 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-06 (later) — Claude — the reconciler, and the four bugs it found in itself
+
+`apps/settlement` now has a working reconciler. Getting it honest took four rounds, and every round
+was the same lesson: **a tool that proves the books is worthless the moment it says something it
+cannot support.**
+
+Run 1 reported `17 discrepancies` and hung. Both were my bugs:
+
+1. **Transaction-id spelling.** Receipts store `0.0.x@s.n`; Mirror Node returns `0.0.x-s-n`. I was
+   comparing different spellings of the same id, so nothing ever matched. Fixed with
+   `normalizeTransactionId` / `sameTransaction` in `@tab/mirror`.
+2. **Wrong invariant.** I treated "a transfer with no receipt" as a violation. It is not — the float
+   legitimately funds payers and tops up accounts, and those correctly have no debit receipt. 16 of
+   the 17 "discrepancies" were healthy operational transfers. Output is now split into
+   **violations** (a receipt with no transfer — always wrong) and **questions** (an unreceipted
+   outflow — for an operator to confirm). Only one direction is a hard invariant.
+3. **Unbounded walk.** It walked the float's entire history at 5–15s/page. The spec says reconcile
+   on every window close, so the walk is now bounded (`--since=`, else `RECONCILE_LOOKBACK_SECONDS`).
+
+Then it printed `CLEAN` over a window containing zero receipts, which is the cry-wolf mistake
+inverted and worse. Fixing that surfaced two more:
+
+4. **Silent skips.** Debits with an `unsettled:` placeholder id were `continue`d past uncounted, so
+   `CLEAN — all 6 receipts have a matching transfer` was printed about 6 receipts of which **0** had
+   been checked. They are now counted as `unreconcilable` and reported as an upstream defect. The
+   CLEAN claim rests only on `matched + alreadyRepaired`.
+5. **Not idempotent.** The report promised "the reconciler writes a repair receipt" and nothing in
+   the code wrote anything. Implementing it exposed the real hazard: the violation re-reported after
+   the repair landed, so `--repair` would write a fresh reversal every run — a −0.04 error becomes
+   **+0.36 after ten runs.** The command whose job is proving the books would have been the thing
+   corrupting them. It now reads existing repairs off the topic and skips what is done.
+
+**Writing repairs is opt-in.** `pnpm reconcile` reports; `--repair` writes. A topic is append-only,
+and a tool that mutates the public record while you read its output is not one you would run on
+camera.
+
+**Protocol and ledger changed together.** `repairReceipt.why` gained `missing_transfer` — the strict
+direction had no code, because the enum was written for the direction I later downgraded to a
+question. Its repair *reverses* a debit, so its amount is positive, and `netWindow` was filing every
+repair under `debits` (documented negative). Now routed by sign. Three tests cover it; the net was
+always right, so this would have misreported a window silently. 28 ledger tests, 50 in total.
+
+**Live, on testnet.** One genuine violation found and repaired: debit receipt
+`0.0.8812188@1788647712.000000000` for `0.0400` claimed a transfer Mirror Node has no record of
+(`found 0` — and the `.000000000` nanos is the tell; a real SDK id has nanosecond precision). Repair
+receipt written to topic `0.0.10182696`; re-run reports `violations 0 · 1 already repaired`.
+
+**The honest gap, and it is the important one:** `matched 0`. The reconciler has still never made a
+single *positive* match, because every recent debit carries `unsettled:<holdId>` instead of a real
+settlement transaction id — `apps/gateway/src/spend.ts:143` falls back to that placeholder whenever
+the x402 facilitator returns no transaction. So the diff cannot yet prove the thing it exists to
+prove. **This is the next thing to fix, and it is in the gateway, not here.** Two options: get the
+real id out of the x402 settle response, or observe it from Mirror and emit a follow-up receipt —
+but note that amount-matching a transfer to a receipt is unsafe in general (two spends of the same
+price to the same seller are indistinguishable), so a Mirror-side backfill may only accept an
+unambiguous single candidate.
+
+Also decided: [ADR-0009](docs/adr/0009-settlement-schedule-timing.md) — schedule at window **close**,
+and the README's "without a keeper" claim is qualified to what HIP-423 actually buys: the settlement
+is *executed by consensus rather than submitted by us*, and survives the worker's death.
+
+**Next:** the `unsettled:` root cause, then wire `tick.ts` (written, tested, never invoked — there is
+no `apps/settlement/src/main.ts` yet).
 
 ### 2026-09-06 — Claude — both legs work; the tab spends and earns
 

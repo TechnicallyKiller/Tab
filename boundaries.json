@@ -311,7 +311,16 @@
         "cache",
         "observability"
       ],
-      "why": "Deployable worker. Window tick, HIP-423 schedule construction, and the reconciler that diffs Mirror outbound transfers against the receipt topic."
+      "why": "Deployable worker. Window tick, HIP-423 schedule construction, and the reconciler that diffs Mirror outbound transfers against the receipt topic.",
+      "externalAllowList": [
+        "@hiero-ledger/sdk",
+        "bullmq",
+        "ioredis",
+        "postgres",
+        "drizzle-orm",
+        "pino",
+        "zod"
+      ]
     },
     "cli": {
       "allow": [

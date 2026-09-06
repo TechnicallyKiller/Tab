@@ -34,6 +34,8 @@ export {
   getTransactionAt,
   getTransactions,
   hbarNetFor,
+  normalizeTransactionId,
+  sameTransaction,
   outboundFrom,
   toTransferEdges,
   type HistoryQuery,

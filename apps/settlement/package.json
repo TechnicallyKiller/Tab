@@ -1,0 +1,21 @@
+{
+  "name": "@tab/settlement",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
+    "tick": "node --experimental-strip-types --env-file=../../.env src/main.ts --once",
+    "reconcile": "node --experimental-strip-types --env-file=../../.env src/reconcile.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "catalog:",
+    "@tab/hedera": "workspace:*",
+    "@tab/ledger": "workspace:*",
+    "@tab/mirror": "workspace:*",
+    "@tab/money": "workspace:*",
+    "@tab/protocol": "workspace:*"
+  },
+  "devDependencies": { "@types/node": "^22.15.0", "typescript": "^5.9.0" }
+}

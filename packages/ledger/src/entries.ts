@@ -77,7 +77,11 @@ export interface RepairEntry extends EntryBase {
   counterparty: string
   amount: MicroUsdc
   transactionId: string
-  reason: 'missing_debit' | 'orphan_hold' | 'amount_mismatch'
+  /**
+   * `amount` is signed, and the sign follows the reason: `missing_debit` adds a
+   * debit (negative), `missing_transfer` reverses one (positive).
+   */
+  reason: 'missing_debit' | 'missing_transfer' | 'orphan_hold' | 'amount_mismatch'
 }
 
 /** A refused spend. Records intent; moves nothing. */

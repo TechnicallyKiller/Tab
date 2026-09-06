@@ -17,3 +17,4 @@ new ADR that supersedes it rather than editing the old one.
 | [0006](0006-money-as-bigint.md) | All money is `bigint` micro-USDC behind a branded type | Accepted |
 | [0007](0007-hcs-as-source-of-truth.md) | HCS is the ledger; Postgres is a rebuildable projection | Accepted |
 | [0008](0008-agentkit-policy-not-hook.md) | Outer enforcement is an Agent Kit **policy**, not a hook | Accepted |
+| [0009](0009-settlement-schedule-timing.md) | Schedule the settlement transfer at window **close**; the tick is consensus-executed, not keeper-free | Accepted |
