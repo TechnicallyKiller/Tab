@@ -143,26 +143,59 @@ async function pass(): Promise<void> {
    * -root discount and the common-funder block were both structurally
    * impossible. Neither rule was wrong; neither was ever asked.
    */
-  try {
-    const tabFunder = await funderOf(mirror, tabAccount)
-    facts.set(tabAccount, { id: tabAccount, ...(tabFunder ? { fundedBy: [tabFunder] } : {}) })
-    if (tabFunder) console.log(`    tab funded by ${tabFunder}`)
-  } catch {
-    facts.set(tabAccount, { id: tabAccount })
-    console.log('    WARNING  the tab’s own ancestry is unavailable — control rules cannot fire')
-  }
-
-  for (const counterparty of counterparties) {
+  /**
+   * Walk ancestry to the HOP LIMIT, not one hop.
+   *
+   * The third gap of this family, and the same shape as the first two: the rule
+   * was fine and was never asked. `facts` only ever held one `fundedBy` per
+   * account, so `sharedFundingRoot(tab, counterparty, facts, 3)` could see one
+   * hop on each side and never the chain between them. With
+   * `operator → tab` and `operator → intermediary → customer`, the shared root
+   * IS the operator and the traversal could not reach it — so
+   * `SHARED_FUNDING_ROOT` was as unreachable as `FUNDED_BY_AGENT` had been.
+   *
+   * Memoised across the pass: the whole point of an ancestry walk is that
+   * accounts share ancestors, so the same funder gets asked for repeatedly.
+   */
+  const resolved = new Set<AccountId>()
+  async function walkAncestry(account: AccountId, hopsLeft: number): Promise<void> {
+    if (hopsLeft <= 0 || resolved.has(account)) return
+    resolved.add(account)
     try {
-      const funder = await funderOf(mirror, counterparty)
-      facts.set(counterparty, { id: counterparty, ...(funder ? { fundedBy: [funder] } : {}) })
-      if ((await isYoung(mirror, counterparty, nowSeconds)) === true) young.add(counterparty)
+      const funder = await funderOf(mirror, account)
+      facts.set(account, { id: account, ...(funder ? { fundedBy: [funder] } : {}) })
+      if (funder) await walkAncestry(funder, hopsLeft - 1)
     } catch (error) {
+      /*
+       * FAILS OPEN, and says so.
+       *
+       * An account whose ancestry cannot be fetched is treated as having none,
+       * which weights it as independent — the unsafe direction. It is named
+       * here rather than buried because the fix is a persisted graph
+       * (`@tab/db`), not more retries: a security rule that fails open must not
+       * depend on re-deriving its inputs from an eventually-consistent index.
+       */
+      facts.set(account, { id: account })
       console.log(
-        `    WARNING  ancestry for ${counterparty} unavailable ` +
+        `    WARNING  ancestry for ${account} unavailable ` +
           `(${error instanceof Error ? error.message : String(error)}) — treated as independent`,
       )
-      facts.set(counterparty, { id: counterparty })
+    }
+  }
+
+  await walkAncestry(tabAccount, params.fundingAncestryHops)
+  const tabFunder = facts.get(tabAccount)?.fundedBy?.[0]
+  if (tabFunder) console.log(`    tab funded by ${tabFunder}`)
+
+  for (const counterparty of counterparties) {
+    await walkAncestry(counterparty, params.fundingAncestryHops)
+    try {
+      if ((await isYoung(mirror, counterparty, nowSeconds)) === true) young.add(counterparty)
+    } catch {
+      // An unknown age is not "old enough". Left out of `young` means no age
+      // discount, which is the unsafe direction — recorded alongside the
+      // ancestry fail-open above rather than treated as different.
+      console.log(`    WARNING  age for ${counterparty} unavailable — no age discount applied`)
     }
   }
 

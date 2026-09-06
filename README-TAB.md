@@ -721,6 +721,9 @@ Drop-in SDK so any agent deployment platform can offer a funded launch instead o
 
 ## Demo
 
+**What actually runs, beat by beat, with measured numbers and the beats that do NOT yet run:**
+[docs/DEMO.md](docs/DEMO.md).
+
 **Video:** _(link)_ · **Dashboard:** _(link)_ · **Receipt topic:** _(HashScan)_ · **Ceiling topic:** _(HashScan)_ · **Float account:** _(HashScan)_
 
 ```

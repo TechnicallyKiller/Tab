@@ -12,7 +12,7 @@
  */
 import { PrivateKey } from '@hiero-ledger/sdk'
 import { configureGlobalHttp } from '@tab/mirror'
-import { format } from '@tab/money'
+import { format, usdc } from '@tab/money'
 import { NETWORKS, createSpendClient, tokenAsset } from '@tab/x402'
 
 configureGlobalHttp({ connectTimeoutMs: 90_000, headersTimeoutMs: 150_000, bodyTimeoutMs: 150_000 })
@@ -40,7 +40,15 @@ const client = createSpendClient({
   payerId,
   payerKey,
   asset,
-  maxAtomicPerPayment: 200_000n,
+  /*
+   * The PAYER's own cap, configurable — a customer decides what it will pay.
+   *
+   * Hardcoded at 0.2000 it silently rejected every call the moment the demo
+   * raised the endpoint price to 0.5000, and x402 reported it as
+   * "All payment requirements were rejected by spendControls" — which reads
+   * like a protocol fault rather than the payer's own limit doing its job.
+   */
+  maxAtomicPerPayment: usdc(process.env['PAYER_MAX_PER_CALL_USDC'] ?? '0.200000'),
 })
 
 console.log(`\npayer · buying from the agent's endpoint\n`)

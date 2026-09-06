@@ -61,7 +61,8 @@
     "engine:once": "pnpm --filter @tab/engine recompute",
     "attack": "pnpm --filter @tab/loop-attacker attack",
     "verify-tab": "pnpm --filter @tab/verify verify-tab",
-    "verify-ceiling": "pnpm --filter @tab/verify verify-ceiling"
+    "verify-ceiling": "pnpm --filter @tab/verify verify-ceiling",
+    "demo:payer": "pnpm --filter @tab/bootstrap demo:payer"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

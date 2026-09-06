@@ -142,7 +142,16 @@ const client = createSpendClient({
   // in the screen recording.
   payerKey: shill.privateKey,
   asset: tokenAsset(tokenId, 'TUSD'),
-  maxAtomicPerPayment: usdc('0.100000'),
+  /*
+   * The shill's own per-payment cap, configurable.
+   *
+   * Hardcoded at 0.1000 this silently rejected every call the moment the demo
+   * raised the endpoint price, and x402 reported it as "All payment
+   * requirements were rejected by spendControls" — which reads like a protocol
+   * fault rather than the payer's own limit working. Second time this exact
+   * shape bit a demo run; `packages/testkit/src/fake-payer.ts` had it too.
+   */
+  maxAtomicPerPayment: usdc(process.env['ATTACK_MAX_PER_CALL_USDC'] ?? '0.600000'),
 })
 
 let purchased = 0

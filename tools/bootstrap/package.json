@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "demo:payer": "node --experimental-strip-types --env-file=../../.env src/demo-payer.ts",
     "evm:account": "node --experimental-strip-types --env-file=../../.env src/evm-account.ts",
     "faucet:sweep": "node --experimental-strip-types --env-file=../../.env src/faucet-sweep.ts",
     "faucet:watch": "node --experimental-strip-types --env-file=../../.env src/faucet-watch.ts",

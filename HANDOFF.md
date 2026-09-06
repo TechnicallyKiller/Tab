@@ -24,12 +24,12 @@ written.
 **Phase:** **both legs work end to end on Hedera testnet.** An agent with no key spends against a
 ceiling and earns through its own endpoint. Frontend still runs entirely on mocks.
 
-**Next action:** demo-parameter pass so the attack produces a REFUSAL (currently the manufactured
-revenue never lifts the ceiling above the starter floor, so the collapse has nothing to take away);
-a faucet-funded independent customer so the honest demo is not itself inside our control cluster;
-then `apps/web` against live data. Still open: bump `MODEL_VERSION` before the next formula change.
+**Next action:** **a decision, then `apps/web`.** The decision is whether to publish a `v2`
+parameter set with a lower starter floor (`0.250000`) so earned credit becomes visible early and the
+refusal beat is demonstrable — see the two options in [docs/DEMO.md](docs/DEMO.md). It changes every
+future ceiling, so it is not mine to make. Then wire `apps/web` to live data.
 
-**Last updated:** 2026-09-07 by Claude (network-impact doc — every figure measured from our own transactions)
+**Last updated:** 2026-09-07 by Claude (demo doc — the attack does not collapse the ceiling, and why that is the stronger claim)
 
 ### Written: 19 of 27 packages
 
@@ -188,6 +188,12 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-07 | **THE ATTACK DOES NOT CAUSE A CEILING COLLAPSE, and the plan's 1:10 beat is wrong about why.** Manufactured revenue is worth ZERO from the first engine pass that can see the funding edge, so the ceiling never inflates and there is nothing to collapse. The detector is faster than the demo script assumed. The honest beat is "the manufactured revenue counts for zero and the ceiling does not move — the attack buys nothing" | `web`, demo, `loop-attacker` |
+| 2026-09-07 | **`SHARED_FUNDING_ROOT` was unreachable — the THIRD rule of that family.** `facts` only held one `fundedBy` per account, so the traversal saw one hop each side and never the chain between. `apps/engine` now walks ancestry to `params.fundingAncestryHops`, memoised. Verified live: the indirect customer went from 48% (young × concentrated) to **33%** (0.7 × 0.6 × 0.8) once the shared root was visible | `engine`, `graph`, `verify` |
+| 2026-09-07 | **v1's STARTER FLOOR PINS A NEW AGENT'S CEILING.** Earned credit for one young customer is `1.0000 × 0.336 × 1.0 × 0.70 = 0.2352`, against a floor of `1.0000` — so the floor, not the underwriting, decides the ceiling for an agent's whole early life. Beating it needs **>4.25 raw revenue** (~9 calls at 0.50) from a single customer. **Lowering the floor is a `v2`, not an edit** — ceilings are already published under `tab-v1`. User's decision, laid out in `docs/DEMO.md` | `params`, `scoring`, demo |
+| 2026-09-07 | **On testnet nothing we create is genuinely independent.** Every account descends from our faucet account, so `COMMON_FUNDER` fires on every payer we make. `pnpm demo:payer` builds an INDIRECTLY related one (operator → intermediary → customer) whose immediate funder differs, so it is discounted not blocked. The demo therefore distinguishes **direct control from indirect relation**, NOT control from true independence — say so out loud | demo, `graph`, `bootstrap` |
+| 2026-09-07 | **A client-side x402 spend cap that is hardcoded silently rejects everything when the endpoint price changes**, and x402 reports it as `All payment requirements were rejected by spendControls` — which reads like a protocol fault. Bit two demo runs. `PAYER_MAX_PER_CALL_USDC` and `ATTACK_MAX_PER_CALL_USDC` are configurable now | `testkit`, `loop-attacker`, `x402` |
+| 2026-09-07 | **`pnpm demo:payer` writes its key straight to gitignored `.env` and never prints it.** `pnpm payer:create` still prints its key; it should follow. A private key in terminal scrollback is a private key in the screen recording, and these scripts run during a demo | `bootstrap`, demo |
 | 2026-09-07 | **HOLDS ARE PUBLISHED, and the gateway AWAITS consensus on the hold before paying.** `reserve → pay → commit` is now verifiable by a stranger: same `holdId`, hold strictly before debit on the topic (proven live — seq 28 hold, seq 29 debit, 36s apart). **The await is the point** — publishing after the payment, or not awaiting, puts the two messages on the topic in an order that proves nothing. The spend FAILS CLOSED if the hold cannot be published: paying with no published authorisation produces exactly the debit-from-nowhere this removes | `gateway`, `protocol`, `ledger`, `verify` |
 | 2026-09-07 | **Cost of publishing holds, measured not guessed:** one extra message per attempted spend, ~2-4s of consensus on a spend path already taking 25-39s on x402 HTS settlement — about 10%. It does NOT touch the 50ms authorization budget, which is the cache read before it. At high volume this triples topic size and slows every replay; the production answer is a rolling batch commitment, not one message per hold | `gateway`, `fastpath`, `cache` |
 | 2026-09-07 | **`checkPublicLedger` takes `holdsPublishedFrom`, and debits before it are EXCLUDED from the hold rule and COUNTED.** Holds were added after receipts already existed, so asserting the new rule against old data marked every historical debit as having "bypassed reserve" — eleven red lines that were not defects and which buried the one finding that was. A stranger derives the cutover the same way `verify-tab` does: the consensus timestamp of the first `hold` message. With NO cutover given the rule is strict — an absent option must never silently disable a check | `verify`, `ledger` |
@@ -269,6 +275,60 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-07 (later still) — Claude — the demo refusal: reachable, and NOT where the plan put it
+
+Chased the `CEILING_EXCEEDED` refusal the plan schedules at 1:10. It is reachable, but not from the
+attack — and finding out why was worth more than the beat.
+
+**The attack cannot cause a ceiling collapse, because the fake revenue never inflates the ceiling.**
+It is worth zero from the first engine pass that can see the funding edge. The plan's beat describes
+a system that first *believes* the manufactured revenue and then discovers the edge; ours never
+believes it. The detector is faster than the script assumed, so there is nothing to collapse.
+
+The honest beat is *"the manufactured revenue counts for zero and the ceiling does not move — the
+attack buys nothing"*, which is arguably the stronger claim and is the one the evidence supports.
+
+**Then a third unreachable rule, same family as the first two.** `SHARED_FUNDING_ROOT` could never
+fire: `facts` held one `fundedBy` per account, so the traversal saw one hop on each side and never
+the chain between them. `apps/engine` now walks ancestry to the hop limit, memoised. Verified live —
+the indirect customer went **48% → 33%** once the shared root became visible, exactly
+`0.7 × 0.6 × 0.8`.
+
+That produces the strongest single artifact in the demo, all measured:
+
+| Counterparty | Funding | Weight | Rules |
+|---|---|---|---|
+| attacker's shill | operator → shill, **directly** | **0% BLOCKED** | `COMMON_FUNDER` |
+| indirect customer | operator → intermediary → customer | **33% counted** | `SHARED_FUNDING_ROOT`, `YOUNG_ACCOUNT`, `CONCENTRATED` |
+| truly unrelated | unrelated root | 100% | `INDEPENDENT` |
+
+**The third row has never been produced and cannot be on testnet** — every account we create
+descends from our faucet account. The demo distinguishes direct control from indirect relation, not
+control from true independence. `docs/DEMO.md` says so rather than letting a viewer assume the
+stronger claim.
+
+**And the reason the refusal did not happen, which is a parameter decision and not a bug.** With v1,
+earned credit for one young customer is `1.0000 × 0.336 × 1.0 × 0.70 = 0.2352` against a
+`1.0000` starter floor. The floor decides a new agent's ceiling for its entire early life; beating
+it needs >4.25 raw revenue from a single customer, about 9 calls. **A ceiling that never rises
+cannot visibly fall.**
+
+Lowering the floor to `0.250000` fixes the demo — and it is a **v2, not an edit**, because ceilings
+are already published under `tab-v1` and `verify-ceiling` catches exactly this. It caught me once
+already. Both options are laid out in `docs/DEMO.md`; the choice is the user's, since it changes
+every future ceiling.
+
+**I did not tune anything to force a refusal.** `docs/DEMO.md` marks that beat NOT YET OBSERVED.
+
+Two smaller finds, both of which cost a demo run each: a hardcoded client-side x402 spend cap
+silently rejects everything when the endpoint price changes, reported as
+`All payment requirements were rejected by spendControls` — which reads like a protocol fault rather
+than the payer's own limit doing its job. Configurable now in both payers. And `pnpm demo:payer`
+writes its key into gitignored `.env` instead of printing it, because I argued exactly that in
+`tab-create.ts` and `pnpm payer:create` still prints.
+
+161 tests, 5/5 guards.
 
 ### 2026-09-07 (late) — Claude — docs/NETWORK_IMPACT.md, measured rather than asserted
 
