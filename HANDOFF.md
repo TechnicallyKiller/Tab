@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-08 by Claude · **20 of 27 packages · 179 tests · 5/5 guards**
+**Last updated:** 2026-09-08 by Claude · **20 of 27 packages · 179 tests · 5/5 guards · REAL USDC**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -78,7 +78,7 @@ byte-identical and stays forever. **`verify-ceiling` still passes every ceiling 
 | Receipt topic | [`0.0.10182696`](https://hashscan.io/testnet/topic/0.0.10182696) — **38 messages**: holds, debits, credits, refusals, repairs |
 | Ceiling topic | [`0.0.10182697`](https://hashscan.io/testnet/topic/0.0.10182697) — **9 published ceilings**, each hash-verifiable |
 | Settlement topic | [`0.0.10182698`](https://hashscan.io/testnet/topic/0.0.10182698) — **5 settlement receipts** |
-| Token | [`0.0.10182853`](https://hashscan.io/testnet/token/0.0.10182853) · `TUSD` · 6dp — **stand-in** for testnet USDC |
+| Token | [`0.0.429274`](https://hashscan.io/testnet/token/0.0.429274) · **REAL testnet USDC** · 6dp. `TUSD` `0.0.10182853` was the stand-in and is superseded; receipts before the switch are TUSD-denominated and carry no `tok` |
 | x402 seller | [`0.0.10379572`](https://hashscan.io/testnet/account/0.0.10379572) — stock `@x402/hedera`, unaware Tab exists |
 | Facilitator fee payer | [`0.0.10379287`](https://hashscan.io/testnet/account/0.0.10379287) · **ECDSA** |
 | Direct customer | [`0.0.10385196`](https://hashscan.io/testnet/account/0.0.10385196) — funded by the operator, so `COMMON_FUNDER` blocks it |
@@ -299,6 +299,12 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-08 | **REAL TESTNET USDC IS IN THE FLOAT — `USDC_TOKEN_ID=0.0.429274`.** The faucet worked all along; it delivered 20.000000 USDC to the OPERATOR (`0.0.11920 → 0.0.8812188`), not to a wallet. `TUSD` is no longer needed. Real USDC is **6 decimals, same as the stand-in**, so `MicroUsdc` is unchanged. Also markedly faster: a spend settles in **4-5s** against 25-39s on TUSD | everyone; `NETWORK_IMPACT.md` fee/latency figures |
+| 2026-09-08 | **RECEIPTS NOW CARRY `tok` — the token every amount is denominated in.** They previously recorded amounts with NO currency: each figure meant "whatever `USDC_TOKEN_ID` was configured when it was written". Invisible with one token, and the moment a deployment switches, the topic holds two currencies with nothing distinguishing them — a stranger replaying it would be **summing TUSD and USDC and reporting the total as money**. `Entry.token` carries it, and **`verify-tab` filters on it and reports what it excluded** | `protocol`, `ledger`, `verify`, `gateway`, `settlement`, `engine` |
+| 2026-09-08 | **THE GATEWAY DEBITED THE CAP, NOT THE SETTLED AMOUNT.** `amount: micro(-request.max)` — so a spend capped at `0.200000` against a seller charging `0.040000` debited the agent `0.200000` and the float kept `0.160000`. Invisible for as long as every demo set `max` equal to the price. `@tab/x402`'s `call()` now returns `amountPaid`, captured from the requirement the client accepted; the gateway debits that and warns loudly when x402 reports no price | `gateway`, `x402`, `settlement`, `verify` |
+| 2026-09-08 | **x402 v2 `PaymentRequirements` uses `amount`; `maxAmountRequired` is the V1 field.** Reading the V1 type found no price and silently fell back to the cap — the exact overstatement above. Both are checked now | `x402` |
+| 2026-09-08 | **Mirror Node returns `decimals` as a STRING from `/tokens/{id}` and a NUMBER from `/accounts/{id}/tokens`.** `@tab/mirror` declares the union honestly (`string | number`); the caller must normalise. Comparing it with `!== 6` produced the memorable error *"USDC has 6 decimals, not 6"* | `bootstrap`, anyone reading token info |
+| 2026-09-08 | **`0.0.10845404` is a MAINNET account.** A testnet faucet cannot pay it — separate ledgers, separate account-number namespaces, and the same seed gives a different id per network. A transfer to it fails `INVALID_ACCOUNT_ID`, proven. You cannot activate a non-existent account number by sending to it; only an ALIAS (public key or EVM address) auto-creates, and the network picks the number | demo, docs |
 | 2026-09-08 | **AMOUNT FIELDS IN THE GATEWAY'S JSON USE `toWire`, NEVER `format`.** `format` is a DISPLAY function — 4 decimals and a U+2212 minus. The API served it, so `1.234567` went out as `"1.2345"` and parsed back as `1234500`: **67 micro-USDC silently lost per value.** A dashboard built on that cannot match HashScan, which is the one thing a dashboard must do. Prose messages may embed `format` inside a sentence | `gateway`, `sdk`, `web` |
 | 2026-09-08 | **`usdc()` is TOO PERMISSIVE to be a wire parser** — it accepts a U+2212 minus and pads a 4-decimal value, so the loss above was undetectable. `@tab/sdk` validates `/^-?\d+\.\d{6}$/` BEFORE parsing and rejects a display string with a message naming the cause. The tolerance in `usdc()` is right for human input and wrong for a wire boundary | `sdk`, `money`, anyone parsing amounts |
 | 2026-09-08 | **The gateway now rebuilds through `entriesFromMessages` from `@tab/ledger`.** It had its own `toEntry` with no `case 'hold'`, so **published holds were silently dropped on every restart** — a pending hold vanished from the projection, `available` came back overstated, and the agent could spend headroom that was reserved. Verified fixed: a restart now replays `hold: 2`. **THIRD message type lost to a private replay copy**, after settlements in the worker. There is one decode; use it | `gateway`, `settlement`, `engine`, `verify` |
@@ -394,6 +400,55 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-08 (later) — Claude — real USDC, and the two bugs the switch exposed
+
+**The faucet had worked all along.** It delivered **20.000000 real testnet USDC** to the OPERATOR
+(`0.0.11920 → 0.0.8812188`), not to a wallet — so `TUSD` is no longer needed and
+`USDC_TOKEN_ID=0.0.429274`. Same 6 decimals, so `MicroUsdc` is untouched, and **markedly faster**:
+a spend settles in **4-5s** against 25-39s on the stand-in token.
+
+Two side findings on the way: `0.0.10845404` is a **mainnet** account, which is why a testnet
+faucet could never pay it (proven — a transfer fails `INVALID_ACCOUNT_ID`, and you cannot activate
+a non-existent account NUMBER by sending to it; only an alias auto-creates one). And Mirror Node
+returns `decimals` as a string from `/tokens/{id}` but a number from `/accounts/{id}/tokens`, which
+produced the error *"USDC has 6 decimals, not 6"* when I compared the union with `!== 6`.
+
+**Switching tokens exposed two real bugs, and the first one blocked the switch.**
+
+**1. Receipts recorded amounts with no currency.** Every figure on the topic meant "whatever
+`USDC_TOKEN_ID` was configured when this was written". Invisible with one token — and the moment a
+deployment switches, the topic holds two currencies with nothing distinguishing them. A stranger
+replaying it would be **summing TUSD and USDC and reporting the total as money**, which directly
+undermines the claim that the topic is independently verifiable. Every receipt now carries `tok`,
+`Entry.token` surfaces it, and `verify-tab` **filters on it and reports the 38 pre-`tok` receipts it
+excluded** rather than quietly including them.
+
+**2. The gateway debited the CAP, not the settled amount.** `amount: micro(-request.max)`. So a
+spend capped at `0.200000` against a seller charging `0.040000` debited the agent `0.200000` and the
+float kept the difference. Confirmed on chain: two such spends left the seller holding exactly
+`0.08` while the ledger said `0.40`. Invisible for as long as every demo set `max` equal to the
+price, and wrong the instant they differed — which is a normal way to call a paid API.
+
+`@tab/x402`'s `call()` now returns `amountPaid`, captured from the payment requirement the client
+actually accepted via `paymentRequirementsSelector`. The selector preserves the default choice
+exactly and only records it, because changing the choice would be a behaviour change smuggled in
+behind a bug fix.
+
+**And the fix was wrong the first time, in a way worth recording:** I read `maxAmountRequired`,
+which is the x402 **V1** field. v2 `PaymentRequirements` uses `amount`. The wrong field found no
+price and fell back to the cap — reproducing the exact bug. Verified fixed live: a spend with
+`max: 0.200000` now reports `amount: "0.040000"`.
+
+The fallback still exists for the case where x402 reports no price, but it now **warns loudly** and
+says the debit is an upper bound the reconciler will flag. A silent fallback is what let this run
+for days.
+
+Also added `pnpm fund <account> [amount]` — provisioning a payer in the configured token, which a
+token switch makes necessary. It reads the token from the environment rather than taking it as an
+argument, so it cannot fund the wrong token while the system is configured for another.
+
+179 tests, 5/5 guards.
 
 ### 2026-09-08 — Claude — @tab/sdk, and two bugs it forced into the open
 

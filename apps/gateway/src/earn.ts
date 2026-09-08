@@ -105,7 +105,7 @@ export async function serveAndCredit(
   let creditWritten = false
   try {
     const written = await receipts.write({
-      v: 1, t: 'credit', tab: endpoint.tab, w: window,
+      v: 1, t: 'credit', tab: endpoint.tab, w: window, tok: env.tokenId,
       cp: params.payer, amt: toWire(endpoint.atomicPrice), att: served,
       req: requestHash(target, at),
       tx: credit.transactionId,

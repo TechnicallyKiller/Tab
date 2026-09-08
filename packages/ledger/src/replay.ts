@@ -56,37 +56,37 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
     switch (msg.t) {
       case 'hold':
         entry = {
-          kind: 'hold', at: message.consensusTimestamp, window: msg.w, holdId: msg.hold,
+          kind: 'hold', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}), holdId: msg.hold,
           counterparty: msg.cp, amount: usdc(msg.amt), expiresAt: msg.exp,
         }
         break
       case 'debit':
         entry = {
-          kind: 'debit', at: message.consensusTimestamp, window: msg.w, holdId: msg.hold,
+          kind: 'debit', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}), holdId: msg.hold,
           counterparty: msg.cp, amount: usdc(msg.amt), transactionId: msg.tx,
         }
         break
       case 'credit':
         entry = {
-          kind: 'credit', at: message.consensusTimestamp, window: msg.w,
+          kind: 'credit', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
           counterparty: msg.cp, amount: usdc(msg.amt), attested: msg.att, transactionId: msg.tx,
         }
         break
       case 'refused':
         entry = {
-          kind: 'refusal', at: message.consensusTimestamp, window: msg.w,
+          kind: 'refusal', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
           counterparty: msg.cp, requested: usdc(msg.amt), rule: msg.rule,
         }
         break
       case 'repair':
         entry = {
-          kind: 'repair', at: message.consensusTimestamp, window: msg.w,
+          kind: 'repair', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
           counterparty: msg.cp, amount: usdc(msg.amt), transactionId: msg.tx, reason: msg.why,
         }
         break
       case 'settlement':
         entry = {
-          kind: 'settlement', at: message.consensusTimestamp, window: msg.w,
+          kind: 'settlement', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
           net: usdc(msg.net), outcome: msg.outcome,
           rampFromBp: msg.rampFrom, rampToBp: msg.rampTo,
           ...(msg.tx ? { transactionId: msg.tx } : {}),

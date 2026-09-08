@@ -70,6 +70,15 @@ export interface PublishParams {
   cause: PublishCause
   modelId: string
   /**
+   * The token every amount in this message is denominated in.
+   *
+   * A ceiling of `0.250000` means nothing without a currency, and the receipt
+   * topic had exactly that gap. Safe to add to a published message type because
+   * the hash covers `inputs` only — every ceiling already on the topic still
+   * verifies.
+   */
+  tokenId: string
+  /**
    * What the fast path should enforce, when the asymmetry rule differs from the
    * formula.
    *
@@ -100,6 +109,7 @@ export async function publishCeiling(params: PublishParams): Promise<PublishedCe
   const message = ceilingUpdate.parse({
     v: 1,
     t: 'ceiling',
+    tok: params.tokenId,
     tab: params.tab,
     w: params.window,
     ceil: toWire(inForce),

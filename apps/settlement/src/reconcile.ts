@@ -407,6 +407,7 @@ if (repairing && result.violations.length > 0) {
     const message = repairReceipt.parse({
       v: 1,
       t: 'repair',
+      tok: tokenId,
       tab: floatAccount,
       w: v.repair.window,
       cp: v.repair.counterparty,

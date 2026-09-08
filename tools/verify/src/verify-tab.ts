@@ -88,7 +88,7 @@ console.log(heading('verify-tab', 'HCS receipts vs on-chain balances'))
 console.log(field('network', network))
 console.log(field('receipt topic', receiptTopic))
 console.log(field('settlements', settlementTopic))
-console.log(field('token', tokenId))
+console.log(field('token', tokenId, 'only receipts denominated in THIS token are asserted'))
 console.log(field('hot float', hotFloat))
 console.log(field('treasury', treasury ?? 'not configured — the invariant spans one account'))
 
@@ -165,9 +165,22 @@ console.log(
   ),
 )
 
+/*
+ * Count what is excluded for having no token, once, before the loop.
+ *
+ * Receipts written before the `tok` field existed carry no currency at all, and
+ * an absent token must NOT be assumed to be the current one — a deployment that
+ * switched tokens leaves one topic holding amounts in two currencies, and
+ * summing them would add TUSD to USDC and report the total as money. So they
+ * are excluded from any balance assertion and counted in the report.
+ */
+let untokened = 0
+
 for (const [tab, all] of byTab) {
-  // Bounded to the snapshot, in consensus order.
-  const entries = all.filter((e) => compareConsensus(e.at, asOf) <= 0)
+  // Bounded to the snapshot, in consensus order, and to THIS token.
+  const inWindow = all.filter((e) => compareConsensus(e.at, asOf) <= 0)
+  untokened += inWindow.filter((e) => e.token === undefined).length
+  const entries = inWindow.filter((e) => e.token === tokenId)
   const p = position(entries, caps.starterCeiling, asOf)
   outstandingTotal = add(outstandingTotal, p.outstanding)
 
@@ -226,6 +239,20 @@ for (const r of results) console.log(r.text)
  * hear made explicitly — silence there is indistinguishable from a verifier
  * that forgot to mention what it left out.
  */
+if (untokened > 0) {
+  console.log()
+  console.log(
+    claim(true, `${untokened} receipt(s) carry no token and are EXCLUDED from the balance check`, [
+      'They were written before receipts recorded a currency, so their amounts',
+      'are denominated in whatever token the deployment had configured at the',
+      'time — which a stranger cannot determine from the topic. Summing them',
+      'against a balance in one token would add two currencies together.',
+      'A real gap in the history, not a defaulting rule. Every receipt written',
+      'since carries `tok`.',
+    ]),
+  )
+}
+
 console.log()
 console.log(
   LOCAL_ONLY_INVARIANTS.length === 0

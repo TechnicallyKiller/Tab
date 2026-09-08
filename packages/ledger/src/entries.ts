@@ -20,6 +20,20 @@ export interface EntryBase {
   at: ConsensusTimestamp
   /** Which settlement window this belongs to. */
   window: number
+  /**
+   * The token this entry's amounts are denominated in.
+   *
+   * Optional only because receipts written before the `tok` field existed do
+   * not carry it. **An absent token cannot be assumed to be the current one** —
+   * that is precisely the bug this exists to prevent: a deployment that
+   * switched tokens would leave one topic holding amounts in two currencies,
+   * and anything summing them would be adding TUSD to USDC and reporting the
+   * total as money.
+   *
+   * A consumer asserting a balance MUST filter on this and report what it
+   * excluded, the way `verify-tab` does.
+   */
+  token?: string
 }
 
 /**

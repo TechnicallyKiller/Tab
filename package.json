@@ -62,7 +62,8 @@
     "attack": "pnpm --filter @tab/loop-attacker attack",
     "verify-tab": "pnpm --filter @tab/verify verify-tab",
     "verify-ceiling": "pnpm --filter @tab/verify verify-ceiling",
-    "demo:payer": "pnpm --filter @tab/bootstrap demo:payer"
+    "demo:payer": "pnpm --filter @tab/bootstrap demo:payer",
+    "fund": "pnpm --filter @tab/bootstrap fund"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

@@ -299,6 +299,7 @@ async function pass(): Promise<void> {
     inForce: move.next.inForce,
     cause: move.action === 'shrink_now' ? 'graph_change' : 'clean_settlement',
     modelId: MODEL_ID,
+    tokenId,
   })
 
   console.log(`

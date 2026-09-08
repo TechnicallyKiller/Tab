@@ -100,7 +100,7 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
     // demonstrating that underwriting works.
     await receipts
       .write({
-        v: 1, t: 'refused', tab: request.tab, w: window,
+        v: 1, t: 'refused', tab: request.tab, w: window, tok: env.tokenId,
         cp: seller, amt: toWire(request.max), rule: refusal.rule, ev: refusal.evidence,
       })
       .catch(() => undefined) // a receipt failure must not turn a refusal into a 500
@@ -133,7 +133,7 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
    */
   const holdWrite = await receipts
     .write({
-      v: 1, t: 'hold', tab: request.tab, w: window,
+      v: 1, t: 'hold', tab: request.tab, w: window, tok: env.tokenId,
       hold: holdId, cp: seller, amt: toWire(request.max),
       exp: expiresAt, req: requestHash(request.url, at),
     })
@@ -180,16 +180,39 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   }
 
   // ── 3. COMMIT ────────────────────────────────────────────────────────────
+  /*
+   * Debit what the seller ACTUALLY charged, not the caller's cap.
+   *
+   * This recorded `request.max`, so a spend capped at `0.200000` against a
+   * seller charging `0.040000` debited the agent `0.200000` — overstating what
+   * it owed by `0.160000` while the float kept the difference. Invisible for as
+   * long as every demo set `max` equal to the price, and wrong the moment they
+   * differed. The reconciler would have caught it as an `amount_mismatch`
+   * against the on-chain transfer, which is some comfort, but the ledger should
+   * not need repairing for something knowable at write time.
+   *
+   * Falls back to `max` only when x402 did not report a price, and that case is
+   * recorded rather than silently treated as equal — an unreported price means
+   * the debit is an UPPER BOUND, and the reconciler will flag it.
+   */
+  const charged = result.amountPaid !== undefined ? micro(result.amountPaid) : request.max
+  if (result.amountPaid === undefined) {
+    console.warn(
+      `[spend] x402 reported no price for ${holdId}; debiting the cap ${format(request.max)} as ` +
+        'an upper bound. The reconciler will flag this against the on-chain transfer.',
+    )
+  }
+
   const debit: Entry = {
     kind: 'debit', at: nowConsensus(), window, holdId, counterparty: seller,
-    amount: micro(-request.max),
+    amount: micro(-charged),
     transactionId: result.settlementTransaction ?? `unsettled:${holdId}`,
   }
   state.push(request.tab, debit)
 
   const written = await receipts.write({
-    v: 1, t: 'debit', tab: request.tab, w: window,
-    cp: seller, amt: toWire(micro(-request.max)), hold: holdId,
+    v: 1, t: 'debit', tab: request.tab, w: window, tok: env.tokenId,
+    cp: seller, amt: toWire(micro(-charged)), hold: holdId,
     req: requestHash(request.url, at),
     tx: debit.transactionId,
   })
@@ -197,7 +220,9 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   return {
     outcome: 'paid',
     holdId,
-    amount: request.max,
+    // What was actually charged, so a caller reconciling against its own
+    // records sees the settled figure rather than the limit it set.
+    amount: charged,
     seller,
     body: result.body,
     receiptSeq: written.sequenceNumber,

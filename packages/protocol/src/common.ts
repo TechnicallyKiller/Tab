@@ -39,6 +39,23 @@ export const windowIndex = z.number().int().nonnegative()
 export const base = z.object({
   /** Schema version. */
   v: z.literal(SCHEMA_VERSION),
+  /**
+   * The token every `amount` in this message is denominated in.
+   *
+   * Added after discovering that receipts recorded amounts with no currency at
+   * all — every figure meant "whatever `USDC_TOKEN_ID` was configured when this
+   * was written". With one token that is invisible; the moment a deployment
+   * switches token it makes the whole topic ambiguous, and a stranger replaying
+   * it would be summing two different currencies. That directly undermines the
+   * claim that the topic is independently verifiable.
+   *
+   * OPTIONAL only for backward compatibility with the messages written before
+   * it existed. **Absent means the token in force at that consensus time**,
+   * which a stranger genuinely cannot determine — so the absence is a real gap
+   * in the history rather than a defaulting rule, and it is why every new
+   * receipt sets it.
+   */
+  tok: entityId.optional(),
   /** The agent this message concerns. */
   tab: entityId,
   /** Window index, so a replay can bucket without arithmetic on timestamps. */

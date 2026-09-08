@@ -225,6 +225,7 @@ async function pass(): Promise<number> {
     const message = settlementMessage.parse({
       v: 1,
       t: 'settlement',
+      tok: tokenId,
       tab: tabAccount,
       w: window,
       credits: toWire(result.plan.net.credits),
