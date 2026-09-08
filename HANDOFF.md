@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-07 by Claude · **19 of 27 packages · 165 tests · 5/5 guards**
+**Last updated:** 2026-09-08 by Claude · **20 of 27 packages · 179 tests · 5/5 guards**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -53,9 +53,9 @@ Zero Solidity, enforced by `pnpm guard`.
 
 **Written.** `money` · `protocol` · `params` · `ledger` · `graph` · `scoring` · `mirror` ·
 `hedera` · `x402` · `testkit` · `gateway` · `settlement` · `engine` · `web` · `verify` ·
-`bootstrap` · `probes` · `honest-agent` · `loop-attacker`
+`bootstrap` · `probes` · `honest-agent` · `loop-attacker` · `sdk`
 
-**Not written.** `db` · `cache` · `fastpath` · `observability` · `sdk` · `cli` ·
+**Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` ·
 `agentkit-plugin` · `mcp`
 
 **165 tests:** ledger 39 · scoring 28 · graph 27 · params 19 · engine 19 · money 13 · verify 11 ·
@@ -150,10 +150,11 @@ for this.
 
 ### What is next, in order
 
-1. **Wire `apps/web` to live data.** Highest visible value and the video depends on it. A mocked
-   dashboard on camera is a credibility risk — one number failing a HashScan cross-check makes every
-   other claim suspect. The UI exists; this is a data layer over endpoints the gateway already
-   serves.
+1. **Wire `apps/web` THROUGH `@tab/sdk`** (written 2026-09-08 — `web` may not import anything
+   else). First task is reconciling the UI's `WeightReason` enum with `@tab/graph`'s: the UI has no
+   `COMMON_FUNDER`, which is the rule that actually fires, and it should render the real codes
+   rather than a translation of them. A mocked dashboard on camera is a credibility risk — one
+   number failing a HashScan cross-check makes every other claim suspect.
 2. ~~Fix the false attack-catalogue claims~~ — **done 2026-09-08.** Five lines corrected; two moved
    from *Caught* to *OPEN*. The spend-side concentration cap and the registration flow are the two
    genuinely unbuilt rules, and both are now labelled OPEN in the README.
@@ -258,7 +259,7 @@ parallel. That is the only rule, and it is about merge conflicts, not authority.
 | **A4** | `cache` | — | unwritten. **Read Probe 5 first**: co-located p99 1.5ms; the hold reserve cannot be cached away |
 | **FAST** | `fastpath` · `apps/gateway` | — | gateway **done** — both legs, holds published, consumes ceilings from HCS. `fastpath` unwritten; checks are inline |
 | **SLOW** | `apps/engine` · `apps/settlement` | — | **both done and live.** No BullMQ/indexer; ceiling publication not serialised |
-| **S1** | `sdk` · `cli` | — | unwritten. `sdk` unlocks the rest cheaply; `cli` is **low value** |
+| **S1** | `sdk` · `cli` | — | `sdk` **done** — 14 tests, verified live. `cli` unwritten and **low value** |
 | **S2** | `agentkit-plugin` | — | unwritten. **The README falsely claims this exists** — build it or correct the line |
 | **S3** | `apps/web` | — | 4,468 lines built, **100% mocked**. THE next job |
 | **S4** | `mcp` | — | unwritten. The one agent-surface package with real demo value |
@@ -298,6 +299,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-08 | **AMOUNT FIELDS IN THE GATEWAY'S JSON USE `toWire`, NEVER `format`.** `format` is a DISPLAY function — 4 decimals and a U+2212 minus. The API served it, so `1.234567` went out as `"1.2345"` and parsed back as `1234500`: **67 micro-USDC silently lost per value.** A dashboard built on that cannot match HashScan, which is the one thing a dashboard must do. Prose messages may embed `format` inside a sentence | `gateway`, `sdk`, `web` |
+| 2026-09-08 | **`usdc()` is TOO PERMISSIVE to be a wire parser** — it accepts a U+2212 minus and pads a 4-decimal value, so the loss above was undetectable. `@tab/sdk` validates `/^-?\d+\.\d{6}$/` BEFORE parsing and rejects a display string with a message naming the cause. The tolerance in `usdc()` is right for human input and wrong for a wire boundary | `sdk`, `money`, anyone parsing amounts |
+| 2026-09-08 | **The gateway now rebuilds through `entriesFromMessages` from `@tab/ledger`.** It had its own `toEntry` with no `case 'hold'`, so **published holds were silently dropped on every restart** — a pending hold vanished from the projection, `available` came back overstated, and the agent could spend headroom that was reserved. Verified fixed: a restart now replays `hold: 2`. **THIRD message type lost to a private replay copy**, after settlements in the worker. There is one decode; use it | `gateway`, `settlement`, `engine`, `verify` |
+| 2026-09-08 | **`@tab/sdk` is written, and `web` may only read through it** (`allow: ['money','protocol','params','sdk']`). Wiring the dashboard with direct `fetch` calls would make that boundary decorative, which is why the SDK came before the frontend. A refusal is a VALUE, not an exception; guidance comes from `@tab/protocol`, never from the wire; retries are transport-only and report an **UNKNOWN** outcome rather than claiming nothing was spent | `sdk`, `web`, `mcp`, `cli`, `agentkit-plugin` |
 | 2026-09-07 | **`@tab/params` v2 IS THE SET IN FORCE (`tab-v2`). One change from v1: the starter floor `1.000000 → 0.250000`.** v1 made the product's central claim untestable — earned credit for one young customer is `0.2352` against a `1.0000` floor, so the GRANT dominated the EARNING for an agent's whole early life. `v1.ts` is byte-identical and stays forever; its frozen hash test is unchanged. **`pnpm verify-ceiling` still PASSES all six ceilings published under `tab-v1`**, because it resolves each message's own `model` field — the frozen-set claim demonstrated, not asserted | `params`, `scoring`, `engine`, `verify` |
 | 2026-09-07 | **The gateway's starter ceiling now comes from `@tab/params`, not a local env default.** It read `STARTER_CEILING_USDC ?? '1.000000'`, a SECOND source of truth for a policy number params exists to own — and it showed immediately: v2 lowered the floor to 0.25 and the gateway kept granting 1.0. Same for the per-call cap. The env vars remain as explicit demo overrides | `gateway`, `params` |
 | 2026-09-07 | **The engine RESUMES its in-force ceiling from the ceiling topic on a cold start.** It used to seed from its own fresh computation, which was a hole in the asymmetry rule: a restart accepted whatever it had just computed, so a growth the running engine would have HELD became effective simply because the process bounced. The published ceiling is the durable record of what is in force | `engine`, `verify` |
@@ -389,6 +394,51 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-08 — Claude — @tab/sdk, and two bugs it forced into the open
+
+**The SDK came before the frontend, and not by choice.** `web`'s allow list is
+`['money', 'protocol', 'params', 'sdk']` — "reads through the SDK only" — and `@tab/sdk` did not
+exist. Wiring the dashboard with direct `fetch` calls would have made that boundary decorative, so
+the SDK is the prerequisite. 14 tests, 179 total.
+
+`spend` · `quote` · `state` · `holds` · `receipts` · `health`, defined once because the same
+surface appears in the Agent Kit plugin, MCP and the CLI. Thin and browser-safe: no Hedera SDK, no
+Redis, no database driver, and **no way to pass a key** — the claim that the agent signs nothing
+should rest on a check anyone can run, not on us not having used a capability we shipped.
+
+**Writing it immediately exposed two real bugs.**
+
+**1. The gateway served DISPLAY strings as API values.** Every amount went through `format()` — 4
+decimals and a U+2212 minus. So `1.234567` left the gateway as `"1.2345"` and parsed back as
+`1234500`: **67 micro-USDC lost per value, silently.** A dashboard built on that could never match
+HashScan, which is the one thing a dashboard must do. Every amount field now uses `toWire()`.
+
+And the reason it had gone unnoticed is worth recording separately: **`usdc()` is too permissive to
+be a wire parser.** It accepts the U+2212 minus and pads a 4-decimal value, so the loss round-trips
+without an error. A test I wrote expecting rejection failed, which is how I found it. The SDK now
+validates the shape before parsing and names the cause; the tolerance in `usdc()` is right for
+human input and wrong at a wire boundary.
+
+**2. The gateway dropped published holds on every restart.** Its `rebuild` used a private
+`toEntry` with no `case 'hold'`. So a pending hold vanished from the projection, `available` came
+back overstated, and the agent could spend headroom that was actually reserved — a double-spend
+window that opened exactly when the process bounced. It now rebuilds through
+`entriesFromMessages`, the same decode the worker, the engine and `tools/verify` use. Verified: a
+restart replays `hold: 2` where it previously replayed none.
+
+**That is the THIRD message type lost to a private replay copy** — after settlements in the
+settlement worker and the tab's own ancestry in the engine. The pattern is consistent enough to
+state as a rule: *a private copy of a shared decode will miss a message type, and the miss will be
+silent.*
+
+Verified live against the running gateway: exact bigint parsing, `quote` correctly predicting
+`CEILING_EXCEEDED` for `0.30` against a `0.25` ceiling and affordable at `0.10`, 25 receipt rows.
+
+**Next:** wire `apps/web` through this SDK. The UI's own `WeightReason` enum does not match
+`@tab/graph`'s — it has no `COMMON_FUNDER`, which is the rule that actually fires — so reconciling
+that vocabulary is the first task, and the UI should render the real codes rather than a
+translation.
 
 ### 2026-09-08 — Claude — the attack catalogue now matches the code
 

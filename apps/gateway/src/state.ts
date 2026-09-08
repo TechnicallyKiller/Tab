@@ -1,10 +1,9 @@
 import {
-  canReserve, inConsensusOrder, position, resolveHolds,
+  canReserve, entriesFromMessages, inConsensusOrder, position, resolveHolds,
   type Entry, type HoldView, type Position, type ReserveDecision,
 } from '@tab/ledger'
 import { format, usdc, type MicroUsdc } from '@tab/money'
-import { decode, type TabMessage } from '@tab/protocol'
-import { decodeUtf8, readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
+import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
 
 /**
  * In-memory ledger state, rebuilt from HCS on boot.
@@ -35,33 +34,33 @@ export class LedgerState {
     this.defaultCeiling = defaultCeiling
   }
 
+  /**
+   * Rebuild the projection from HCS.
+   *
+   * Uses `entriesFromMessages` from `@tab/ledger` — the SAME decode the
+   * settlement worker, the engine and `tools/verify` use. This file had its own
+   * copy (`toEntry`), and the copy had no `case 'hold'`, so **published holds
+   * were silently dropped on every restart.** A pending hold vanished from the
+   * projection, `available` came back overstated, and the agent could spend
+   * headroom that was actually reserved — a double-spend window that opened
+   * exactly when the gateway bounced.
+   *
+   * That is the third message type to go missing from a private replay copy,
+   * after settlements in the worker. The lesson is now enforced structurally:
+   * there is one decode, and it lives in the package every reader shares.
+   */
   async rebuild(mirror: MirrorClient, topicId: string): Promise<RebuildResult> {
     const walk = await readTopic(mirror, { topicId })
     const { assembled } = reassembleChunks(walk.items)
 
     this.byTab.clear()
-    let replayed = 0
-    let skipped = 0
-
-    for (const message of assembled) {
-      const result = decode(decodeUtf8(message.payload))
-      if (!result.ok) {
-        // A bootstrap.hello from before the schema existed, or a future
-        // version. One unrecognised message must not abort the reconstruction
-        // of everything after it.
-        skipped++
-        continue
-      }
-      const entry = toEntry(result.message, message.consensusTimestamp)
-      if (!entry) continue
-      this.push(result.message.tab, entry)
-      replayed++
+    const replay = entriesFromMessages(assembled)
+    for (const [tab, entries] of replay.byTab) {
+      // Already in consensus order from the shared decode.
+      this.byTab.set(tab, [...entries])
     }
 
-    for (const [tab, entries] of this.byTab) {
-      this.byTab.set(tab, inConsensusOrder(entries))
-    }
-    return { replayed, skipped, tabs: this.byTab.size }
+    return { replayed: replay.replayed, skipped: replay.skipped, tabs: this.byTab.size }
   }
 
   push(tab: string, entry: Entry): void {
@@ -113,30 +112,3 @@ export class LedgerState {
  * Ceiling and settlement messages are not ledger entries — the caller applies
  * those separately — so they return null rather than being forced into shape.
  */
-export function toEntry(message: TabMessage, at: string): Entry | null {
-  const window = message.w
-  switch (message.t) {
-    case 'debit':
-      return {
-        kind: 'debit', at, window, holdId: message.hold,
-        counterparty: message.cp, amount: usdc(message.amt), transactionId: message.tx,
-      }
-    case 'credit':
-      return {
-        kind: 'credit', at, window, counterparty: message.cp,
-        amount: usdc(message.amt), attested: message.att, transactionId: message.tx,
-      }
-    case 'refused':
-      return {
-        kind: 'refusal', at, window, counterparty: message.cp,
-        requested: usdc(message.amt), rule: message.rule,
-      }
-    case 'repair':
-      return {
-        kind: 'repair', at, window, counterparty: message.cp,
-        amount: usdc(message.amt), transactionId: message.tx, reason: message.why,
-      }
-    default:
-      return null
-  }
-}

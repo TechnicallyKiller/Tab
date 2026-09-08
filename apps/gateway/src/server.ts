@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { paymentMiddleware } from '@x402/fastify'
-import { format, usdc } from '@tab/money'
+import { format, usdc, toWire } from '@tab/money'
 import { REFUSAL_GUIDANCE, isRetryable } from '@tab/protocol'
 import { createEarnServer, type Asset, type TabFacilitator } from '@tab/x402'
 import { serveAndCredit, type AgentEndpoint } from './earn.ts'
@@ -25,6 +25,19 @@ export interface EarnConfig {
 export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance {
   const app = Fastify({ logger: false })
 
+  /*
+   * AMOUNT FIELDS IN JSON USE `toWire`, NEVER `format`.
+   *
+   * `format` is a DISPLAY function: it truncates to 4 decimals and uses a
+   * U+2212 minus. Serving it as an API value is lossy and was — `1.234567`
+   * went out as `"1.2345"` and parsed back as `1234500`, silently dropping 67
+   * micro-USDC. A dashboard built on that cannot match HashScan, which is the
+   * one thing a dashboard must do.
+   *
+   * `toWire` gives six decimals and an ASCII minus, which `usdc()` round-trips
+   * exactly. Prose messages may still embed `format` inside a sentence, where
+   * a human is the reader and 4dp is the point.
+   */
   // ── the EARN leg ────────────────────────────────────────────────────────
   //
   // The gateway fronts the agent's endpoint. x402 answers the 402, verifies and
@@ -82,7 +95,7 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
       return reply.status(result.status).send({
         served: result.body,
         credited: {
-          amount: format(earn.endpoint.atomicPrice),
+          amount: toWire(earn.endpoint.atomicPrice),
           attested: result.status >= 200 && result.status < 300,
           receiptSeq: result.receiptSeq,
           written: result.creditWritten,
@@ -136,7 +149,7 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
           guidance: REFUSAL_GUIDANCE[outcome.rule],
           retryable: isRetryable(outcome.rule),
         },
-        available: format(outcome.available),
+        available: toWire(outcome.available),
       })
     }
 
@@ -152,7 +165,7 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
 
     return reply.status(200).send({
       paid: {
-        amount: format(outcome.amount),
+        amount: toWire(outcome.amount),
         seller: outcome.seller,
         holdId: outcome.holdId,
         receiptSeq: outcome.receiptSeq,
@@ -170,12 +183,12 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
     return {
       tab,
       window: deps.window(),
-      balance: format(p.balance),
-      outstanding: format(p.outstanding),
-      holds: format(p.holds),
-      available: format(p.available),
-      ceiling: format(p.ceiling),
-      perCallCap: format(deps.env.perCallCap),
+      balance: toWire(p.balance),
+      outstanding: toWire(p.outstanding),
+      holds: toWire(p.holds),
+      available: toWire(p.available),
+      ceiling: toWire(p.ceiling),
+      perCallCap: toWire(deps.env.perCallCap),
       entries: deps.state.entriesFor(tab).length,
     }
   })
@@ -184,7 +197,7 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
     const { tab } = request.params as { tab: string }
     return deps.state.holds(tab, nowConsensus()).map((h) => ({
       ...h,
-      amount: format(h.amount),
+      amount: toWire(h.amount),
     }))
   })
 
@@ -192,8 +205,8 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
     const { tab } = request.params as { tab: string }
     return deps.state.entriesFor(tab).map((e) => ({
       ...e,
-      amount: 'amount' in e ? format(e.amount) : undefined,
-      requested: 'requested' in e ? format(e.requested) : undefined,
+      amount: 'amount' in e ? toWire(e.amount) : undefined,
+      requested: 'requested' in e ? toWire(e.requested) : undefined,
     }))
   })
 
