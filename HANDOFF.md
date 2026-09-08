@@ -140,7 +140,7 @@ for this.
 
 **Presentation.**
 
-10. **`apps/web` is 100% mocked** — not one `fetch` in 4,468 lines.
+10. **`apps/web` is PARTLY live** — `tab`, `receipts`, `refusals` poll the gateway and the console states `LIVE`/`MOCK DATA` on screen. `counterparties`, `settlements`, `ceiling`, `agents` and `config` are still mocked; the first three need data sources that do not exist yet, notably **per-counterparty weights, which the engine computes and publishes nowhere.**
 11. **No demo video, no user-testing evidence.** Only the user can produce these.
 12. **The plan's demo script is stale in two places**: it says the attack collapses the ceiling
     (it does not — the fake revenue never inflates it), and "ramp 15% → 30%" (it reads 25% → 40%).
@@ -261,7 +261,7 @@ parallel. That is the only rule, and it is about merge conflicts, not authority.
 | **SLOW** | `apps/engine` · `apps/settlement` | — | **both done and live.** No BullMQ/indexer; ceiling publication not serialised |
 | **S1** | `sdk` · `cli` | — | `sdk` **done** — 14 tests, verified live. `cli` unwritten and **low value** |
 | **S2** | `agentkit-plugin` | — | unwritten. **The README falsely claims this exists** — build it or correct the line |
-| **S3** | `apps/web` | — | 4,468 lines built, **100% mocked**. THE next job |
+| **S3** | `apps/web` | — | **3 views LIVE** (tab, receipts, refusals) through `@tab/sdk`. 5 still mocked, each blocked on a missing data source rather than UI work |
 | **S4** | `mcp` | — | unwritten. The one agent-surface package with real demo value |
 | **D1** | `tools/verify` | — | **done** — 11 tests. Both commands run; caught two of our own mistakes |
 | **D2** | `agents/honest-agent` | — | **done** — zero dependencies, spends and earns |
@@ -299,6 +299,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-08 | **THE CONSOLE IS WIRED TO LIVE DATA THROUGH `@tab/sdk`** — `tab`, `receipts` and `refusals` now poll the gateway. **It states its source on screen**: `LIVE` when `NEXT_PUBLIC_TAB_ACCOUNT_ID` is set, `MOCK DATA` styled as a warning otherwise, plus `GATEWAY UNREACHABLE` on a failed poll. A console that silently falls back to invented numbers is one that will be filmed showing invented numbers | `web`, demo |
+| 2026-09-08 | **`NEXT_PUBLIC_*` IS READ FROM THE MONOREPO ROOT `.env` VIA `next.config.ts`.** Next loads `.env` relative to the APP directory and inlines `NEXT_PUBLIC_*` at BUILD time — so a root-level `.env` was invisible and the console rendered mock data while appearing configured. Only the two `NEXT_PUBLIC_` keys are lifted; forwarding `.env` wholesale would put private keys in a browser bundle | `web` |
+| 2026-09-08 | **Entries carry `seq` and `requestHash` now** — the HCS sequence number and the published request hash, both optional because an entry created in-process has neither yet. The console shows the real sequence number instead of a counter of its own, and renders `pending` rather than inventing one. Live: `seq` present on all 35 entries, `token` on the 8 written since `tok` existed | `ledger`, `sdk`, `gateway`, `web` |
+| 2026-09-08 | **The UI's `Leg` type had THREE values; the topic has SIX.** `HOLD`, `REPAIR` and `SETTLEMENT` were unrenderable. A `HOLD` row immediately before its `DEBIT` is the write-ahead ordering visible on screen — the property a viewer would otherwise have to take on trust | `web`, `protocol` |
 | 2026-09-08 | **REAL TESTNET USDC IS IN THE FLOAT — `USDC_TOKEN_ID=0.0.429274`.** The faucet worked all along; it delivered 20.000000 USDC to the OPERATOR (`0.0.11920 → 0.0.8812188`), not to a wallet. `TUSD` is no longer needed. Real USDC is **6 decimals, same as the stand-in**, so `MicroUsdc` is unchanged. Also markedly faster: a spend settles in **4-5s** against 25-39s on TUSD | everyone; `NETWORK_IMPACT.md` fee/latency figures |
 | 2026-09-08 | **RECEIPTS NOW CARRY `tok` — the token every amount is denominated in.** They previously recorded amounts with NO currency: each figure meant "whatever `USDC_TOKEN_ID` was configured when it was written". Invisible with one token, and the moment a deployment switches, the topic holds two currencies with nothing distinguishing them — a stranger replaying it would be **summing TUSD and USDC and reporting the total as money**. `Entry.token` carries it, and **`verify-tab` filters on it and reports what it excluded** | `protocol`, `ledger`, `verify`, `gateway`, `settlement`, `engine` |
 | 2026-09-08 | **THE GATEWAY DEBITED THE CAP, NOT THE SETTLED AMOUNT.** `amount: micro(-request.max)` — so a spend capped at `0.200000` against a seller charging `0.040000` debited the agent `0.200000` and the float kept `0.160000`. Invisible for as long as every demo set `max` equal to the price. `@tab/x402`'s `call()` now returns `amountPaid`, captured from the requirement the client accepted; the gateway debits that and warns loudly when x402 reports no price | `gateway`, `x402`, `settlement`, `verify` |
@@ -400,6 +404,54 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-08 (evening) — Claude — the console is on live data
+
+`tab`, `receipts` and `refusals` now render figures polled from the gateway through `@tab/sdk`.
+Builds clean, 13 routes, and verified end to end: the tab id and gateway URL are inlined into the
+client bundle, and the gateway answers `balance=3.750000 ceiling=0.250000` with 35 entries.
+
+**The architecture made this far smaller than expected.** Every view reads one `useConsole()`
+context fed by a single hook, so live data meant writing one replacement hook with the same shape —
+not touching eight views. `useLiveTab` mirrors `useReceiptStream` exactly and the provider picks
+between them, which also keeps the mock usable: a demo sometimes has to run with no gateway, and a
+mock that has drifted out of shape is a mock nobody can fall back to.
+
+**The console states where its numbers came from, always.** `LIVE`, or `MOCK DATA` styled as a
+warning, plus `GATEWAY UNREACHABLE` when a poll fails. On a failed poll the last good figures STAY
+on screen marked stale rather than blanking — a reader glancing at a zeroed balance and ceiling
+would read a liquidated tab, not a lost connection.
+
+**Three things had to be fixed to make it honest rather than merely working:**
+
+1. **`NEXT_PUBLIC_*` was invisible.** Next loads `.env` relative to the app directory and inlines
+   those values at BUILD time, so our root `.env` never reached the bundle — the console rendered
+   mock data while appearing configured, which is precisely the failure the `LIVE` badge exists to
+   prevent, happening to the badge itself. `next.config.ts` now reads the root file and lifts ONLY
+   the two `NEXT_PUBLIC_` keys; forwarding `.env` wholesale would put private keys in a browser
+   bundle.
+2. **The UI's `Leg` had three values where the topic has six.** `HOLD`, `REPAIR` and `SETTLEMENT`
+   could not be rendered at all. Showing a `HOLD` immediately before its `DEBIT` puts the
+   write-ahead ordering on screen, which is otherwise a property a viewer must take on trust.
+3. **`seq` and `requestHash` were required fields the mock had to invent.** They are real data —
+   the HCS sequence number and the published `req` hash — so they are surfaced from
+   `entriesFromMessages` through the SDK instead, and are now OPTIONAL because an entry the gateway
+   created a moment ago genuinely has neither. The table renders `pending` rather than a fabricated
+   number. Live: `seq` on all 35 entries, `token` on the 8 written since `tok` existed — the honest
+   boundary of the token switch, visible in the data.
+
+**Still mocked, and each blocked on a data source that does not exist yet, not on UI work:**
+
+| View | What it needs |
+|---|---|
+| `counterparties` | **Per-counterparty weights are computed by the engine and published nowhere.** The strongest artifact in the demo is currently only visible in engine stdout |
+| `settlements` | A gateway endpoint over the settlements topic, and an SDK verb |
+| `ceiling` | A gateway endpoint exposing the ceiling snapshot it already consumes, with the published inputs and hash |
+| `agents` | Multi-tab support; the gateway serves one tab at a time |
+| `config` | Can read `@tab/params` directly — the smallest of these by far |
+
+**Next:** publishing counterparty weights is the highest-value one, because it turns the
+independence table from stdout into a screen.
 
 ### 2026-09-08 (later) — Claude — real USDC, and the two bugs the switch exposed
 

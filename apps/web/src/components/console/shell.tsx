@@ -37,7 +37,7 @@ const TITLES: Record<string, [string, string]> = {
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const { seconds, stale, toggleStale } = useConsole()
+  const { seconds, stale, toggleStale, live, error } = useConsole()
   const [title, subtitle] = TITLES[pathname] ?? ['Tab', '']
 
   return (
@@ -87,6 +87,34 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             <span style={{ fontSize: 19, fontWeight: 600 }}>{mmss(seconds)}</span>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/*
+              WHERE THE NUMBERS CAME FROM, always on screen.
+              A console that silently falls back to mock data is a console that
+              will be filmed showing invented numbers — and one figure that
+              fails a HashScan cross-check makes every other figure suspect. So
+              the source is stated, not implied, and MOCK is styled as a warning
+              rather than as a neutral label.
+            */}
+            <span
+              className={live ? 'pill' : 'pill pill-caution'}
+              title={
+                live
+                  ? 'Figures polled from the gateway through @tab/sdk'
+                  : 'NEXT_PUBLIC_TAB_ACCOUNT_ID is not set — these figures are invented'
+              }
+              style={{ background: live ? 'var(--surface)' : 'var(--caution)' }}
+            >
+              {live ? 'LIVE' : 'MOCK DATA'}
+            </span>
+            {error ? (
+              <span
+                className="pill pill-caution"
+                title={error}
+                style={{ background: 'var(--caution)' }}
+              >
+                GATEWAY UNREACHABLE
+              </span>
+            ) : null}
             {/* Stale is a real state to design, so it is togglable in the mock. */}
             <button
               type="button"

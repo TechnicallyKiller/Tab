@@ -43,7 +43,9 @@ export function ReceiptTable({ rows }: { rows: Receipt[] }) {
                   ? 'var(--credit)'
                   : 'var(--debit)'
             return (
-              <tr key={`${r.seq}-${r.consensus}`} data-flash={r.flash}>
+              // Keyed on the consensus timestamp, which is unique and always
+              // present. `seq` is absent until a receipt is published.
+              <tr key={r.consensus} data-flash={r.flash}>
                 <td style={{ color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{r.consensus}</td>
                 <td><Pill tone={tone}>{r.leg}</Pill></td>
                 <td>{r.counterparty}</td>
@@ -53,10 +55,10 @@ export function ReceiptTable({ rows }: { rows: Receipt[] }) {
                 <td style={{ color: 'var(--ink-2)' }}>
                   {r.leg === 'REFUSED' ? '—' : r.attested ? 'yes' : 'no'}
                 </td>
-                <td style={{ color: 'var(--ink-3)' }}>{r.requestHash}</td>
+                <td style={{ color: 'var(--ink-3)' }}>{r.requestHash ?? '—'}</td>
                 <td className="n">
                   <a href={`https://hashscan.io/testnet/topic/0.0.4881203`} style={{ color: 'var(--pen)' }}>
-                    {fmtSeq(r.seq)}
+                    {r.seq === undefined ? 'pending' : fmtSeq(r.seq)}
                   </a>
                 </td>
               </tr>

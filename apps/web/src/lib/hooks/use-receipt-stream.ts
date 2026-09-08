@@ -9,7 +9,7 @@ import {
   SEED_RECEIPTS,
   TOP_SEQ,
 } from '../mock/receipts'
-import { HOLDS, OPENING_BALANCE, WINDOW_SECONDS } from '../mock/tab'
+import { CEILING, HOLDS, OPENING_BALANCE, PER_CALL_CAP, WINDOW_SECONDS } from '../mock/tab'
 import type { Leg, Receipt } from '../mock/types'
 
 const EMIT_MS = 3400
@@ -110,6 +110,12 @@ export function useReceiptStream() {
     balance,
     outstanding,
     holds: HOLDS,
+    // Mirrors `useLiveTab` so the two are interchangeable behind the provider.
+    // A mock whose shape has drifted is a mock nobody can fall back to.
+    ceiling: CEILING,
+    perCallCap: PER_CALL_CAP,
+    error: undefined as string | undefined,
+    live: false as const,
     flashKey,
     refusalStamp,
     streaming,

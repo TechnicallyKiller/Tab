@@ -34,6 +34,17 @@ export interface EntryBase {
    * excluded, the way `verify-tab` does.
    */
   token?: string
+  /**
+   * The HCS sequence number this entry was replayed from.
+   *
+   * Optional because an entry constructed in-process — before its receipt is
+   * published — genuinely has no sequence number yet. Present on anything
+   * replayed from a topic, and it is the number you cite in an audit, so the
+   * console shows it rather than a counter of its own.
+   */
+  seq?: number
+  /** Hash of the request this entry relates to, when the receipt carried one. */
+  requestHash?: string
 }
 
 /**

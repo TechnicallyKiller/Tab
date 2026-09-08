@@ -6,11 +6,21 @@ import { useConsole } from '@/components/console/provider'
 import { ReceiptTable } from '@/components/console/receipt-table'
 import { Card, CardHead, Figure, Stamp } from '@/components/ui'
 import { atLeastZero, format, isNegative, pctOf, sub } from '@/lib/money'
-import { CEILING, PER_CALL_CAP, STARTER_TAB } from '@/lib/mock/tab'
+import { STARTER_TAB } from '@/lib/mock/tab'
 
 export default function TabView() {
-  const { rows, balance, outstanding, holds, flashKey, stale, streaming, toggleStream } = useConsole()
-  const available = atLeastZero(sub(sub(CEILING, outstanding), holds))
+  const {
+    rows, balance, outstanding, holds, ceiling, perCallCap,
+    flashKey, stale, streaming, toggleStream,
+  } = useConsole()
+  /*
+   * The ceiling comes from the console, which polls the gateway — it used to be
+   * a mock constant, so this view showed a fixed 1.0000 regardless of what the
+   * engine had published. `available` is still derived here rather than taken
+   * from the gateway, deliberately: recomputing it from the same three figures
+   * on screen means a viewer can check the arithmetic themselves.
+   */
+  const available = atLeastZero(sub(sub(ceiling, outstanding), holds))
   const negative = isNegative(balance)
 
   return (
@@ -34,13 +44,13 @@ export default function TabView() {
             </div>
           </div>
           <div className="rule-t" style={{ padding: '18px 22px 20px' }}>
-            <CapacityMeter outstanding={outstanding} holds={holds} ceiling={CEILING} />
+            <CapacityMeter outstanding={outstanding} holds={holds} ceiling={ceiling} />
           </div>
         </Card>
 
         <div className="tile-grid">
-          <Tile label="available" value={format(available)} tone="credit" pct={pctOf(available, CEILING)} />
-          <Tile label="per-call cap" value={format(PER_CALL_CAP)} pct={0} />
+          <Tile label="available" value={format(available)} tone="credit" pct={pctOf(available, ceiling)} />
+          <Tile label="per-call cap" value={format(perCallCap)} pct={0} />
           <Tile label="window spend" value="0.62 / 1.00" pct={62} />
           <Tile label="tier" value="C" pct={33} />
         </div>

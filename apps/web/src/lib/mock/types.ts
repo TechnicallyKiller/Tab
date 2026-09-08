@@ -1,15 +1,31 @@
 import type { BasisPoints, MicroUsdc } from '../money'
 
-export type Leg = 'DEBIT' | 'CREDIT' | 'REFUSED'
+/**
+ * Six legs, because the receipt topic has six message types.
+ *
+ * This listed three. `HOLD`, `REPAIR` and `SETTLEMENT` are on the topic and
+ * showing them is not padding: a HOLD row immediately before its DEBIT is the
+ * write-ahead ordering visible on screen, which is the property a stranger
+ * would otherwise have to take on trust.
+ */
+export type Leg = 'HOLD' | 'DEBIT' | 'CREDIT' | 'REFUSED' | 'REPAIR' | 'SETTLEMENT'
 
 export interface Receipt {
+  /** Consensus timestamp — the real ordering key. */
   consensus: string
   leg: Leg
   counterparty: string
   amount: MicroUsdc
   attested: boolean
-  requestHash: string
-  seq: number
+  /**
+   * Optional, because they are only present once a receipt has been PUBLISHED.
+   *
+   * They were required, which forced the mock to invent both. Real data has a
+   * gap here — an entry the gateway created a moment ago has no HCS sequence
+   * number yet — and a UI that cannot render that gap would have to be lied to.
+   */
+  requestHash?: string
+  seq?: number
   /** Set only on rows that arrived while the page was open, to drive the flash. */
   flash?: string
 }

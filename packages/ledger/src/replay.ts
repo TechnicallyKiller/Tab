@@ -20,6 +20,8 @@ import { inConsensusOrder, type Entry } from './entries.ts'
 export interface TopicMessage {
   payload: Uint8Array
   consensusTimestamp: string
+  /** Consensus-assigned and monotonic. Carried onto the entry for auditing. */
+  sequenceNumber?: number
 }
 
 export interface Replay {
@@ -51,42 +53,57 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
       continue
     }
     const msg = result.message
+
+    /*
+     * Audit fields, extracted ONCE and typed.
+     *
+     * Spread inline per case, TypeScript could not narrow `msg.req` across
+     * message types that lack it and inferred `{}` — which then failed to
+     * satisfy `Entry`. Pulling them out here types them properly and keeps the
+     * cases readable.
+     */
+    const audit: { seq?: number; requestHash?: string; token?: string } = {
+      ...(message.sequenceNumber !== undefined ? { seq: message.sequenceNumber } : {}),
+      ...('req' in msg && typeof msg.req === 'string' ? { requestHash: msg.req } : {}),
+      ...(msg.tok ? { token: msg.tok } : {}),
+    }
+
     let entry: Entry | null = null
 
     switch (msg.t) {
       case 'hold':
         entry = {
-          kind: 'hold', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}), holdId: msg.hold,
+          kind: 'hold', at: message.consensusTimestamp, window: msg.w, ...audit, holdId: msg.hold,
           counterparty: msg.cp, amount: usdc(msg.amt), expiresAt: msg.exp,
         }
         break
       case 'debit':
         entry = {
-          kind: 'debit', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}), holdId: msg.hold,
+          kind: 'debit', at: message.consensusTimestamp, window: msg.w, ...audit, holdId: msg.hold,
           counterparty: msg.cp, amount: usdc(msg.amt), transactionId: msg.tx,
         }
         break
       case 'credit':
         entry = {
-          kind: 'credit', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
+          kind: 'credit', at: message.consensusTimestamp, window: msg.w, ...audit,
           counterparty: msg.cp, amount: usdc(msg.amt), attested: msg.att, transactionId: msg.tx,
         }
         break
       case 'refused':
         entry = {
-          kind: 'refusal', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
+          kind: 'refusal', at: message.consensusTimestamp, window: msg.w, ...audit,
           counterparty: msg.cp, requested: usdc(msg.amt), rule: msg.rule,
         }
         break
       case 'repair':
         entry = {
-          kind: 'repair', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
+          kind: 'repair', at: message.consensusTimestamp, window: msg.w, ...audit,
           counterparty: msg.cp, amount: usdc(msg.amt), transactionId: msg.tx, reason: msg.why,
         }
         break
       case 'settlement':
         entry = {
-          kind: 'settlement', at: message.consensusTimestamp, window: msg.w, ...(msg.tok ? { token: msg.tok } : {}),
+          kind: 'settlement', at: message.consensusTimestamp, window: msg.w, ...audit,
           net: usdc(msg.net), outcome: msg.outcome,
           rampFromBp: msg.rampFrom, rampToBp: msg.rampTo,
           ...(msg.tx ? { transactionId: msg.tx } : {}),

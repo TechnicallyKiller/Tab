@@ -126,6 +126,18 @@ export type ReceiptLeg = 'hold' | 'debit' | 'credit' | 'refusal' | 'repair' | 's
 
 export interface ReceiptRow {
   leg: ReceiptLeg
+  /**
+   * The HCS sequence number, when this entry was replayed from a topic.
+   *
+   * Optional because an entry the gateway created this instant has not been
+   * published yet. It is the number to cite in an audit, so the console shows
+   * it rather than a counter of its own.
+   */
+  seq?: number
+  /** Hash of the request, when the receipt carried one. Never the request. */
+  requestHash?: string
+  /** The token these amounts are denominated in. Absent on pre-`tok` receipts. */
+  token?: string
   /** Consensus timestamp — the ordering key, and the only one that counts. */
   at: string
   window: number

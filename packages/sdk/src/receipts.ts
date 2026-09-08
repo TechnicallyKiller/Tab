@@ -49,6 +49,9 @@ export async function receipts(client: TabClient, tab: string): Promise<ReceiptR
       leg,
       at: String(r['at']),
       window: Number(r['window'] ?? 0),
+      ...(r['seq'] !== undefined && r['seq'] !== null ? { seq: Number(r['seq']) } : {}),
+      ...(r['requestHash'] ? { requestHash: String(r['requestHash']) } : {}),
+      ...(r['token'] ? { token: String(r['token']) } : {}),
       ...(r['counterparty'] ? { counterparty: String(r['counterparty']) } : {}),
       /*
        * A refusal carries `requested`, not `amount` — it moved no money, and
