@@ -17,9 +17,11 @@
  */
 import { TabClient, type TabClientConfig } from './client.ts'
 import { quote, spend, state } from './spend.ts'
-import { health, holds, receipts } from './receipts.ts'
+import { counterparties, health, holds, receipts } from './receipts.ts'
 import type { MicroUsdc } from '@tab/money'
-import type { Quote, SpendRequest, SpendResult, TabState, Hold, ReceiptRow } from './types.ts'
+import type {
+  CounterpartyWeight, Hold, Quote, ReceiptRow, SpendRequest, SpendResult, TabState,
+} from './types.ts'
 
 export interface Tab {
   spend(request: SpendRequest): Promise<SpendResult>
@@ -27,6 +29,7 @@ export interface Tab {
   state(tab: string): Promise<TabState>
   holds(tab: string): Promise<Hold[]>
   receipts(tab: string): Promise<ReceiptRow[]>
+  counterparties(tab: string): Promise<CounterpartyWeight[]>
   health(): Promise<Awaited<ReturnType<typeof health>>>
 }
 
@@ -45,13 +48,14 @@ export function createTab(config: TabClientConfig): Tab {
     state: (tab) => state(client, tab),
     holds: (tab) => holds(client, tab),
     receipts: (tab) => receipts(client, tab),
+    counterparties: (tab) => counterparties(client, tab),
     health: () => health(client),
   }
 }
 
 export { TabClient, type TabClientConfig } from './client.ts'
 export { spend, quote, state, parseAmount } from './spend.ts'
-export { holds, receipts, health } from './receipts.ts'
+export { holds, receipts, counterparties, health } from './receipts.ts'
 export {
   TabInvalidError,
   TabProtocolError,
@@ -60,6 +64,7 @@ export {
   type TabError,
 } from './errors.ts'
 export type {
+  CounterpartyWeight,
   Hold,
   Quote,
   ReceiptLeg,
@@ -72,4 +77,16 @@ export type {
   SpendResult,
   TabState,
 } from './types.ts'
-export { REFUSAL_CODES, REFUSAL_GUIDANCE, isRetryable } from './types.ts'
+export {
+  BLOCKING_REASONS,
+  REFUSAL_CODES,
+  REFUSAL_GUIDANCE,
+  WEIGHT_REASONS,
+  WEIGHT_REASON_DETAIL,
+  isBlocking,
+  isRetryable,
+} from './types.ts'
+
+// Re-exported so `apps/web` can type a reason without importing @tab/graph,
+// which its allow list forbids.
+export type { WeightReason } from '@tab/protocol'

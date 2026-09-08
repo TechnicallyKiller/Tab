@@ -30,14 +30,17 @@ export interface Receipt {
   flash?: string
 }
 
-export type WeightReason =
-  | 'INDEPENDENT'
-  | 'AGE_DISCOUNT'
-  | 'SHARED_ROOT'
-  | 'RECIPROCAL_FLOW'
-  | 'CONCENTRATION'
-  | 'HARD_BLOCK_ANCESTRY'
-  | 'HARD_BLOCK_SOLE_COUNTERPARTY'
+/*
+ * The reason vocabulary comes from `@tab/protocol` via the SDK.
+ *
+ * This file defined its own: seven names, of which two existed in the system,
+ * and no `COMMON_FUNDER` — the rule that actually fires on live data. The
+ * console would have rendered reason codes that do not exist, and `chipTone`
+ * matched `HARD_BLOCK*`, so every real hard block showed as a mere caution.
+ */
+export type { WeightReason } from '@tab/sdk'
+import type { WeightReason } from '@tab/sdk'
+
 
 export interface Counterparty {
   id: string

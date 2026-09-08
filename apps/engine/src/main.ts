@@ -34,6 +34,7 @@ import {
 import { edgesFor, funderOf, isYoung, revenueFromEntries } from './gather.ts'
 import { recompute } from './recompute.ts'
 import { publishCeiling } from './publish/ceiling.ts'
+import { publishWeights } from './publish/weights.ts'
 import { transition, type CeilingState } from './guards/asymmetry.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -287,6 +288,30 @@ async function pass(): Promise<void> {
    * and an engine that only speaks when a number moves is indistinguishable
    * from one that has died.
    */
+  /*
+   * Weights first, then the ceiling.
+   *
+   * The ceiling is the CONCLUSION and the weights are the evidence for it, so a
+   * reader who sees a ceiling on the topic can already find the weights that
+   * produced it. Published the other way round there is a window — small, but
+   * real — where the console shows a collapsed ceiling and no reason for it,
+   * which is the one thing the Counterparties view exists to prevent.
+   */
+  if (result.weights.length > 0) {
+    const weightSeqs = await publishWeights({
+      hedera,
+      topicId: ceilingTopic,
+      tab: tabAccount,
+      window: currentWindow,
+      tokenId,
+      weights: result.weights,
+      revenue: revenue.revenueByCounterparty,
+    })
+    console.log(
+      `  weights         ${weightSeqs.length} published · seq ${weightSeqs.map((w) => w.sequenceNumber).join(', ')}`,
+    )
+  }
+
   const published = await publishCeiling({
     hedera,
     topicId: ceilingTopic,

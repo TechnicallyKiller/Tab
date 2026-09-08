@@ -71,8 +71,10 @@ export {
 
 export {
   ceilingsFromMessages,
+  weightsFromMessages,
   entriesFromMessages,
   type PublishedCeiling,
+  type PublishedWeight,
   type Replay,
   type TopicMessage,
 } from './replay.ts'

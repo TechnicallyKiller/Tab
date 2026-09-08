@@ -1,8 +1,11 @@
 import type { TabClient } from './client.ts'
 import { TabInvalidError } from './errors.ts'
 import { parseAmount } from './spend.ts'
-import { REFUSAL_CODES, type RefusalCode } from '@tab/protocol'
-import type { Hold, ReceiptRow } from './types.ts'
+import {
+  REFUSAL_CODES, WEIGHT_REASONS,
+  type RefusalCode, type WeightReason,
+} from '@tab/protocol'
+import type { CounterpartyWeight, Hold, ReceiptRow } from './types.ts'
 
 /**
  * Validated, not cast.
@@ -88,4 +91,51 @@ export async function health(client: TabClient): Promise<{
     window: Number(body['window'] ?? 0),
     demoMode: body['demoMode'] === true,
   }
+}
+
+/**
+ * Published independence weights for a tab's counterparties.
+ *
+ * Reason codes are VALIDATED against `WEIGHT_REASONS`, not cast — an unknown
+ * reason from a newer server is dropped rather than typed as a real one, for
+ * the same reason an unknown refusal code is: the console would otherwise
+ * render a rule that does not exist, and `isBlocking` would answer confidently
+ * about it.
+ */
+export async function counterparties(
+  client: TabClient,
+  tab: string,
+): Promise<CounterpartyWeight[]> {
+  if (!tab) throw new TabInvalidError('counterparties() needs a tab id')
+  const rows = await client.request<Record<string, unknown>[]>(
+    'GET',
+    `/v1/tabs/${tab}/counterparties`,
+  )
+  return rows.map((r) => {
+    const raw = Array.isArray(r['reasons']) ? r['reasons'] : []
+    const reasons = raw.filter(knownReason)
+    return {
+      counterparty: String(r['counterparty']),
+      bp: Number(r['bp'] ?? 0),
+      /*
+       * Never empty, even if every reason was unrecognised.
+       *
+       * A weight with no reason is unreadable in the console, so an unknown
+       * vocabulary degrades to `INDEPENDENT` ONLY when the weight is full —
+       * otherwise it stays empty and the view shows the number without a
+       * fabricated justification for it.
+       */
+      reasons: reasons.length > 0 ? reasons : Number(r['bp'] ?? 0) === 10_000 ? (['INDEPENDENT'] as const) : [],
+      blocking: r['blocking'] === true,
+      revenue: parseAmount(r['revenue'], 'counterparty.revenue'),
+      shareBp: Number(r['shareBp'] ?? 0),
+      window: Number(r['window'] ?? 0),
+      at: String(r['at']),
+      ...(r['token'] ? { token: String(r['token']) } : {}),
+    }
+  })
+}
+
+function knownReason(value: unknown): value is WeightReason {
+  return typeof value === 'string' && (WEIGHT_REASONS as readonly string[]).includes(value)
 }

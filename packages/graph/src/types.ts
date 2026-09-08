@@ -57,19 +57,23 @@ export interface AccountFacts {
  * is deciding a spend, and `weightOf` marks them `blocking` so the caller does
  * not have to know which reasons are fatal.
  */
-export const WEIGHT_REASONS = [
-  'INDEPENDENT',
-  'FUNDED_BY_AGENT',
-  'COMMON_FUNDER',
-  'SOLE_COUNTERPARTY',
-  'RECIPROCAL_FLOW',
-  'SHARED_FUNDING_ROOT',
-  'YOUNG_ACCOUNT',
-  'CONCENTRATED',
-  'UNATTESTED',
-] as const
-
-export type WeightReason = (typeof WEIGHT_REASONS)[number]
+/*
+ * The reason vocabulary lives in `@tab/protocol`, not here.
+ *
+ * It is a PUBLISHED interface — it goes on HCS in a weight message and is
+ * rendered in the console — and `apps/web` may not import this package. Keeping
+ * it here forced the console to invent its own list: seven names, two of which
+ * matched, and no `COMMON_FUNDER` at all, which is the rule that actually
+ * fires. Re-exported so this package's own consumers are unaffected.
+ */
+export {
+  BLOCKING_REASONS,
+  WEIGHT_REASONS,
+  WEIGHT_REASON_DETAIL,
+  isBlocking,
+  type WeightReason,
+} from '@tab/protocol'
+import type { WeightReason } from '@tab/protocol'
 
 export interface Weight {
   counterparty: AccountId
@@ -88,17 +92,3 @@ export interface Weight {
   blocking: boolean
 }
 
-/** Human-readable explanation, for the dashboard and the refusal message. */
-export const WEIGHT_REASON_DETAIL: Record<WeightReason, string> = {
-  INDEPENDENT: 'no funding relationship, no reciprocal flow, counted in full',
-  FUNDED_BY_AGENT: 'the agent funded this account — revenue from it is the agent paying itself',
-  COMMON_FUNDER:
-    'the same account funded both this counterparty and the agent’s tab — one operator on both ' +
-    'sides of the trade, so the revenue is not independent demand',
-  SOLE_COUNTERPARTY: 'the agent is this account’s only counterparty — it exists to trade with the agent',
-  RECIPROCAL_FLOW: 'value flows back toward the agent — some of this revenue is circular',
-  SHARED_FUNDING_ROOT: 'funded from the same root as the agent within the hop limit',
-  YOUNG_ACCOUNT: 'account is newer than the age threshold — not yet independently established',
-  CONCENTRATED: 'over the single-counterparty share cap of the agent’s total',
-  UNATTESTED: 'no gateway receipt — money arrived, but no purchase can be proven',
-}

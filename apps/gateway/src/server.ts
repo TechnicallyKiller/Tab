@@ -201,6 +201,33 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
     }))
   })
 
+  /**
+   * Published independence weights, for the Counterparties view.
+   *
+   * Served from what the ENGINE published to HCS, not recomputed here — the
+   * gateway cannot import `@tab/graph` and should not: recomputing would give
+   * the console a second answer to compare against the topic, and two answers
+   * is worse than one even when they agree.
+   */
+  app.get('/v1/tabs/:tab/counterparties', async (request) => {
+    const { tab } = request.params as { tab: string }
+    const weights = deps.weights?.() ?? new Map()
+    return [...weights.values()]
+      .filter((w) => w.tab === tab)
+      .sort((a, b) => b.shareBp - a.shareBp || (a.counterparty < b.counterparty ? -1 : 1))
+      .map((w) => ({
+        counterparty: w.counterparty,
+        bp: w.bp,
+        reasons: w.reasons,
+        blocking: w.blocking,
+        revenue: toWire(w.revenue),
+        shareBp: w.shareBp,
+        window: w.window,
+        at: w.at,
+        ...(w.token ? { token: w.token } : {}),
+      }))
+  })
+
   app.get('/v1/tabs/:tab/entries', async (request) => {
     const { tab } = request.params as { tab: string }
     return deps.state.entriesFor(tab).map((e) => ({

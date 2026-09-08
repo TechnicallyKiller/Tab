@@ -1,3 +1,10 @@
+/*
+ * Reason names mirror `@tab/protocol` exactly.
+ *
+ * They used to be this file's own invention, which meant the mock rehearsed a
+ * vocabulary the system does not use — and a mock that disagrees with reality
+ * is a mock that hides a bug rather than standing in for one.
+ */
 import { bp, usdc } from '../money'
 import type { Counterparty } from './types'
 
@@ -24,7 +31,7 @@ export const COUNTERPARTIES: Counterparty[] = [
     volume: usdc('0.1980'),
     shareBp: bp(2000),
     weightBp: bp(8000),
-    reason: 'AGE_DISCOUNT',
+    reason: 'YOUNG_ACCOUNT',
     hops: [AGENT, '0.0.5120033'],
   },
   {
@@ -46,7 +53,7 @@ export const COUNTERPARTIES: Counterparty[] = [
     volume: usdc('0.4360'),
     shareBp: bp(4400),
     weightBp: bp(5000),
-    reason: 'CONCENTRATION',
+    reason: 'CONCENTRATED',
     hops: [AGENT, '0.0.4899120'],
   },
   {
@@ -57,7 +64,7 @@ export const COUNTERPARTIES: Counterparty[] = [
     volume: usdc('0.0880'),
     shareBp: bp(900),
     weightBp: bp(8000),
-    reason: 'SHARED_ROOT',
+    reason: 'SHARED_FUNDING_ROOT',
     hops: [AGENT, MID, '0.0.7710455'],
   },
   {
@@ -68,7 +75,7 @@ export const COUNTERPARTIES: Counterparty[] = [
     volume: usdc('0.0400'),
     shareBp: bp(400),
     weightBp: bp(0),
-    reason: 'HARD_BLOCK_ANCESTRY',
+    reason: 'COMMON_FUNDER',
     hops: [AGENT, MID, 'seller 0.0.5591204'],
   },
 ]

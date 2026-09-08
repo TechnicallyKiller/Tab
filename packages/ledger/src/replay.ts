@@ -1,5 +1,5 @@
 import { usdc, type MicroUsdc } from '@tab/money'
-import { decode } from '@tab/protocol'
+import { decode, type WeightReason } from '@tab/protocol'
 import { inConsensusOrder, type Entry } from './entries.ts'
 
 /**
@@ -175,4 +175,58 @@ export function ceilingsFromMessages(
     if (!existing || snapshot.at > existing.at) byTab.set(msg.tab, snapshot)
   }
   return byTab
+}
+
+/** One counterparty's published independence weight. */
+export interface PublishedWeight {
+  tab: string
+  counterparty: string
+  /** Basis points. 10000 counts in full, 0 blocks. */
+  bp: number
+  reasons: readonly WeightReason[]
+  blocking: boolean
+  revenue: MicroUsdc
+  /** Share of total revenue, basis points. */
+  shareBp: number
+  window: number
+  at: string
+  token?: string
+}
+
+/**
+ * Latest published weight per counterparty.
+ *
+ * "Latest" by consensus timestamp, so a re-weighting in a later window
+ * supersedes an earlier one — the console should show what the engine currently
+ * believes, not a history. `verify-tab` is where history belongs.
+ *
+ * Shared here rather than written twice, for the same reason
+ * `ceilingsFromMessages` is: the gateway serves these and the engine could read
+ * them back, and a private copy of a shared decode has already lost a message
+ * type three times in this project.
+ */
+export function weightsFromMessages(
+  messages: readonly TopicMessage[],
+): Map<string, PublishedWeight> {
+  const byCounterparty = new Map<string, PublishedWeight>()
+  for (const message of messages) {
+    const result = decode(utf8.decode(message.payload))
+    if (!result.ok || result.message.t !== 'weight') continue
+    const msg = result.message
+    const row: PublishedWeight = {
+      tab: msg.tab,
+      counterparty: msg.cp,
+      bp: msg.bp,
+      reasons: msg.why,
+      blocking: msg.block,
+      revenue: usdc(msg.rev),
+      shareBp: msg.share,
+      window: msg.w,
+      at: message.consensusTimestamp,
+      ...(msg.tok ? { token: msg.tok } : {}),
+    }
+    const existing = byCounterparty.get(msg.cp)
+    if (!existing || row.at > existing.at) byCounterparty.set(msg.cp, row)
+  }
+  return byCounterparty
 }

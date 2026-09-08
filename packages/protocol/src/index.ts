@@ -34,6 +34,7 @@ export {
   creditReceipt,
   debitReceipt,
   holdReceipt,
+  weightUpdate,
   receipt,
   refusalReceipt,
   registration,
@@ -45,6 +46,7 @@ export {
   type CreditReceipt,
   type DebitReceipt,
   type HoldReceipt,
+  type WeightUpdate,
   type Receipt,
   type Registration,
   type RefusalReceipt,
@@ -54,3 +56,11 @@ export {
 } from './messages.ts'
 
 export { encode, decode, MAX_MESSAGE_BYTES, type DecodeResult } from './wire.ts'
+
+export {
+  BLOCKING_REASONS,
+  WEIGHT_REASONS,
+  WEIGHT_REASON_DETAIL,
+  isBlocking,
+  type WeightReason,
+} from './weight-reasons.ts'

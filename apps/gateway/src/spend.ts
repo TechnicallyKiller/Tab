@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { format, micro, usdc, type MicroUsdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
-import type { Entry } from '@tab/ledger'
+import type { Entry, PublishedWeight } from '@tab/ledger'
 import type { SpendClient } from '@tab/x402'
 import type { GatewayEnv } from './env.ts'
 import { nowConsensus, type ReceiptWriter } from './receipts.ts'
@@ -70,6 +70,14 @@ export interface SpendDeps {
   client: SpendClient
   receipts: ReceiptWriter
   window: () => number
+  /**
+   * Published independence weights, for the console to read.
+   *
+   * Optional and unused by the spend path — the graph runs in the engine and
+   * the fast path never consults it. It is here only because `apps/web` may
+   * talk to nothing but the gateway.
+   */
+  weights?: () => ReadonlyMap<string, PublishedWeight>
 }
 
 /** Hash the request, never store the request. Receipts carry the hash. */

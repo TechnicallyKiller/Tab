@@ -1,5 +1,5 @@
 import type { MicroUsdc } from '@tab/money'
-import type { RefusalCode } from '@tab/protocol'
+import type { RefusalCode, WeightReason } from '@tab/protocol'
 
 /**
  * The wire shapes, and the results a caller sees.
@@ -14,8 +14,16 @@ import type { RefusalCode } from '@tab/protocol'
  * amount is still on the wire.
  */
 
-export type { RefusalCode } from '@tab/protocol'
-export { REFUSAL_CODES, REFUSAL_GUIDANCE, isRetryable } from '@tab/protocol'
+export type { RefusalCode, WeightReason } from '@tab/protocol'
+export {
+  BLOCKING_REASONS,
+  REFUSAL_CODES,
+  REFUSAL_GUIDANCE,
+  WEIGHT_REASONS,
+  WEIGHT_REASON_DETAIL,
+  isBlocking,
+  isRetryable,
+} from '@tab/protocol'
 
 /* ── spend ──────────────────────────────────────────────────────────────── */
 
@@ -118,6 +126,31 @@ export interface Hold {
   at: string
   expiresAt: string
   status: 'pending' | 'committed' | 'expired'
+}
+
+/* ── counterparties ─────────────────────────────────────────────────────── */
+
+/**
+ * One counterparty's published independence weight.
+ *
+ * Read from what the ENGINE published to HCS, never recomputed — the reason
+ * codes come from `@tab/protocol`, so the console renders the same vocabulary
+ * that is on the topic rather than a translation of it.
+ */
+export interface CounterpartyWeight {
+  counterparty: string
+  /** Basis points. 10000 counts in full, 0 blocks the spend. */
+  bp: number
+  /** Every reason that applied, most severe first. Never empty. */
+  reasons: readonly WeightReason[]
+  /** True when a reason is fatal — refused, not merely discounted. */
+  blocking: boolean
+  revenue: MicroUsdc
+  /** Share of total revenue, basis points. */
+  shareBp: number
+  window: number
+  at: string
+  token?: string
 }
 
 /* ── receipts ───────────────────────────────────────────────────────────── */

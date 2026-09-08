@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-08 by Claude · **20 of 27 packages · 179 tests · 5/5 guards · REAL USDC**
+**Last updated:** 2026-09-08 by Claude · **20 of 27 packages · 181 tests · 5/5 guards · REAL USDC**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -140,7 +140,7 @@ for this.
 
 **Presentation.**
 
-10. **`apps/web` is PARTLY live** — `tab`, `receipts`, `refusals` poll the gateway and the console states `LIVE`/`MOCK DATA` on screen. `counterparties`, `settlements`, `ceiling`, `agents` and `config` are still mocked; the first three need data sources that do not exist yet, notably **per-counterparty weights, which the engine computes and publishes nowhere.**
+10. **`apps/web` is PARTLY live** — `tab`, `receipts`, `refusals` poll the gateway and the console states `LIVE`/`MOCK DATA` on screen. `settlements`, `ceiling`, `agents` and `config` are still mocked. `counterparties` went live once the engine started **publishing weights to HCS**.
 11. **No demo video, no user-testing evidence.** Only the user can produce these.
 12. **The plan's demo script is stale in two places**: it says the attack collapses the ceiling
     (it does not — the fake revenue never inflates it), and "ramp 15% → 30%" (it reads 25% → 40%).
@@ -261,7 +261,7 @@ parallel. That is the only rule, and it is about merge conflicts, not authority.
 | **SLOW** | `apps/engine` · `apps/settlement` | — | **both done and live.** No BullMQ/indexer; ceiling publication not serialised |
 | **S1** | `sdk` · `cli` | — | `sdk` **done** — 14 tests, verified live. `cli` unwritten and **low value** |
 | **S2** | `agentkit-plugin` | — | unwritten. **The README falsely claims this exists** — build it or correct the line |
-| **S3** | `apps/web` | — | **3 views LIVE** (tab, receipts, refusals) through `@tab/sdk`. 5 still mocked, each blocked on a missing data source rather than UI work |
+| **S3** | `apps/web` | — | **4 views LIVE** (tab, receipts, refusals, counterparties) through `@tab/sdk`. `settlements`, `ceiling`, `agents` need gateway endpoints; `config` can read `@tab/params` directly |
 | **S4** | `mcp` | — | unwritten. The one agent-surface package with real demo value |
 | **D1** | `tools/verify` | — | **done** — 11 tests. Both commands run; caught two of our own mistakes |
 | **D2** | `agents/honest-agent` | — | **done** — zero dependencies, spends and earns |
@@ -299,6 +299,11 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-08-18 | **No Docker.** Supabase + Upstash. [ADR-0005](docs/adr/0005-managed-infrastructure.md) | everyone |
 | 2026-08-21 | **`apps/dashboard` is now `apps/web`** and carries all three surfaces as route groups (`/`, `/app/*`, `/docs`). `boundaries.json` and every README updated | `web`, anyone reading the package map |
 | 2026-08-21 | **pnpm 11 ignores the `pnpm` field in package.json.** `overrides` moved to `pnpm-workspace.yaml` — the ADR-0002 SDK pin was silently inactive before this | everyone |
+| 2026-09-08 | **COUNTERPARTY WEIGHTS ARE PUBLISHED — `weightUpdate` (`t: 'weight'`) on the ceiling topic.** The engine computed these and published them NOWHERE; the three-way weight table that is the demo's strongest artifact existed only in engine stdout. **ONE MESSAGE PER COUNTERPARTY**, because an array inside the ceiling message hits the **1024-byte single-chunk limit** with a handful of them and `encode()` refuses anything larger. Verified live: seq 11, `bp=3360`, `why=[SHARED_FUNDING_ROOT, YOUNG_ACCOUNT, CONCENTRATED]` — and `3360` is reproducible as `0.7 × 0.6 × 0.8` | `protocol`, `engine`, `gateway`, `sdk`, `web` |
+| 2026-09-08 | **`WEIGHT_REASONS` MOVED FROM `@tab/graph` TO `@tab/protocol`.** They are a published interface, like `REFUSAL_CODES` — they go on HCS and are rendered in the console, and `apps/web` may not import `graph`. Keeping them in graph forced the console to invent its own vocabulary, and it did: **seven names, two of which existed, and no `COMMON_FUNDER`** — the rule that actually fires. Its `chipTone` matched `HARD_BLOCK*`, so every real hard block would have rendered as a mere caution | `protocol`, `graph`, `sdk`, `web` |
+| 2026-09-08 | **EVERY reason is published and rendered, not just the first.** Three fire at once on live data and their PRODUCT is the weight. One reason leaves a number nobody can reproduce | `protocol`, `web`, `engine` |
+| 2026-09-08 | **Weights are published BEFORE the ceiling.** The ceiling is the conclusion and the weights are its evidence, so a reader who sees a ceiling can already find the reasons. The other order leaves a window where the console shows a collapsed ceiling and no reason for it | `engine` |
+| 2026-09-08 | **`firstSeen`, `ageDays`, `direction` and `hops` are NOT published.** The engine knows all four. The console renders `—` rather than inventing them, and the Evidence panel returns null for a live row rather than showing an empty funding chain that would imply the graph found no ancestry. Publishing the funding path is the obvious next protocol addition | `engine`, `protocol`, `web` |
 | 2026-09-08 | **THE CONSOLE IS WIRED TO LIVE DATA THROUGH `@tab/sdk`** — `tab`, `receipts` and `refusals` now poll the gateway. **It states its source on screen**: `LIVE` when `NEXT_PUBLIC_TAB_ACCOUNT_ID` is set, `MOCK DATA` styled as a warning otherwise, plus `GATEWAY UNREACHABLE` on a failed poll. A console that silently falls back to invented numbers is one that will be filmed showing invented numbers | `web`, demo |
 | 2026-09-08 | **`NEXT_PUBLIC_*` IS READ FROM THE MONOREPO ROOT `.env` VIA `next.config.ts`.** Next loads `.env` relative to the APP directory and inlines `NEXT_PUBLIC_*` at BUILD time — so a root-level `.env` was invisible and the console rendered mock data while appearing configured. Only the two `NEXT_PUBLIC_` keys are lifted; forwarding `.env` wholesale would put private keys in a browser bundle | `web` |
 | 2026-09-08 | **Entries carry `seq` and `requestHash` now** — the HCS sequence number and the published request hash, both optional because an entry created in-process has neither yet. The console shows the real sequence number instead of a counter of its own, and renders `pending` rather than inventing one. Live: `seq` present on all 35 entries, `token` on the 8 written since `tok` existed | `ledger`, `sdk`, `gateway`, `web` |
@@ -404,6 +409,60 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-08 (night) — Claude — the independence table is on the public record
+
+The engine computed counterparty weights and published them **nowhere**. The three-way weight table
+— the strongest single artifact in the demo — existed only in engine stdout, which means nobody
+could check it. It is on HCS now, and it renders in the console.
+
+Verified live, end to end:
+
+```
+  seq 11  t=weight  cp=0.0.10393567  bp=3360  block=false
+    why=['SHARED_FUNDING_ROOT','YOUNG_ACCOUNT','CONCENTRATED']
+    rev=1.000000  share=10000bp  tok=0.0.429274
+```
+
+`3360` is reproducible by hand as `0.7 × 0.6 × 0.8`, which is the point: HCS → gateway → SDK →
+console, with every reason intact at each hop.
+
+**One message per counterparty, and the reason matters.** An array of weights inside the ceiling
+message was the obvious design and it is wrong: it hits the **1024-byte single-chunk limit** as soon
+as an agent has a handful of counterparties, and `encode()` refuses anything larger because a
+chunked payload read partially parses as truncated JSON. Per-counterparty messages are small,
+incremental and cannot overflow. The cost is N messages per window — the same trade as holds, and
+the same answer at scale: a batch commitment, not a bigger message.
+
+**Weights publish BEFORE the ceiling.** The ceiling is the conclusion, the weights are its evidence.
+Published the other way round there is a window — small but real — where the console shows a
+collapsed ceiling with no reason for it, which is the one thing the Counterparties view exists to
+prevent.
+
+**The console had invented its own reason vocabulary, and this is what forced it out.**
+`WEIGHT_REASONS` lived in `@tab/graph`, which `apps/web` may not import — so the UI had defined
+seven names of its own. Two existed in the system. There was **no `COMMON_FUNDER` at all**, the rule
+that actually fires on live data, and `chipTone` classified hard blocks by matching a `HARD_BLOCK*`
+prefix that no real reason has — so every genuine hard block would have rendered as a mere caution.
+The vocabulary now lives in `@tab/protocol` beside `REFUSAL_CODES`, where a published interface
+belongs, and the mock was updated to use the real names too: a mock that disagrees with reality
+hides a bug rather than standing in for one.
+
+**Every reason is shown, not just the first.** Three fired at once and their product IS the weight.
+Showing one leaves a number a viewer cannot reproduce, which defeats the purpose of showing it.
+
+**What is deliberately blank:** `firstSeen`, `ageDays`, `direction` and `hops` are not published,
+though the engine knows all four. They render as `—`, and the Evidence panel returns null for a live
+row rather than drawing an empty funding chain that would imply the graph found no ancestry.
+`YOUNG_ACCOUNT` already carries the age finding that affected the number. Publishing the funding
+path would make that panel real and is the obvious next addition.
+
+**Verified:** the weight is on the topic, the gateway serves it, the SDK parses it with unknown
+reasons dropped rather than cast, and the page takes the live branch. I have **not** seen the
+rendered rows — the view is a client component, so `curl` sees only the loading state. The data path
+is proven; the pixels are not.
+
+181 tests, 5/5 guards.
 
 ### 2026-09-08 (evening) — Claude — the console is on live data
 

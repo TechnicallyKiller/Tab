@@ -59,8 +59,24 @@ for (const t of state.tabs()) {
  * because the graph found a funding edge and the engine published a collapsed
  * ceiling, not because we told the gateway to refuse it.
  */
+/**
+ * Latest published weights, kept for the console to read.
+ *
+ * The gateway does not USE these — the graph runs in the engine and the fast
+ * path never consults it. It serves them because `apps/web` may only talk to
+ * the gateway, and the alternative was a console that showed a collapsed
+ * ceiling with no visible reason. Held in memory and refreshed on the same poll
+ * as the ceiling, so the two cannot disagree on screen.
+ */
+let latestWeights = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['weights'] extends Map<string, infer W> ? W : never>()
+
+export function weightsSnapshot() {
+  return latestWeights
+}
+
 async function syncCeilings(label: string): Promise<void> {
   const replay = await replayCeilings(mirror, env.ceilingTopic)
+  latestWeights = replay.weights
   for (const [t, snapshot] of replay.byTab) {
     const before = state.ceilingFor(t)
     if (before === snapshot.ceiling) continue
@@ -142,6 +158,8 @@ const app = buildServer(
     client,
     receipts: new ReceiptWriter(tab, env.receiptTopic),
     window: currentWindow,
+    // Read-only, for the console. The spend path never consults it.
+    weights: weightsSnapshot,
   },
   agentUpstream
     ? {

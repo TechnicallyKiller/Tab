@@ -8,6 +8,7 @@ import {
   shortHash,
 } from './common.ts'
 import { REFUSAL_CODES } from './refusal-codes.ts'
+import { WEIGHT_REASONS } from './weight-reasons.ts'
 
 /**
  * Every message Tab publishes to HCS.
@@ -136,6 +137,46 @@ export const receipt = z.discriminatedUnion('t', [
 /* ── ceilings topic ─────────────────────────────────────────────────────── */
 
 /**
+ * One counterparty's independence weight, published.
+ *
+ * ONE MESSAGE PER COUNTERPARTY, deliberately. The obvious alternative — an
+ * array of weights inside the ceiling message — hits the **1024-byte
+ * single-chunk limit** the moment an agent has a handful of counterparties, and
+ * `encode()` refuses anything larger because a chunked payload read partially
+ * parses as truncated JSON. A message per counterparty is small, incremental,
+ * and cannot overflow.
+ *
+ * The cost, as with holds: N messages per window rather than one. At scale the
+ * answer is a batch commitment, not a bigger message.
+ *
+ * Published because the engine computed these and published them NOWHERE — the
+ * strongest artifact in the demo, the three-way weight table, existed only in
+ * engine stdout. A number nobody can read is a number nobody can check.
+ */
+export const weightUpdate = base.extend({
+  t: z.literal('weight'),
+  /** The counterparty being weighted. */
+  cp: entityId,
+  /** Independence weight in basis points. 10000 counts in full, 0 blocks. */
+  bp: basisPoints,
+  /**
+   * Every reason that applied, most severe first. Never empty.
+   *
+   * A weight with no reason is useless in the console and useless in a dispute:
+   * the question an operator asks is not "what weight" but "why".
+   */
+  why: z.array(z.enum(WEIGHT_REASONS)).min(1).max(9),
+  /** True when a reason is fatal — the spend is refused, not discounted. */
+  block: z.boolean(),
+  /** Revenue attributed to this counterparty over the trailing span. */
+  rev: amount,
+  /** Its share of total revenue, basis points. */
+  share: basisPoints,
+})
+
+
+
+/**
  * Every input that influenced the ceiling.
  *
  * If a number affected the result and is not in here, `verify-ceiling` cannot
@@ -240,6 +281,7 @@ export const registration = base.extend({
 /* ── the union written to any topic ─────────────────────────────────────── */
 
 export const tabMessage = z.discriminatedUnion('t', [
+  weightUpdate,
   holdReceipt,
   debitReceipt,
   creditReceipt,
@@ -254,6 +296,7 @@ export type DebitReceipt = z.infer<typeof debitReceipt>
 export type CreditReceipt = z.infer<typeof creditReceipt>
 export type RefusalReceipt = z.infer<typeof refusalReceipt>
 export type HoldReceipt = z.infer<typeof holdReceipt>
+export type WeightUpdate = z.infer<typeof weightUpdate>
 export type RepairReceipt = z.infer<typeof repairReceipt>
 export type Receipt = z.infer<typeof receipt>
 export type CeilingInputs = z.infer<typeof ceilingInputs>

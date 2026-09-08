@@ -15,7 +15,10 @@
  */
 import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
-import { ceilingsFromMessages, type PublishedCeiling } from '@tab/ledger'
+import {
+  ceilingsFromMessages, weightsFromMessages,
+  type PublishedCeiling, type PublishedWeight,
+} from '@tab/ledger'
 
 /*
  * The decode lives in `@tab/ledger`, not here.
@@ -31,6 +34,13 @@ export type CeilingSnapshot = PublishedCeiling
 export interface CeilingReplay {
   /** Latest ceiling per tab, in consensus order. */
   byTab: Map<string, CeilingSnapshot>
+  /**
+   * Latest independence weight per counterparty.
+   *
+   * On the same topic as the ceiling because they are the ceiling's evidence —
+   * one read gives the console both the number and the reasons for it.
+   */
+  weights: Map<string, PublishedWeight>
   read: number
 }
 
@@ -49,7 +59,8 @@ export async function replayCeilings(
   const walk = await readTopic(mirror, { topicId })
   const { assembled } = reassembleChunks(walk.items)
   const byTab = ceilingsFromMessages(assembled)
-  return { byTab, read: assembled.length }
+  const weights = weightsFromMessages(assembled)
+  return { byTab, weights, read: assembled.length }
 }
 
 /**

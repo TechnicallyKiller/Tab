@@ -247,8 +247,44 @@ test('every verb is present exactly once', () => {
   // The same surface appears in the Agent Kit plugin, MCP and CLI. Defined
   // once, here, is what stops those three drifting.
   assert.deepEqual(Object.keys(tab).sort(), [
-    'health', 'holds', 'quote', 'receipts', 'spend', 'state',
+    'counterparties', 'health', 'holds', 'quote', 'receipts', 'spend', 'state',
   ])
+})
+
+test('an unknown weight reason is dropped, not typed as a real one', async () => {
+  // A newer server sending a reason this client does not know must not have it
+  // rendered as a rule that exists — `isBlocking` would then answer
+  // confidently about a fiction.
+  const { doFetch } = fakeGateway(() => ({
+    body: [
+      {
+        counterparty: '0.0.2000', bp: 3360, blocking: false,
+        reasons: ['SHARED_FUNDING_ROOT', 'NOT_A_REASON', 'YOUNG_ACCOUNT'],
+        revenue: '1.000000', shareBp: 10000, window: 5962354, at: '1788.0',
+      },
+    ],
+  }))
+  const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
+  const rows = await tab.counterparties('0.0.1000')
+  assert.deepEqual(rows[0]!.reasons, ['SHARED_FUNDING_ROOT', 'YOUNG_ACCOUNT'])
+  assert.equal(rows[0]!.bp, 3360)
+})
+
+test('a blocked counterparty round-trips its reasons and zero weight', async () => {
+  const { doFetch } = fakeGateway(() => ({
+    body: [
+      {
+        counterparty: '0.0.2000', bp: 0, blocking: true,
+        reasons: ['COMMON_FUNDER'],
+        revenue: '4.000000', shareBp: 10000, window: 5962354, at: '1788.0',
+      },
+    ],
+  }))
+  const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
+  const rows = await tab.counterparties('0.0.1000')
+  assert.equal(rows[0]!.bp, 0)
+  assert.equal(rows[0]!.blocking, true)
+  assert.deepEqual(rows[0]!.reasons, ['COMMON_FUNDER'])
 })
 
 /* ── failure is distinct from refusal ──────────────────────────────────── */
