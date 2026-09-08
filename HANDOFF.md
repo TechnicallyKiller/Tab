@@ -102,12 +102,14 @@ for this.
    counterparty is weighted **independent**. Not theoretical: **the loop attacker went uncaught on
    its first full run because of exactly this.** The point-lookup on `created_timestamp` narrowed
    the window; only `@tab/db` closes it, by recording the edge when observed and never forgetting.
-2. **"Bulk-minting agents to farm Starter Tabs" is listed *Caught* in the attack catalogue and is
-   NOT.** Nothing anywhere writes a `register` message — the schema exists, the flow does not. One
-   Starter Tab per funding root is unenforced. **This is a false claim in the README.**
-3. **The 40% concentration cap is in the SLOW path, not the fast path** as the plan states. It
-   discounts revenue at recompute time; it does not refuse a spend at request time. **Also a false
-   claim in the README.**
+2. **No registration flow.** Nothing writes a `register` message, so one Starter Tab per funding
+   root is unenforced and bulk-minting agents to farm Starter Tabs is not prevented. The README
+   labels it OPEN as of 2026-09-08. `@tab/graph` already resolves funding roots, so the check is
+   cheap once a registration flow exists.
+3. **No spend-side concentration cap.** The cap that exists measures REVENUE concentration on the
+   earn leg — a different rule. A spend-side version needs a minimum-volume floor first, or a new
+   tab's first spend is 100% concentrated by definition and every opening call is refused. README
+   labels it OPEN.
 4. **The double-settlement damage is still on the receipt topic.** `verify-tab` exits non-zero on
    it, correctly — window 5962288 really was paid twice, by a bug since fixed. Live data state, not
    a code bug.
@@ -152,8 +154,9 @@ for this.
    dashboard on camera is a credibility risk — one number failing a HashScan cross-check makes every
    other claim suspect. The UI exists; this is a data layer over endpoints the gateway already
    serves.
-2. **Fix the two false attack-catalogue claims** (gaps 2 and 3). Ten minutes, and they are claims a
-   judge may test.
+2. ~~Fix the false attack-catalogue claims~~ — **done 2026-09-08.** Five lines corrected; two moved
+   from *Caught* to *OPEN*. The spend-side concentration cap and the registration flow are the two
+   genuinely unbuilt rules, and both are now labelled OPEN in the README.
 3. **`@tab/db`** — closes the fail-open exposure properly.
 4. **Tests for `mirror`** — the highest-risk untested surface.
 5. **`@tab/sdk` → `@tab/mcp`** if time. MCP is the one with real demo value: Claude Desktop calling
@@ -386,6 +389,44 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-08 — Claude — the attack catalogue now matches the code
+
+Corrected five of eleven lines in README-TAB.md's attack catalogue. Two moved from **Caught** to
+**OPEN**; three had the right verdict and the wrong reason.
+
+**Moved to OPEN — claimed but never built:**
+
+- **Concentrating SPEND at one seller.** Sharper than I first reported: this is not "the cap exists
+  but in the slow path". The cap that exists measures **revenue** concentration on the earn leg
+  (`concentration()` literally throws on negative input because it takes revenue). A spend-side cap
+  is a **different rule that exists nowhere**. It also needs a minimum-volume floor before it can
+  work at all — a new tab's first spend is 100% concentrated by definition, so a naive version
+  refuses every agent's opening call.
+- **Bulk-minting agents to farm Starter Tabs.** `registration` is a message schema nothing writes,
+  so one-Starter-Tab-per-funding-root is unenforced. `@tab/graph` already resolves funding roots, so
+  the check is cheap once a registration flow exists.
+
+**Right verdict, wrong reason:**
+
+- "Spend at a seller the agent controls" said *funding ancestry within 3 hops*. That rule is
+  **structurally unreachable** — a tab holds no key and can never be a funder. It is caught by
+  `COMMON_FUNDER`, verified live at 0%.
+- "Wash revenue from self-funded payers" said *shared funding root → discount to zero*. A shared
+  root alone is a **0.7 discount**; `COMMON_FUNDER` is what zeroes. The two were conflated.
+- "Fake revenue via plain transfers" said *discounted 0.6*. The reality is **stronger**: revenue is
+  read from credit RECEIPTS, so a plain transfer with no served request contributes nothing at all.
+  The 0.6 applies to an inflow the gateway saw but could not attest. Corrected in our own favour,
+  which is worth doing for the same reason as the others — a reader who checks one claim and finds
+  it loose discounts every other claim.
+
+Also marked "Seller whose only counterparty is the agent" as implemented and unit-tested but **not
+yet observed on live data**, because it has not been.
+
+A catalogue whose Caught column is aspirational is worse than one with more gaps, because the gaps
+are the part a reader can actually verify. Five lines are OPEN now and the README says so.
+
+No code changed.
 
 ### 2026-09-07 (session close) — Claude — HANDOFF rewritten to match reality
 

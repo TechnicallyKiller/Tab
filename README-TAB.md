@@ -671,18 +671,25 @@ Published including the gaps, because a catalogue that only lists solved attacks
 
 | Attack | Status | Handling |
 |---|---|---|
-| Spend at a seller the agent controls | **Caught** | Funding ancestry within 3 hops → hard block |
-| Seller whose only counterparty is the agent | **Caught** | Single-counterparty rule → hard block |
-| Wash revenue from self-funded payers | **Caught** | Shared funding root → weight discount to zero |
-| Fake revenue via plain transfers | **Caught** | Unattested inflows discounted 0.6; no served request, no full credit |
-| Concentrating spend at one seller | **Caught** | 40% concentration cap in the fast path |
-| Bulk-minting agents to farm Starter Tabs | **Caught** | One Starter Tab per funding root |
+| Spend at a seller the agent controls | **Caught** | `COMMON_FUNDER` → hard block, verified live at 0%. **Not** by "the agent funded it": a tab holds no key and can never be a funder, so that rule is structurally unreachable |
+| Seller whose only counterparty is the agent | **Caught** | `SOLE_COUNTERPARTY` → hard block. Implemented and unit-tested; not yet observed on live data |
+| Wash revenue from self-funded payers | **Caught** | `COMMON_FUNDER` zeroes it. A shared funding root alone is a **0.7 discount**, not zero — the two were conflated in an earlier draft |
+| Fake revenue via plain transfers | **Caught** | Stronger than the 0.6 discount this once claimed: revenue is read from credit RECEIPTS, so a plain transfer with no served request contributes **nothing**. The 0.6 discount applies to an inflow the gateway saw but could not attest |
+| Concentrating **revenue** from one payer | **Caught** | 40% share cap discounts the counterparty's weight — `@tab/graph`, verified live at 33% |
+| Concentrating **spend** at one seller | **OPEN** | Not implemented. The cap that exists measures REVENUE concentration on the earn leg, which is a different rule. A spend-side cap needs a minimum-volume floor first, or a new tab's first spend is 100% concentrated by definition and every agent is refused its opening call |
+| Bulk-minting agents to farm Starter Tabs | **OPEN** | Not implemented. `registration` exists as a message schema and nothing writes one, so one-Starter-Tab-per-funding-root is unenforced. `@tab/graph` already resolves funding roots, so the check is cheap once a registration flow exists |
 | Racing many spends before the ceiling updates | **Caught** | Pending holds decrement available at reserve time, not at commit |
 | Sophisticated non-reciprocal collusion ring | **OPEN** | Not caught. A ring where value never flows back and funding roots are properly separated defeats the graph. Cost of mounting it is high; it is not zero. |
 | Gateway operator misbehaviour | **OPEN by design** | Custodial. Detectable via published receipts, not preventable in v1. |
 | Seller takes payment and doesn't deliver | **OPEN** | v1 records the dispute and does not arbitrate. |
 
-The last three lines are the ones that win points. Say them out loud in the video.
+**Five lines here are OPEN, and two of them moved from *Caught* to *OPEN* after the code was
+written and checked.** That correction is deliberate: a catalogue whose "Caught" column is aspirational
+is worse than one with more gaps, because the gaps are the part a reader can verify. The two that
+moved are the spend-side concentration cap and one-Starter-Tab-per-funding-root — both were claimed,
+neither was built.
+
+The OPEN lines are the ones that win points. Say them out loud in the video.
 
 ---
 
