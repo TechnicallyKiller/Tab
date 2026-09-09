@@ -329,3 +329,108 @@ export function weightsFromMessages(
   }
   return byCounterparty
 }
+
+/* ── graph facts ─────────────────────────────────────────────────────────── */
+
+/**
+ * One account's remembered graph facts.
+ *
+ * Shaped to drop straight into `@tab/graph`'s `AccountFacts`. `fundedBy` is an
+ * array there because the graph walks chains; a published fact carries at most
+ * one funder, so this holds one and the caller builds the chain by looking each
+ * funder up in turn.
+ */
+export interface RememberedFacts {
+  account: string
+  createdAt?: string
+  funder?: string
+  /** Consensus timestamp of the message that first established the funder. */
+  funderSeenAt?: string
+  /** Sequence number of that message — the thing to cite. */
+  funderSeq?: number
+}
+
+/**
+ * Replay published graph facts, MERGING rather than replacing.
+ *
+ * This function is the whole point of publishing facts, and the merge is the
+ * load-bearing line. The naive reader — keep the newest message per account —
+ * would reintroduce the exact bug this closes: a Mirror Node outage publishes a
+ * fact with no funder, that message is newest, and a funding edge correctly
+ * observed a week ago is erased. One outage would un-catch the loop attacker
+ * through the very mechanism meant to catch it.
+ *
+ * So a funder is **sticky**: once observed, later silence cannot remove it.
+ * Absence in a message means "not observed", never "has no funder" — an account
+ * created by nothing is not a thing on Hedera.
+ *
+ * ## What this deliberately does NOT do
+ *
+ * It never lets a later message CHANGE a known funder to a different one. An
+ * account has exactly one creating payer, forever; two different answers means
+ * one of them is wrong, and silently taking the newer would let a bad or
+ * malicious publisher rewrite history. The first observation wins and the
+ * conflict is reported, so a caller can surface it rather than absorb it.
+ */
+export interface FactsReplay {
+  byAccount: Map<string, RememberedFacts>
+  read: number
+  /**
+   * Accounts where two messages claimed DIFFERENT funders.
+   *
+   * Never expected — an account has one creating payer — so a non-empty list
+   * means either a bug in whatever published, or someone writing to the topic
+   * who should not be. Reported rather than resolved.
+   */
+  conflicts: { account: string; kept: string; rejected: string }[]
+}
+
+export function factsFromMessages(messages: readonly TopicMessage[]): FactsReplay {
+  const byAccount = new Map<string, RememberedFacts>()
+  const conflicts: FactsReplay['conflicts'] = []
+  let read = 0
+
+  for (const message of messages) {
+    const result = decode(utf8.decode(message.payload))
+    if (!result.ok || result.message.t !== 'fact') continue
+    const msg = result.message
+    read++
+
+    const existing = byAccount.get(msg.acct)
+    if (!existing) {
+      byAccount.set(msg.acct, {
+        account: msg.acct,
+        ...(msg.born ? { createdAt: msg.born } : {}),
+        ...(msg.by
+          ? {
+              funder: msg.by,
+              funderSeenAt: message.consensusTimestamp,
+              ...(message.sequenceNumber !== undefined ? { funderSeq: message.sequenceNumber } : {}),
+            }
+          : {}),
+      })
+      continue
+    }
+
+    // A creation time is immutable too, but harmless to fill in later — an
+    // earlier pass may have had the funder and not the birth, or the reverse.
+    if (existing.createdAt === undefined && msg.born) existing.createdAt = msg.born
+
+    if (!msg.by) continue
+
+    if (existing.funder === undefined) {
+      existing.funder = msg.by
+      existing.funderSeenAt = message.consensusTimestamp
+      if (message.sequenceNumber !== undefined) existing.funderSeq = message.sequenceNumber
+      continue
+    }
+
+    if (existing.funder !== msg.by) {
+      // First observation wins. See the doc comment: taking the newer would let
+      // a later writer rewrite an account's origin.
+      conflicts.push({ account: msg.acct, kept: existing.funder, rejected: msg.by })
+    }
+  }
+
+  return { byAccount, read, conflicts }
+}

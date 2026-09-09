@@ -26,15 +26,19 @@ import { clientFromEnv } from '@tab/hedera'
 import { MirrorClient, configureGlobalHttp } from '@tab/mirror'
 import { bp, format, formatBpMultiple, formatBpPercent, usdc } from '@tab/money'
 import { MODEL_ID, describeParams, params, windowOf } from '@tab/params'
-import { ceilingsFromMessages, checkWindowSettledOnce, rampAfter, type Entry } from '@tab/ledger'
+import {
+  ceilingsFromMessages, checkWindowSettledOnce, factsFromMessages, rampAfter, type Entry,
+} from '@tab/ledger'
 import { WEIGHT_REASON_DETAIL, type AccountFacts, type AccountId } from '@tab/graph'
 import {
   entriesFromMessages, readTopic, reassembleChunks,
 } from './replay.ts'
-import { edgesFor, funderOf, isYoung, revenueFromEntries } from './gather.ts'
+import { edgesFor, isYoungFrom, observeAccount, revenueFromEntries } from './gather.ts'
+import { resolveAncestry } from './ancestry.ts'
 import { recompute } from './recompute.ts'
 import { publishCeiling } from './publish/ceiling.ts'
 import { publishWeights } from './publish/weights.ts'
+import { publishFacts, type ObservedFact } from './publish/facts.ts'
 import { transition, type CeilingState } from './guards/asymmetry.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -99,6 +103,19 @@ async function pass(): Promise<void> {
 
   const receipts = await replayTopic(receiptTopic)
   const settlements = await replayTopic(settlementTopic)
+
+  /*
+   * The ceiling topic, read ONCE per pass and used three ways.
+   *
+   * Remembered graph facts (the fail-open fix), the in-force ceiling to resume
+   * on a cold start, and the check on what is worth republishing. It was read
+   * lazily inside the cold-start branch before; facts are needed on every pass,
+   * and reading the same topic twice in one pass would give two readers a
+   * chance to disagree about it.
+   */
+  const ceilingMessages = reassembleChunks(
+    (await readTopic(mirror, { topicId: ceilingTopic })).items,
+  ).assembled
   const entries = [
     ...(receipts.byTab.get(tabAccount) ?? []),
     ...(settlements.byTab.get(tabAccount) ?? []),
@@ -137,6 +154,35 @@ async function pass(): Promise<void> {
   const young = new Set<AccountId>()
 
   /*
+   * What the topic already remembers.
+   *
+   * Read once per pass and used two ways: as the FALLBACK when Mirror Node
+   * cannot answer, and as the check on what is worth publishing. The reader is
+   * monotonic — a fact with no funder cannot erase a known one — which is the
+   * property the whole fix rests on. See `factsFromMessages`.
+   */
+  const remembered = factsFromMessages(ceilingMessages)
+  if (remembered.conflicts.length > 0) {
+    /*
+     * Never expected: an account has exactly one creating payer, forever.
+     *
+     * Reported rather than resolved. Two different answers means either a bug
+     * in whatever published, or a writer on this topic who should not be — and
+     * silently taking one would hide both.
+     */
+    for (const c of remembered.conflicts) {
+      console.log(
+        `    CONFLICT  ${c.account} was published as funded by both ${c.kept} and ${c.rejected}; ` +
+          `keeping the first observation (${c.kept})`,
+      )
+    }
+  }
+
+  /** Everything this pass actually saw, for the publisher to diff. */
+  const observed: ObservedFact[] = []
+  const stats = { fetched: 0, remembered: 0, unknown: 0 }
+
+  /*
    * The TAB's own ancestry, which was missing.
    *
    * Without an entry for the tab, `sharedFundingRoot(tab, counterparty, ...)`
@@ -158,47 +204,64 @@ async function pass(): Promise<void> {
    * Memoised across the pass: the whole point of an ancestry walk is that
    * accounts share ancestors, so the same funder gets asked for repeatedly.
    */
-  const resolved = new Set<AccountId>()
-  async function walkAncestry(account: AccountId, hopsLeft: number): Promise<void> {
-    if (hopsLeft <= 0 || resolved.has(account)) return
-    resolved.add(account)
-    try {
-      const funder = await funderOf(mirror, account)
-      facts.set(account, { id: account, ...(funder ? { fundedBy: [funder] } : {}) })
-      if (funder) await walkAncestry(funder, hopsLeft - 1)
-    } catch (error) {
-      /*
-       * FAILS OPEN, and says so.
-       *
-       * An account whose ancestry cannot be fetched is treated as having none,
-       * which weights it as independent — the unsafe direction. It is named
-       * here rather than buried because the fix is a persisted graph
-       * (`@tab/db`), not more retries: a security rule that fails open must not
-       * depend on re-deriving its inputs from an eventually-consistent index.
-       */
-      facts.set(account, { id: account })
-      console.log(
-        `    WARNING  ancestry for ${account} unavailable ` +
-          `(${error instanceof Error ? error.message : String(error)}) — treated as independent`,
-      )
-    }
-  }
+  /*
+   * The walk lives in `ancestry.ts` so it can be TESTED.
+   *
+   * It was inline here, and the branch that matters most — Mirror Node
+   * unavailable, the topic answering instead — is the branch a live run is
+   * least likely to exercise, because Mirror usually works. A security rule
+   * that fails open should not be trusted on a coincidence.
+   *
+   * The tab is walked first so its own ancestry is in `facts` before any
+   * counterparty is compared against it. Without an entry for the tab,
+   * `sharedFundingRoot(tab, counterparty, ...)` returns false every time — the
+   * tab simply is not in the map — which made the shared-root discount and the
+   * common-funder block both structurally impossible. Neither rule was wrong;
+   * neither was ever asked.
+   */
+  const ancestry = await resolveAncestry([tabAccount, ...counterparties], {
+    observe: (account) => observeAccount(mirror, account),
+    remembered: remembered.byAccount,
+    hops: params.fundingAncestryHops,
+    note: (line) => console.log(line),
+  })
+  for (const [id, fact] of ancestry.facts) facts.set(id, fact)
+  observed.push(...ancestry.observed)
+  stats.fetched = ancestry.stats.fetched
+  stats.remembered = ancestry.stats.remembered
+  stats.unknown = ancestry.stats.unknown
 
-  await walkAncestry(tabAccount, params.fundingAncestryHops)
   const tabFunder = facts.get(tabAccount)?.fundedBy?.[0]
   if (tabFunder) console.log(`    tab funded by ${tabFunder}`)
 
   for (const counterparty of counterparties) {
-    await walkAncestry(counterparty, params.fundingAncestryHops)
-    try {
-      if ((await isYoung(mirror, counterparty, nowSeconds)) === true) young.add(counterparty)
-    } catch {
+    /*
+     * The age comes from the birth time the walk already has.
+     *
+     * `isYoung` made its OWN `getAccount` call, so every counterparty cost two
+     * identical account fetches per pass — and, worse, the two answers could
+     * disagree: one call could succeed and the other fail, giving an account a
+     * funder but no age, or the reverse. One observation now answers both
+     * questions, and it falls back to the remembered birth time exactly as the
+     * ancestry does.
+     */
+    const age = isYoungFrom(ancestry.birthdays.get(counterparty), nowSeconds)
+    if (age === true) young.add(counterparty)
+    else if (age === undefined) {
       // An unknown age is not "old enough". Left out of `young` means no age
-      // discount, which is the unsafe direction — recorded alongside the
-      // ancestry fail-open above rather than treated as different.
-      console.log(`    WARNING  age for ${counterparty} unavailable — no age discount applied`)
+      // discount, which is the unsafe direction — the same residual as the
+      // ancestry case, and named the same way rather than treated as different.
+      console.log(
+        `    WARNING  age for ${counterparty} unknown (not fetched, not published) — ` +
+          `no age discount applied (FAILS OPEN)`,
+      )
     }
   }
+
+  console.log(
+    `    ancestry    ${stats.fetched} fetched · ${stats.remembered} from the topic · ` +
+      `${stats.unknown} unknown (fail-open)`,
+  )
 
   const edges = await edgesFor(
     mirror,
@@ -257,9 +320,7 @@ async function pass(): Promise<void> {
    * of what is in force, so it is the right thing to resume from.
    */
   if (!ceilingState) {
-    const published = ceilingsFromMessages(
-      reassembleChunks((await readTopic(mirror, { topicId: ceilingTopic })).items).assembled,
-    ).get(tabAccount)
+    const published = ceilingsFromMessages(ceilingMessages).get(tabAccount)
     if (published) {
       ceilingState = { inForce: published.ceiling, window: published.window }
       console.log(
@@ -297,6 +358,36 @@ async function pass(): Promise<void> {
    * real — where the console shows a collapsed ceiling and no reason for it,
    * which is the one thing the Counterparties view exists to prevent.
    */
+  /*
+   * Facts first, then weights, then the ceiling — evidence before conclusion.
+   *
+   * A fact is the evidence for a weight, and a weight is the evidence for the
+   * ceiling, so a reader who finds a ceiling on the topic can always walk back
+   * to what produced it. Published the other way round there is a window —
+   * small, but real — in which the record carries a conclusion whose reasons
+   * have not landed yet.
+   *
+   * Only NEW facts are written. The reader is monotonic, so a duplicate is
+   * harmless, but republishing every account every window would add N messages
+   * per window forever to say nothing.
+   */
+  const factSeqs = await publishFacts({
+    hedera,
+    topicId: ceilingTopic,
+    tab: tabAccount,
+    window: currentWindow,
+    observed,
+    known: remembered.byAccount,
+  })
+  if (factSeqs.length > 0) {
+    console.log(
+      `  facts           ${factSeqs.length} published · ` +
+        factSeqs.map((f) => `${f.account} (${f.added}) seq ${f.sequenceNumber}`).join(', '),
+    )
+  } else {
+    console.log(`  facts           none new — the topic already knows ${remembered.byAccount.size} account(s)`)
+  }
+
   if (result.weights.length > 0) {
     const weightSeqs = await publishWeights({
       hedera,

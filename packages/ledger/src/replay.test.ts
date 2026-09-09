@@ -6,6 +6,7 @@ import {
   ceilingHistoryFromMessages,
   ceilingsFromMessages,
   entriesFromMessages,
+  factsFromMessages,
   type TopicMessage,
 } from './replay.ts'
 
@@ -207,4 +208,97 @@ test('an undecodable message is skipped, never fatal', () => {
   assert.equal(ceilingsFromMessages([
     published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 2000, 2),
   ]).size, 1)
+})
+
+/* ── graph facts: the merge is the fix ───────────────────────────────────── */
+
+function fact(overrides: { acct: string; born?: string; by?: string; w?: number }): TabMessage {
+  return {
+    v: SCHEMA_VERSION,
+    t: 'fact',
+    tab: TAB,
+    w: overrides.w ?? 10,
+    acct: overrides.acct,
+    ...(overrides.born ? { born: overrides.born } : {}),
+    ...(overrides.by ? { by: overrides.by } : {}),
+  } as TabMessage
+}
+
+test('a funder is remembered, with the seq that established it', () => {
+  const replay = factsFromMessages([
+    published(fact({ acct: '0.0.5000', born: '1788600000.000000000', by: '0.0.99' }), 1000, 4),
+  ])
+  const f = replay.byAccount.get('0.0.5000')
+  assert.equal(f?.funder, '0.0.99')
+  assert.equal(f?.createdAt, '1788600000.000000000')
+  assert.equal(f?.funderSeq, 4)
+  assert.equal(replay.read, 1)
+})
+
+test('A LATER MESSAGE WITH NO FUNDER CANNOT ERASE ONE — this is the whole fix', () => {
+  /*
+   * The exact failure being closed. Mirror Node's transactions-by-account index
+   * is intermittent for new accounts, so a pass during an outage observes no
+   * funder and publishes a fact without one. A reader that kept the NEWEST
+   * message per account would erase a funding edge correctly observed earlier,
+   * un-catching the loop attacker through the mechanism meant to catch it.
+   */
+  const replay = factsFromMessages([
+    published(fact({ acct: '0.0.5000', by: '0.0.99' }), 1000, 1),
+    published(fact({ acct: '0.0.5000' }), 2000, 2), // the outage
+    published(fact({ acct: '0.0.5000' }), 3000, 3), // and again
+  ])
+  assert.equal(replay.byAccount.get('0.0.5000')?.funder, '0.0.99')
+  // The seq still points at the message that ESTABLISHED it, not the last one.
+  assert.equal(replay.byAccount.get('0.0.5000')?.funderSeq, 1)
+  assert.equal(replay.conflicts.length, 0)
+})
+
+test('the birth time fills in later, because two passes may see different halves', () => {
+  const replay = factsFromMessages([
+    published(fact({ acct: '0.0.5000', by: '0.0.99' }), 1000, 1),
+    published(fact({ acct: '0.0.5000', born: '1788600000.000000000' }), 2000, 2),
+  ])
+  const f = replay.byAccount.get('0.0.5000')
+  assert.equal(f?.funder, '0.0.99')
+  assert.equal(f?.createdAt, '1788600000.000000000')
+})
+
+test('a DIFFERENT funder is rejected and reported, never silently taken', () => {
+  // An account has exactly one creating payer, forever. Two answers means one
+  // is wrong, and taking the newer would let a later writer rewrite an
+  // account's origin — so the first observation wins and the conflict surfaces.
+  const replay = factsFromMessages([
+    published(fact({ acct: '0.0.5000', by: '0.0.99' }), 1000, 1),
+    published(fact({ acct: '0.0.5000', by: '0.0.4242' }), 2000, 2),
+  ])
+  assert.equal(replay.byAccount.get('0.0.5000')?.funder, '0.0.99')
+  assert.deepEqual(replay.conflicts, [
+    { account: '0.0.5000', kept: '0.0.99', rejected: '0.0.4242' },
+  ])
+})
+
+test('facts for many accounts build the chain a hop walk needs', () => {
+  // `operator → intermediary → customer`. The graph walks this by looking each
+  // funder up in turn, which is why one funder per message is enough.
+  const replay = factsFromMessages([
+    published(fact({ acct: '0.0.5002', by: '0.0.5001' }), 1000, 1),
+    published(fact({ acct: '0.0.5001', by: '0.0.5000' }), 1100, 2),
+  ])
+  assert.equal(replay.byAccount.get('0.0.5002')?.funder, '0.0.5001')
+  assert.equal(replay.byAccount.get('0.0.5001')?.funder, '0.0.5000')
+  assert.equal(replay.byAccount.get('0.0.5000'), undefined)
+})
+
+test('facts and ceilings share a topic without confusing either reader', () => {
+  // Both live on the ceiling topic. Each reader must skip what is not its own
+  // rather than counting it or failing on it.
+  const mixed = [
+    published(fact({ acct: '0.0.5000', by: '0.0.99' }), 1000, 1),
+    published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 2000, 2),
+  ]
+  assert.equal(factsFromMessages(mixed).read, 1)
+  assert.equal(ceilingsFromMessages(mixed).size, 1)
+  // And neither is a ledger entry.
+  assert.equal(entriesFromMessages(mixed).replayed, 0)
 })

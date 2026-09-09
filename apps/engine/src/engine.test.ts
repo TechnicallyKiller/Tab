@@ -9,7 +9,9 @@ import {
 } from './guards/asymmetry.ts'
 import { ceilingInputRecord } from './publish/ceiling.ts'
 import { recompute } from './recompute.ts'
-import { revenueFromEntries } from './gather.ts'
+import { isYoungFrom, revenueFromEntries } from './gather.ts'
+import { newFactFields } from './publish/facts.ts'
+import { resolveAncestry, type Observation } from './ancestry.ts'
 import type { Entry } from '@tab/ledger'
 import type { AccountFacts, AccountId, TransferEdge } from '@tab/graph'
 
@@ -307,4 +309,227 @@ test('a trailing span of 1 is the most recent CLOSED window', () => {
   const r = revenueFromEntries(entries, 1, 148)
   assert.deepEqual(r.history.map((h) => h.window), [147], 'not the open window, and not empty')
   assert.equal(format(r.history[0]!.attested), '1.0000')
+})
+
+/* ── the age check, now pure so a remembered birth answers it ────────────── */
+
+const DAY = 86_400
+
+test('a remembered creation time answers the age question as well as a fetched one', () => {
+  // The whole reason `isYoung` was split into a fetch and this pure check: the
+  // answer must come from a birth time the topic remembers just as readily as
+  // from one Mirror Node returned this second.
+  const now = 1_800_000_000
+  const twoDaysOld = `${now - 2 * DAY}.000000000`
+  const thirtyDaysOld = `${now - 30 * DAY}.000000000`
+
+  assert.equal(isYoungFrom(twoDaysOld, now, 7), true)
+  assert.equal(isYoungFrom(thirtyDaysOld, now, 7), false)
+})
+
+test('an UNKNOWN age is undefined, never "old enough"', () => {
+  /*
+   * The direction matters. `false` would mean "not young", which grants full
+   * weight — so a Mirror Node outage would silently remove the age discount
+   * from every counterparty. `undefined` forces the caller to decide, and the
+   * engine logs it as a fail-open rather than absorbing it.
+   */
+  assert.equal(isYoungFrom(undefined, 1_800_000_000, 7), undefined)
+  // Garbage in is also unknown, not old.
+  assert.equal(isYoungFrom('not-a-timestamp', 1_800_000_000, 7), undefined)
+})
+
+test('the age boundary is exclusive at exactly the threshold', () => {
+  // Exactly `ageFullDays` old is NOT young — it has reached full credit. An
+  // off-by-one here silently discounts every account for one extra day.
+  const now = 1_800_000_000
+  assert.equal(isYoungFrom(`${now - 7 * DAY}.000000000`, now, 7), false)
+  assert.equal(isYoungFrom(`${now - 7 * DAY + 1}.000000000`, now, 7), true)
+})
+
+/* ── which observations are worth publishing ─────────────────────────────── */
+
+test('only NEW facts are published — a duplicate costs a message to say nothing', () => {
+  const known = new Map([
+    ['0.0.5000', { account: '0.0.5000', createdAt: '1.0', funder: '0.0.99' }],
+    ['0.0.5001', { account: '0.0.5001', createdAt: '1.0' }],
+  ])
+
+  // Already fully known: nothing to add.
+  assert.equal(newFactFields({ account: '0.0.5000', createdAt: '1.0', funder: '0.0.99' }, known), undefined)
+  // Known birth, newly observed funder.
+  assert.equal(newFactFields({ account: '0.0.5001', createdAt: '1.0', funder: '0.0.99' }, known), 'funder')
+  // Never seen at all.
+  assert.equal(newFactFields({ account: '0.0.5002', createdAt: '1.0', funder: '0.0.99' }, known), 'both')
+})
+
+test('an observation with NO funder is never published — absence carries nothing', () => {
+  /*
+   * The asymmetry that makes this safe. A reader treats a missing funder as
+   * "not observed" and keeps whatever it knew, so publishing an empty fact
+   * cannot help — and publishing one for an account we already have a funder
+   * for would be paying for a message that a correct reader must ignore.
+   */
+  const known = new Map([['0.0.5000', { account: '0.0.5000', createdAt: '1.0', funder: '0.0.99' }]])
+  assert.equal(newFactFields({ account: '0.0.5000' }, known), undefined)
+  assert.equal(newFactFields({ account: '0.0.9999' }, new Map()), undefined)
+})
+
+/* ── the fail-open fix: a fact observed once is never forgotten ──────────── */
+
+// `TAB` is already declared above for the ceiling tests; these are the
+// ancestry fixtures.
+const SHILL = '0.0.7000'
+const OPERATOR = '0.0.99'
+
+/** Mirror Node that always works. */
+const working = (map: Record<string, Observation>) => async (account: string) => map[account] ?? {}
+
+/** Mirror Node that is down for these accounts — the intermittent index. */
+const broken = (map: Record<string, Observation>, failing: readonly string[]) =>
+  async (account: string) => {
+    if (failing.includes(account)) {
+      throw new Error('Mirror Node returned 0 transactions (index not populated)')
+    }
+    return map[account] ?? {}
+  }
+
+const CHAIN: Record<string, Observation> = {
+  [TAB]: { createdAt: '100.0', funder: OPERATOR },
+  [SHILL]: { createdAt: '200.0', funder: OPERATOR },
+  [OPERATOR]: { createdAt: '1.0' },
+}
+
+test('a working Mirror Node resolves the chain and reports what it observed', async () => {
+  const result = await resolveAncestry([TAB, SHILL], {
+    observe: working(CHAIN),
+    remembered: new Map(),
+    hops: 3,
+  })
+  assert.deepEqual(result.facts.get(TAB)?.fundedBy, [OPERATOR])
+  assert.deepEqual(result.facts.get(SHILL)?.fundedBy, [OPERATOR])
+  // The shared funder is resolved once, not once per child.
+  assert.equal(result.stats.fetched, 3)
+  assert.equal(result.stats.remembered, 0)
+  assert.equal(result.stats.unknown, 0)
+  assert.equal(result.observed.length, 3)
+})
+
+test('WITHOUT a memory, a Mirror outage silently weights a shill as independent', async () => {
+  /*
+   * The bug, reproduced. This is what the engine did on every pass, and it is
+   * why the loop attacker ran end to end and was NOT caught: no `fundedBy`
+   * means `COMMON_FUNDER` cannot fire, so one operator on both sides of the
+   * trade looks like independent demand.
+   */
+  const result = await resolveAncestry([TAB, SHILL], {
+    observe: broken(CHAIN, [SHILL]),
+    remembered: new Map(),
+    hops: 3,
+  })
+  assert.equal(result.facts.get(SHILL)?.fundedBy, undefined)
+  assert.equal(result.stats.unknown, 1)
+})
+
+test('WITH a memory, the same outage is answered by the topic', async () => {
+  // The fix. The funding edge survives an index that will not answer.
+  const notes: string[] = []
+  const result = await resolveAncestry([TAB, SHILL], {
+    observe: broken(CHAIN, [SHILL]),
+    remembered: new Map([
+      [SHILL, { account: SHILL, createdAt: '200.0', funder: OPERATOR, funderSeq: 16 }],
+    ]),
+    hops: 3,
+    note: (l) => notes.push(l),
+  })
+
+  assert.deepEqual(result.facts.get(SHILL)?.fundedBy, [OPERATOR])
+  assert.equal(result.stats.remembered, 1)
+  assert.equal(result.stats.unknown, 0)
+  // The age rule gets its answer from the remembered birth too, with no fetch.
+  assert.equal(result.birthdays.get(SHILL), '200.0')
+  // And it says where the answer came from, citing the sequence number.
+  assert.match(notes.join('\n'), /remembered {2}0\.0\.7000 funded by 0\.0\.99 \(published seq 16\)/)
+})
+
+test('a remembered funder is still WALKED, so the chain does not stop at the gap', async () => {
+  /*
+   * Falling back must not merely record the edge — it must keep walking from
+   * it. `SHARED_FUNDING_ROOT` needs the chain between two accounts, so a
+   * fallback that stopped at the remembered funder would find the edge and
+   * still miss the root, which is the same rule silently unreachable again.
+   */
+  const deep: Record<string, Observation> = {
+    '0.0.3000': { createdAt: '300.0', funder: '0.0.2999' },
+    '0.0.2999': { createdAt: '299.0', funder: OPERATOR },
+    [OPERATOR]: { createdAt: '1.0' },
+  }
+  const result = await resolveAncestry(['0.0.3000'], {
+    observe: broken(deep, ['0.0.3000']),
+    remembered: new Map([
+      ['0.0.3000', { account: '0.0.3000', funder: '0.0.2999', funderSeq: 5 }],
+    ]),
+    hops: 3,
+  })
+  assert.deepEqual(result.facts.get('0.0.3000')?.fundedBy, ['0.0.2999'])
+  // Reached one hop PAST the remembered edge, and then the root.
+  assert.deepEqual(result.facts.get('0.0.2999')?.fundedBy, [OPERATOR])
+  assert.ok(result.facts.has(OPERATOR))
+})
+
+test('a SUCCESSFUL fetch that finds no funder cannot erase a remembered one', async () => {
+  /*
+   * The subtle case, and the one most likely to be got wrong. A pass during a
+   * partial outage gets a 200 from the accounts endpoint and nothing from the
+   * transactions index: success, with no funder. Taking that at face value
+   * would drop an edge the topic already holds — the erase-on-outage bug in a
+   * different disguise.
+   */
+  const result = await resolveAncestry([SHILL], {
+    observe: working({ [SHILL]: { createdAt: '200.0' } }), // no funder, no error
+    remembered: new Map([
+      [SHILL, { account: SHILL, createdAt: '200.0', funder: OPERATOR, funderSeq: 16 }],
+    ]),
+    hops: 3,
+  })
+  assert.deepEqual(result.facts.get(SHILL)?.fundedBy, [OPERATOR])
+  /*
+   * NOT counted as remembered, because Mirror DID answer — the memory only
+   * supplied the field it left out. `remembered` counts outages, so inflating
+   * it here would hide how often the index is actually failing.
+   *
+   * Two fetches, not one: the walk continues from the remembered funder, which
+   * the previous test requires. My first version of this assertion said one and
+   * was simply wrong about the code.
+   */
+  assert.equal(result.stats.remembered, 0)
+  assert.equal(result.stats.fetched, 2)
+})
+
+test('the hop limit is respected, so a long chain cannot walk forever', async () => {
+  const long: Record<string, Observation> = {
+    a: { funder: 'b' }, b: { funder: 'c' }, c: { funder: 'd' }, d: { funder: 'e' },
+  }
+  const result = await resolveAncestry(['a'], {
+    observe: working(long),
+    remembered: new Map(),
+    hops: 2,
+  })
+  // Two hops: `a` and `b` resolved, `c` never asked.
+  assert.ok(result.facts.has('a'))
+  assert.ok(result.facts.has('b'))
+  assert.equal(result.facts.has('c'), false)
+})
+
+test('a funding CYCLE terminates rather than recursing forever', async () => {
+  // Impossible on Hedera — an account cannot create its own creator — but the
+  // walk takes its input from an index, and an index can be wrong. A hang here
+  // would stall the engine, not fail it, which is far harder to notice.
+  const cycle: Record<string, Observation> = { x: { funder: 'y' }, y: { funder: 'x' } }
+  const result = await resolveAncestry(['x'], {
+    observe: working(cycle),
+    remembered: new Map(),
+    hops: 10,
+  })
+  assert.equal(result.stats.fetched, 2)
 })

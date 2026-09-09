@@ -72,10 +72,13 @@ export {
 export {
   ceilingHistoryFromMessages,
   ceilingsFromMessages,
+  factsFromMessages,
   weightsFromMessages,
   entriesFromMessages,
+  type FactsReplay,
   type PublishedCeiling,
   type PublishedCeilingInputs,
+  type RememberedFacts,
   type PublishedWeight,
   type Replay,
   type TopicMessage,

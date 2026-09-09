@@ -177,6 +177,69 @@ export const weightUpdate = base.extend({
 
 
 /**
+ * One account's observed graph facts — creation time and funder.
+ *
+ * ## Why this exists
+ *
+ * The independence graph **failed open**. Funding ancestry was re-derived every
+ * pass from Mirror Node's transactions-by-account index, which is *intermittent*
+ * for new accounts — measured returning 5 transactions once and 0 both before
+ * and after, minutes apart. When the lookup failed the counterparty was
+ * weighted **independent**, the unsafe direction. That is not theoretical: the
+ * loop attacker went uncaught on its first full run because of exactly this.
+ *
+ * The fix is to record a fact WHEN OBSERVED and never forget it. That was
+ * scoped as `@tab/db`, and a private database would have worked — but it would
+ * have put the graph's inputs somewhere a stranger cannot see, which
+ * contradicts the entire no-contract argument. Every other input to a ceiling
+ * is on a topic; the graph's inputs were the exception, and re-deriving them
+ * from an eventually-consistent index is precisely why `verify-ceiling` could
+ * check the arithmetic but never the graph.
+ *
+ * So they go on the topic. A published fact is durable, monotonic (see below),
+ * free of a database, and checkable by anyone with a Mirror Node URL.
+ *
+ * ## Monotonic, and why a reader must enforce it
+ *
+ * These messages are **append-only and cumulative**: once `by` is known for an
+ * account, a later message that omits it must NOT erase it. A reader that
+ * blindly takes the newest message would let one Mirror Node outage — which
+ * publishes a fact with no funder — wipe a funding edge that was correctly
+ * observed a week ago, reproducing the fail-open through the very mechanism
+ * meant to close it. `factsFromMessages` in `@tab/ledger` merges rather than
+ * replaces, and that is the load-bearing property.
+ *
+ * ## What is published, and what is not
+ *
+ * This is a **derived index of already-public data**: every field is readable
+ * by anyone from Mirror Node, and publishing it reveals no private
+ * information — it only saves the next reader from an index that may not
+ * answer. Nothing here is a private key, a request payload, or an amount.
+ */
+export const graphFact = base.extend({
+  t: z.literal('fact'),
+  /**
+   * The account this fact is ABOUT — not the tab.
+   *
+   * `base` carries `tab` because every other message concerns one, and here it
+   * means "the tab whose engine pass observed this". That is deliberate rather
+   * than a workaround: a fact is evidence someone gathered at a moment, and
+   * knowing which pass gathered it is what lets a reader re-run that pass.
+   */
+  acct: entityId,
+  /** Consensus timestamp of account creation. Absent when Mirror had none. */
+  born: consensusTimestamp.optional(),
+  /**
+   * The account that funded `acct`, when one was observed.
+   *
+   * Absent means NOT OBSERVED, never "has no funder" — an account genuinely
+   * created by itself is not a thing on Hedera. A reader must therefore treat
+   * absence as no information and keep whatever it already knew.
+   */
+  by: entityId.optional(),
+})
+
+/**
  * Every input that influenced the ceiling.
  *
  * If a number affected the result and is not in here, `verify-ceiling` cannot
@@ -291,6 +354,7 @@ export const registration = base.extend({
 
 export const tabMessage = z.discriminatedUnion('t', [
   weightUpdate,
+  graphFact,
   holdReceipt,
   debitReceipt,
   creditReceipt,
@@ -306,6 +370,7 @@ export type CreditReceipt = z.infer<typeof creditReceipt>
 export type RefusalReceipt = z.infer<typeof refusalReceipt>
 export type HoldReceipt = z.infer<typeof holdReceipt>
 export type WeightUpdate = z.infer<typeof weightUpdate>
+export type GraphFact = z.infer<typeof graphFact>
 export type RepairReceipt = z.infer<typeof repairReceipt>
 export type Receipt = z.infer<typeof receipt>
 export type CeilingInputs = z.infer<typeof ceilingInputs>

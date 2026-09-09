@@ -97,7 +97,7 @@ export function revenueFromEntries(
 }
 
 /**
- * Who created this account.
+ * Who created this account, and when — from ONE pair of requests.
  *
  * Derived from the account's CREATING transaction, found by a point lookup on
  * its `created_timestamp`. The transaction id's payer is the creator.
@@ -123,24 +123,35 @@ export function revenueFromEntries(
  * `/accounts/{id}`, which was reliable throughout, and one exact-timestamp
  * query returns the CRYPTOCREATEACCOUNT itself.
  *
- * ## What it still does not fix
+ * ## What this no longer leaves unfixed
  *
- * Two requests per counterparty per pass, and a fresh lookup every time. The
- * real answer is to record the edge WHEN IT IS OBSERVED and never forget it —
- * which is what `@tab/db` is for, and this is the concrete justification for
- * it: a security rule that fails open must not depend on re-deriving its
- * inputs from an eventually-consistent index.
+ * This used to be two functions — `funderOf` and `isYoung` — each making its
+ * own `getAccount` call, so every counterparty cost three requests to answer
+ * two questions that come from the same document, and the two answers could
+ * disagree when one call succeeded and the other did not. Mirror Node is the
+ * intermittent dependency this whole area is fighting, so halving the number
+ * of chances it has to fail is not a micro-optimisation.
+ *
+ * The deeper problem — a fresh lookup every pass, on an eventually-consistent
+ * index, for a security rule that fails open — is fixed by publishing what is
+ * observed to HCS and never forgetting it. See `publish/facts.ts` and
+ * `factsFromMessages`. That was scoped as `@tab/db`; the topic does it without
+ * a database and, unlike a private store, leaves the graph's inputs where a
+ * stranger can check them.
+ *
+ * Returns both fields as optional. `undefined` means NOT OBSERVED, never a
+ * substantive answer: an account with no creation time is not old enough, and
+ * an account with no observed funder is not unfunded.
  */
-export async function funderOf(
+export async function observeAccount(
   mirror: MirrorClient,
   account: AccountId,
-): Promise<AccountId | undefined> {
+): Promise<{ createdAt?: string; funder?: AccountId }> {
   const info = await getAccount(mirror, account)
   const created = info.created_timestamp
-  if (!created) return undefined
+  if (!created) return {}
 
   const creating = await getTransactionAt(mirror, created)
-  if (!creating) return undefined
 
   /*
    * The payer is the id's own account prefix: `0.0.8812188-1788698157-659492670`.
@@ -151,36 +162,35 @@ export async function funderOf(
    * entry" would work until a transaction where it does not — while the id's
    * prefix is the payer by definition.
    */
-  const payer = creating.transaction_id?.split('-')[0]
-  return payer && payer !== account ? payer : undefined
+  const payer = creating?.transaction_id?.split('-')[0]
+
+  return {
+    createdAt: created,
+    ...(payer && payer !== account ? { funder: payer } : {}),
+  }
 }
 
 /**
- * Whether an account is younger than the age threshold.
+ * Whether a creation time is younger than the threshold. Pure.
  *
- * Uses `created_timestamp` from the accounts endpoint — the exact creation
- * time. The tempting alternative, "timestamp of its first operation", is wrong
- * in the direction that matters: an attacker's freshly minted seller looks
- * older than it is the moment someone funds it, and that is precisely the
- * account the age discount exists to catch.
- *
- * Returns `undefined` when Mirror Node has no creation time rather than
- * guessing. An unknown age must not be silently treated as "old enough".
+ * Split from the fetch so the answer can come from a REMEMBERED creation time
+ * just as well as a freshly fetched one — which is the point of publishing
+ * facts. `undefined` in gives `undefined` out: an unknown age must never be
+ * silently treated as "old enough".
  */
-export async function isYoung(
-  mirror: MirrorClient,
-  account: AccountId,
+export function isYoungFrom(
+  createdAt: string | undefined,
   nowSeconds: number,
   ageFullDays = params.ageFullDays,
-): Promise<boolean | undefined> {
-  const info = await getAccount(mirror, account)
-  const created = info.created_timestamp
-  if (!created) return undefined
-  const createdSeconds = Number(created.split('.')[0])
+): boolean | undefined {
+  if (!createdAt) return undefined
+  const createdSeconds = Number(createdAt.split('.')[0])
   if (!Number.isFinite(createdSeconds)) return undefined
+  // Presentation-free arithmetic on seconds, not money.
   const ageDays = (nowSeconds - createdSeconds) / 86_400
   return ageDays < ageFullDays
 }
+
 
 /**
  * Token transfer edges touching an account, over a bounded window span.
