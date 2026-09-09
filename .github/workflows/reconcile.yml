@@ -1,0 +1,79 @@
+name: reconcile
+
+# Audit the money: diff Mirror Node's outbound transfers against the receipt
+# topic and report anything that disagrees.
+#
+# ## REPORT ONLY — never `--repair` on a schedule
+#
+# The reconciler can write repair receipts, and it must not do so unattended.
+# The reason is specific rather than cautious: the idempotence that makes
+# `--repair` safe depends on matching a repair to its debit by transaction id,
+# and if that ever regressed, an unattended job would re-report and re-reverse
+# the same violation on every run — turning a -0.04 discrepancy into +0.36 after
+# ten runs. The command whose job is proving the books would be the thing
+# corrupting them.
+#
+# So this job reports, and a human runs `pnpm reconcile --repair` after reading
+# what it found. A failing run emails you; that notification IS the product here.
+#
+# The default window is the last hour. `RECONCILE_LOOKBACK_SECONDS` widens it —
+# but a wide window means a slow Mirror Node walk, so the schedule stays narrow
+# and a manual run can go deeper.
+
+on:
+  workflow_dispatch:
+    inputs:
+      lookback_seconds:
+        description: 'How far back to reconcile (default 3600)'
+        required: false
+        default: '3600'
+  schedule:
+    - cron: '7 */6 * * *' # four times a day
+
+concurrency:
+  group: tab-reconcile
+  cancel-in-progress: true # read-only, so cancelling a stale run costs nothing
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.20.0', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Reconcile the ledger against the chain
+        run: pnpm reconcile
+        env:
+          RECONCILE_LOOKBACK_SECONDS: ${{ inputs.lookback_seconds || '3600' }}
+          HEDERA_NETWORK: testnet
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          TOPIC_RECEIPTS: ${{ secrets.TOPIC_RECEIPTS }}
+          TOPIC_SETTLEMENTS: ${{ secrets.TOPIC_SETTLEMENTS }}
+
+      # Runs even when the reconciler reports a violation, because the public
+      # invariants are a separate question from the chain diff and you want both
+      # answers in one place.
+      - name: Verify the public invariants
+        if: always()
+        run: pnpm verify-tab
+        env:
+          HEDERA_NETWORK: testnet
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          TOPIC_RECEIPTS: ${{ secrets.TOPIC_RECEIPTS }}
+          TOPIC_CEILINGS: ${{ secrets.TOPIC_CEILINGS }}
+          TOPIC_SETTLEMENTS: ${{ secrets.TOPIC_SETTLEMENTS }}
+          # Optional, and the tool SAYS so when they are missing rather than
+          # quietly skipping the float invariant. Set them as repository
+          # variables to assert it; leave them and the run still reports every
+          # other invariant.
+          TREASURY_ACCOUNT_ID: ${{ vars.TREASURY_ACCOUNT_ID }}
+          FLOAT_TOTAL_USDC: ${{ vars.FLOAT_TOTAL_USDC }}

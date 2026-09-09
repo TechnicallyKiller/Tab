@@ -91,50 +91,88 @@ win and the missing `.env` on a fresh clone is not an error.
 
 ---
 
-## 3 · Engine and settlement — not servers
+## 3 · Engine and settlement — scheduled, not hosted
 
-Both are passes, not daemons. Render cron jobs are a paid feature and this
-project has no budget, so either:
+Both are passes that exit, not daemons. **Three workflows are committed** and
+need nothing but secrets:
 
-**Run them locally during the demo** — simplest, and what the demo script
-assumes:
+| Workflow | Runs | Does |
+|---|---|---|
+| `.github/workflows/engine.yml` | every 2h + manual | recompute and publish the ceiling |
+| `.github/workflows/settle.yml` | every 2h + manual | settle every closed window |
+| `.github/workflows/reconcile.yml` | every 6h + manual | audit the money, **report only** |
 
-```bash
-pnpm engine:once --publish     # recompute and publish a ceiling
-pnpm settle                    # settle the closed window
-pnpm reconcile                 # audit the money against Mirror Node
+Every one has `workflow_dispatch`, which is how you drive a demo — **Actions →
+pick the workflow → Run workflow**.
+
+### Why a 2-hour schedule settles 10-minute windows correctly
+
+Both are **catch-up passes**, not heartbeats. `pnpm settle` settles *every*
+closed unsettled window in one run, and the engine recomputes from the full
+trailing history. So a late or skipped run costs freshness and nothing else —
+which is what makes GitHub's best-effort cron acceptable here. It routinely runs
+late under load; do not read the interval as a guarantee.
+
+### Minutes — this repo is PRIVATE, and that is the constraint
+
+Private repos on the Free plan get **2,000 Actions minutes a month**. Each run is
+roughly 2 minutes with a warm pnpm cache:
+
+| Cadence | Runs/month | Minutes |
+|---|---|---|
+| every 30 min | ~1,440 | ~2,900 ✗ **over** |
+| every 2 hours | ~360 | ~720 ✓ |
+| all three as committed | ~840 | ~1,700 ✓ fits, with headroom |
+
+**Make the repo public and this becomes unlimited**, at which point you can
+tighten the cron freely. Until then the committed schedule is deliberately
+conservative.
+
+### Two settings that MUST match Render
+
+`DEMO_MODE` and `WINDOW_SECONDS` are read by the gateway *and* by these jobs. The
+gateway files each receipt into a window computed from `WINDOW_SECONDS`; if the
+settler disagrees, it settles windows the gateway never filed into and never
+settles the ones it did. **The tab silently never settles, and nothing errors.**
+
+The arithmetic is shared (`windowOf` in `@tab/params`) precisely so it cannot
+drift — the *configuration* still can, and only you can keep the two places
+equal. Set them as repository **variables** (not secrets) so they are visible:
+
+```
+Settings → Secrets and variables → Actions → Variables
+  DEMO_MODE       true
+  WINDOW_SECONDS  300
 ```
 
-**Or schedule them free on GitHub Actions.** Public repos get unlimited minutes.
-Note what this means: the workflow needs `HEDERA_OPERATOR_KEY` in repository
-secrets. That is acceptable for **testnet** keys holding faucet funds and is not
-acceptable for anything else — decide that deliberately rather than by default.
+The workflows default to `true` / `300`, matching the demo `.env`.
 
-```yaml
-# .github/workflows/engine.yml
-on:
-  schedule: [{ cron: '*/10 * * * *' }]   # every 10 minutes
-jobs:
-  engine:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '22.20.0' }
-      - run: corepack enable && pnpm install --frozen-lockfile
-      - run: pnpm engine:once --publish
-        env:
-          HEDERA_NETWORK: testnet
-          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
-          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
-          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
-          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
-          TOPIC_RECEIPTS: ${{ secrets.TOPIC_RECEIPTS }}
-          TOPIC_CEILINGS: ${{ secrets.TOPIC_CEILINGS }}
-          TOPIC_SETTLEMENTS: ${{ secrets.TOPIC_SETTLEMENTS }}
+### Secrets
+
+```
+Settings → Secrets and variables → Actions → Secrets
+  HEDERA_OPERATOR_ID    HEDERA_OPERATOR_KEY
+  FAUCET_ACCOUNT_ID     FAUCET_ACCOUNT_KEY
+  USDC_TOKEN_ID         TAB_ACCOUNT_ID
+  TOPIC_RECEIPTS        TOPIC_CEILINGS        TOPIC_SETTLEMENTS
 ```
 
----
+**Say this out loud rather than by default:** this puts two private keys in
+GitHub. They are **testnet** keys holding faucet funds, which is why it is
+acceptable — and it would not be for anything else. If these ever become mainnet
+keys, this arrangement has to change first.
+
+### The reconciler never repairs on a schedule
+
+`reconcile.yml` runs **report only**. The reconciler *can* write repair receipts
+and must not do so unattended: its idempotence depends on matching a repair to
+its debit by transaction id, and if that ever regressed, an unattended job would
+re-report and re-reverse the same violation every run — turning a −0.04
+discrepancy into +0.36 after ten runs. The command whose job is proving the books
+would be the thing corrupting them.
+
+A failing run emails you. That notification *is* the product here. Read what it
+found, then run `pnpm reconcile --repair` yourself.
 
 ## 4 · MCP, for a judge to drive it themselves
 

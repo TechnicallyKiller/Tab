@@ -1,0 +1,78 @@
+name: engine
+
+# The slow path: recompute the ceiling from HCS and publish it.
+#
+# ## Cadence, and why it does not have to match the window
+#
+# The engine is a CATCH-UP pass, not a heartbeat. It recomputes from the full
+# trailing history every run, so a late or skipped run costs freshness and
+# nothing else — the next one produces exactly the same answer it would have.
+# That is what makes an unreliable scheduler acceptable here.
+#
+# GitHub's cron is best-effort and routinely runs late under load. Do not read
+# the interval below as a guarantee.
+#
+# ## Minutes, on a PRIVATE repo
+#
+# Private repos on the Free plan get **2,000 Actions minutes a month**. Each run
+# here is roughly 2 minutes with a warm pnpm cache, so every 30 minutes is about
+# 48 runs a day — ~2,900 minutes a month, which does NOT fit. Every 2 hours is
+# ~12 runs a day, ~720 minutes, which does alongside the settler and the
+# reconciler.
+#
+# Make the repo public and this becomes unlimited. Until then the schedule is
+# deliberately conservative and `workflow_dispatch` is how you drive a demo.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */2 * * *' # every 2 hours, off the hour to avoid the rush
+
+# ONE at a time. Two engines publishing for one agent make the ceiling topic
+# ambiguous — the reader picks the last one and is wrong deterministically.
+# `cancel-in-progress: false` because killing a pass mid-publish is worse than
+# waiting for it.
+concurrency:
+  group: tab-engine
+  cancel-in-progress: false
+
+jobs:
+  recompute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.20.0', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Recompute and publish the ceiling
+        run: pnpm engine:once --publish
+        env:
+          # ─────────────────────────────────────────────────────────────────
+          # THESE MUST MATCH THE GATEWAY'S OWN SETTINGS ON RENDER.
+          #
+          # The gateway files each receipt into a window computed from
+          # WINDOW_SECONDS. If this job disagrees, it settles windows the
+          # gateway never filed into and never settles the ones it did — the
+          # tab silently never settles at all, and nothing errors.
+          #
+          # `windowOf` is shared (`@tab/params`) precisely so the arithmetic
+          # cannot drift; the CONFIGURATION still can, and only you can keep
+          # these two places equal.
+          # ─────────────────────────────────────────────────────────────────
+          DEMO_MODE: ${{ vars.DEMO_MODE || 'true' }}
+          WINDOW_SECONDS: ${{ vars.WINDOW_SECONDS || '300' }}
+          TRAILING_WINDOWS: ${{ vars.TRAILING_WINDOWS || '6' }}
+
+          HEDERA_NETWORK: testnet
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          TOPIC_RECEIPTS: ${{ secrets.TOPIC_RECEIPTS }}
+          TOPIC_CEILINGS: ${{ secrets.TOPIC_CEILINGS }}
+          TOPIC_SETTLEMENTS: ${{ secrets.TOPIC_SETTLEMENTS }}
+          FAUCET_ACCOUNT_ID: ${{ secrets.FAUCET_ACCOUNT_ID }}
+          FAUCET_ACCOUNT_KEY: ${{ secrets.FAUCET_ACCOUNT_KEY }}

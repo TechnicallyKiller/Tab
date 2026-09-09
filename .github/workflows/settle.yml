@@ -1,0 +1,74 @@
+name: settle
+
+# Close the window: net a window's receipts into ONE transfer, executed by
+# Hedera consensus rather than submitted by us.
+#
+# ## This one MOVES MONEY, so read the concurrency block
+#
+# `--once` settles every closed, unsettled window in a single pass — so like the
+# engine it is a catch-up, and a delayed run settles a backlog rather than
+# losing anything. A run every 2 hours settling twelve 10-minute windows is
+# correct, not degraded.
+#
+# The failure this project has actually had is a window paid TWICE. Two
+# concurrent runs is the shape that causes it, which is why:
+#
+#   - `concurrency` allows exactly one run
+#   - `cancel-in-progress: false` — NEVER cancel a settlement mid-flight. A
+#     cancel between scheduling a transfer and writing its receipt leaves the
+#     window looking unsettled while the money has already moved, which is
+#     precisely the double-payment setup.
+#
+# The worker also audits `checkWindowSettledOnce` before scheduling and refuses
+# to proceed on a duplicate, so this is defence in depth rather than the defence.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '47 */2 * * *' # offset from the engine so they do not contend
+
+concurrency:
+  group: tab-settle
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    # Generous: a scheduled transfer waits on consensus, and the worker polls
+    # Mirror Node for execution with its own 180s timeout per window.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.20.0', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Settle every closed window
+        run: pnpm settle
+        env:
+          # ─────────────────────────────────────────────────────────────────
+          # THESE MUST MATCH THE GATEWAY'S OWN SETTINGS ON RENDER.
+          #
+          # The gateway files each receipt into a window computed from
+          # WINDOW_SECONDS. If this job disagrees, it settles windows the
+          # gateway never filed into and never settles the ones it did — the
+          # tab silently never settles at all, and nothing errors.
+          #
+          # `windowOf` is shared (`@tab/params`) precisely so the arithmetic
+          # cannot drift; the CONFIGURATION still can, and only you can keep
+          # these two places equal.
+          # ─────────────────────────────────────────────────────────────────
+          DEMO_MODE: ${{ vars.DEMO_MODE || 'true' }}
+          WINDOW_SECONDS: ${{ vars.WINDOW_SECONDS || '300' }}
+
+          HEDERA_NETWORK: testnet
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          TOPIC_RECEIPTS: ${{ secrets.TOPIC_RECEIPTS }}
+          TOPIC_CEILINGS: ${{ secrets.TOPIC_CEILINGS }}
+          TOPIC_SETTLEMENTS: ${{ secrets.TOPIC_SETTLEMENTS }}
+          FAUCET_ACCOUNT_ID: ${{ secrets.FAUCET_ACCOUNT_ID }}
+          FAUCET_ACCOUNT_KEY: ${{ secrets.FAUCET_ACCOUNT_KEY }}
