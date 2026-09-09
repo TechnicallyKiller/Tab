@@ -1,5 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { format, micro, usdc, type MicroUsdc } from '@tab/money'
+/*
+ * `toWire` is IMPORTED, not redefined.
+ *
+ * This file carried its own copy — byte-equivalent to `@tab/money`'s, so
+ * nothing was wrong yet — while `server.ts`, in the same app, imported the
+ * shared one. Two implementations of one function side by side is the setup
+ * for drift, not drift itself, and it is the fifth private copy of something
+ * shared to appear in this repo: three replay decoders each lost a message
+ * type, and `whoami.ts`'s inline type re-created a decimals bug. The pattern
+ * is reliable enough to treat as a rule.
+ */
+import { format, micro, toWire, usdc, type MicroUsdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
 import type { Entry, PublishedCeiling, PublishedWeight, RememberedFacts } from '@tab/ledger'
 import type { SettlementEntry } from './settlements.ts'
@@ -302,14 +313,6 @@ function check(deps: SpendDeps, request: SpendRequest, at: string): SpendRefused
   }
 
   return null
-}
-
-function toWire(amount: MicroUsdc): string {
-  const negative = amount < 0n
-  const m = negative ? -amount : amount
-  const whole = m / 1_000_000n
-  const frac = (m % 1_000_000n).toString().padStart(6, '0')
-  return `${negative ? '-' : ''}${whole}.${frac}`
 }
 
 function shiftSeconds(consensus: string, seconds: number): string {

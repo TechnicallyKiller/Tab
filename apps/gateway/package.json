@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --experimental-strip-types --watch --env-file=../../.env src/main.ts",
     "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",
