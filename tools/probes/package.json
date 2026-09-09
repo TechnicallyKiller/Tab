@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "x402": "node --experimental-strip-types --env-file=../../.env src/x402-loop.ts",
+    "x402": "node --experimental-strip-types --env-file-if-exists=../../.env src/x402-loop.ts",
     "typecheck": "tsc --noEmit",
-    "probe:x402": "node --experimental-strip-types --env-file=../../.env src/x402-loop.ts",
-    "probe:x402:hts": "node --experimental-strip-types --env-file=../../.env src/x402-loop.ts --hts",
-    "probe:latency": "node --experimental-strip-types --env-file=../../.env src/redis-latency.ts",
-    "probe:schedule": "node --experimental-strip-types --env-file=../../.env src/schedule-tick.ts",
-    "probe:adapter": "node --experimental-strip-types --env-file=../../.env src/x402-adapter.ts",
-    "probe:adapter:hts": "node --experimental-strip-types --env-file=../../.env src/x402-adapter.ts --hts",
-    "probe:protocol": "node --experimental-strip-types --env-file=../../.env src/protocol-roundtrip.ts"
+    "probe:x402": "node --experimental-strip-types --env-file-if-exists=../../.env src/x402-loop.ts",
+    "probe:x402:hts": "node --experimental-strip-types --env-file-if-exists=../../.env src/x402-loop.ts --hts",
+    "probe:latency": "node --experimental-strip-types --env-file-if-exists=../../.env src/redis-latency.ts",
+    "probe:schedule": "node --experimental-strip-types --env-file-if-exists=../../.env src/schedule-tick.ts",
+    "probe:adapter": "node --experimental-strip-types --env-file-if-exists=../../.env src/x402-adapter.ts",
+    "probe:adapter:hts": "node --experimental-strip-types --env-file-if-exists=../../.env src/x402-adapter.ts --hts",
+    "probe:protocol": "node --experimental-strip-types --env-file-if-exists=../../.env src/protocol-roundtrip.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",

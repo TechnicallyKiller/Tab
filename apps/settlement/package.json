@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
-    "tick": "node --experimental-strip-types --env-file=../../.env src/main.ts --once",
-    "reconcile": "node --experimental-strip-types --env-file=../../.env src/reconcile.ts",
+    "start": "node --experimental-strip-types --env-file-if-exists=../../.env src/main.ts",
+    "tick": "node --experimental-strip-types --env-file-if-exists=../../.env src/main.ts --once",
+    "reconcile": "node --experimental-strip-types --env-file-if-exists=../../.env src/reconcile.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --experimental-strip-types --test src/*.test.ts"
   },

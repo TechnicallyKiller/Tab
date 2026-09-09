@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
-    "recompute": "node --experimental-strip-types --env-file=../../.env src/main.ts --once",
+    "start": "node --experimental-strip-types --env-file-if-exists=../../.env src/main.ts",
+    "recompute": "node --experimental-strip-types --env-file-if-exists=../../.env src/main.ts --once",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --experimental-strip-types --test src/*.test.ts"
   },

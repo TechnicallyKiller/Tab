@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify-tab": "node --experimental-strip-types --env-file=../../.env src/verify-tab.ts",
-    "verify-ceiling": "node --experimental-strip-types --env-file=../../.env src/verify-ceiling.ts",
+    "verify-tab": "node --experimental-strip-types --env-file-if-exists=../../.env src/verify-tab.ts",
+    "verify-ceiling": "node --experimental-strip-types --env-file-if-exists=../../.env src/verify-ceiling.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --experimental-strip-types --test src/*.test.ts"
   },

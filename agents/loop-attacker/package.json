@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "attack": "node --experimental-strip-types --env-file=../../.env src/run.ts",
+    "attack": "node --experimental-strip-types --env-file-if-exists=../../.env src/run.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
