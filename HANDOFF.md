@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 266 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE**
+**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 299 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -60,16 +60,40 @@ Zero Solidity, enforced by `pnpm guard`.
 **Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` ·
 `agentkit-plugin` · `mcp`
 
-**266 tests:** ledger 53 · mirror 49 · engine 31 · scoring 28 · graph 27 · sdk 26 · params 19 ·
-money 13 · verify 11 · protocol 9.
+**299 tests:** ledger 53 · mirror 49 · engine 34 · graph 32 · scoring 28 · params 27 · sdk 26 ·
+verify 22 · money 13 · protocol 9.
 
-### Parameters: v2 is in force
+### Parameters: v3 is in force
 
-`MODEL_ID = tab-v2`. One change from v1 — the starter floor `1.000000 → 0.250000` — because v1 made
-the product's central claim untestable: earned credit for one young customer is `0.2352` against a
-`1.0000` floor, so the grant dominated the earning for an agent's whole early life. `v1.ts` is
-byte-identical and stays forever. **`verify-ceiling` still passes every ceiling published under
-`tab-v1`.**
+`MODEL_ID = tab-v3`. Three generations, each changing exactly one thing:
+
+- **v1 → v2** — the starter floor `1.000000 → 0.250000`, because v1 made the product's central
+  claim untestable: earned credit for one young customer is `0.2352` against a `1.0000` floor, so
+  the grant dominated the earning for an agent's whole early life.
+- **v2 → v3** — the independence discount steps moved INTO the set, and `unverifiedBp` (50%) is
+  new. The five existing values are unchanged, so no weight moved by relocating them (confirmed
+  live: the same three counterparties still weigh 0%, 0%, 33%).
+
+`v1.ts` and `v2.ts` are byte-identical and stay forever; all three hashes are pinned in
+`params.test.ts` as a tripwire. **`verify-ceiling` passes ceilings published under all three, each
+against its own frozen set — 13 of 14.** The one failure is `seq 1` and is genuine: hash matches so
+the record is authentic, ceiling *value* matches, but the `binding` label reads `unrated` where
+today's formula says `computed`, because `computeCeiling` changed after publication without a
+version bump. No credit decision was affected. It stays visible — catching exactly that is what the
+tool is for.
+
+**`weights` is the schema's one optional field.** v1 and v2 genuinely had no frozen weight policy
+(the steps lived in `apps/engine`), so back-filling it would claim a weight published under
+`tab-v1` is reproducible from the frozen record when it is not. `weightPolicyFor` returns
+`undefined` for pre-v3 — while an unknown *version* still throws, because a lookup bug and a fact
+about history must not present identically.
+
+**A published weight is now verifiable, not just readable.** `weightUpdate` carries `model`, and
+`pnpm verify-ceiling` recomputes each weight from its published reasons and the frozen steps:
+`SHARED_FUNDING_ROOT × YOUNG_ACCOUNT × CONCENTRATED` → `0.7 × 0.6 × 0.8` → `3360bp`, matching seq
+34 on the live topic. The arithmetic is re-implemented in `tools/verify/src/reweigh.ts` rather than
+imported from `@tab/graph` — calling the function that produced the number would prove only that it
+is deterministic.
 
 ### Live testnet
 
@@ -98,7 +122,7 @@ for this.
 
 **Correctness and security. Fix these before scaling anything.**
 
-1. **The independence graph fail-open is MOSTLY CLOSED (2026-09-09), with a named residual.**
+1. ~~The independence graph FAILS OPEN~~ — **CLOSED 2026-09-09, in two halves.**
    Ancestry was re-derived every pass from Mirror Node's transactions-by-account index, which is
    *intermittent* for new accounts — measured returning 5 transactions once and 0 both before and
    after, minutes apart. A failed fetch weighted the counterparty **independent**, and the loop
@@ -111,10 +135,19 @@ for this.
    `verify-ceiling` could check a ceiling's arithmetic but never its graph. It also needs no
    database, which matters given there is no budget.
 
-   **The residual, precisely:** an account *never successfully observed*, during an outage, is
-   still weighted independent — there is nothing to remember. Closing that needs a POLICY change
-   (discount the unverifiable rather than trust it), which moves ceilings, which needs a new
-   frozen parameter set (v3). That is the next real correctness item.
+   **The second half — v3.** The residual was an account *never successfully observed*: nothing to
+   remember, so absent ancestry still read as absent relationship and the counterparty was
+   weighted INDEPENDENT. `UNVERIFIED_FUNDING` now discounts it to **50%**. A discount and not a
+   block, because blocking would turn routine Mirror Node lag into a simultaneous refusal for
+   every counterparty — the original fail-open existed partly for that reason and the reason was
+   sound, only its magnitude was wrong. It is self-healing: the moment provenance IS observed it
+   is published, and a published fact is never forgotten, so it cannot apply to the same account
+   twice. The starter floor still binds for a new or small agent, so it cannot stop one opening.
+
+   **Nothing here is unhandled any more.** What remains is a *documented property*, not a gap: a
+   counterparty whose provenance we have never seen counts for half rather than nothing, which is
+   a deliberate calibration and is stated in `v3.ts`, in the console's config view, and on the
+   Counterparties evidence panel.
 2. **No registration flow.** Nothing writes a `register` message, so one Starter Tab per funding
    root is unenforced and bulk-minting agents to farm Starter Tabs is not prevented. The README
    labels it OPEN as of 2026-09-08. `@tab/graph` already resolves funding roots, so the check is
@@ -414,6 +447,9 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-09-06 | **A Hedera transaction id is spelled two ways**: `0.0.x@s.n` in our receipts, `0.0.x-s-n` by Mirror Node. Use `normalizeTransactionId` / `sameTransaction` from `@tab/mirror` on BOTH sides of any comparison | `mirror`, `settlement`, `verify`, `engine` |
 | 2026-09-06 | **`reconcile` is window-bounded** (`--since=<seconds.nanos>`, else `RECONCILE_LOOKBACK_SECONDS`, default 3600). Walking the float's full history hung at 5–15s/page and gets slower forever; the spec's unit is the window | `settlement` |
 | 2026-09-06 | **OPEN DEFECT — the spend path writes `unsettled:<holdId>` as the debit's transaction id** whenever the x402 facilitator returns no settlement transaction. Those debits can never be reconciled: there is no id to match. The reconciler counts them as `unreconcilable` rather than skipping them, but **the fix belongs in `apps/gateway`** — write the real id once the transfer lands, or emit a follow-up receipt carrying it. Until then the reconciler has never made a single positive match, so the demo's proof-of-reconciliation is not yet demonstrated | `gateway`, `x402`, `settlement`, demo |
+| 2026-09-09 | **Anything that influences a published ceiling belongs in `@tab/params`, and "influences" includes the WEIGHT steps.** They lived in `apps/engine` and the engine's own comment named it as a gap for days. The consequence was not stylistic: a weight message said `bp 3360 · why [...]` and no stranger could check that 3360 followed from those reasons. v3 moved them; `verify-ceiling` now reproduces weights | `params`, `graph`, `engine`, `verify` |
+| 2026-09-09 | **A version bump must never back-fill a new field into a frozen set.** v1 and v2 genuinely had no weight policy, so `weights` is OPTIONAL and pre-v3 weights report NOT VERIFIABLE. Filling it in would claim a historical weight is reproducible from the frozen record when it is not — the same class of mistake as taking a newer funder in `factsFromMessages`. Absence of proof is not evidence of a problem, and the two must not print the same | `params`, `verify` |
+| 2026-09-09 | **A verifier must re-implement, not import.** `tools/verify/src/reweigh.ts` duplicates `@tab/graph`'s discount ORDER on purpose: calling the function that produced a number proves only that it is deterministic. If the copy drifts, the check fails — which is the signal wanted. `boundaries.json` bars `verify` from `graph` for this reason | `verify`, anyone "de-duplicating" it |
 | 2026-09-09 | **Mirror Node's `decimals` is a STRING from `/tokens/{id}` and a number from `/accounts/{id}/tokens`.** A strict `!== 6` against `"6"` throws `Token 0.0.429274 has 6 decimals, not 6` — a sentence that has now cost an hour twice. Coerce with `decimalsOf` before ANY comparison; it returns NaN rather than a default, so an unreadable token is refused instead of assumed to be USDC | anyone reading a token balance |
 | 2026-09-09 | **A private copy of a shared shape has now hidden a defect FOUR times.** Three replay copies each lost a message type (holds on gateway restart, settlements in the worker, `weightUpdate` in the console), and `whoami.ts`'s inline `{ decimals: number }` dodged the fix above while keeping the bug. If a type exists in a package, import it — a local copy that typechecks is not a local copy that is right | everyone |
 | 2026-09-09 | **`pnpm whoami` does not work and never did** — pnpm has a builtin of that name and shadows any script, failing with `401 Unauthorized` from the npm registry, which reads as an auth problem. Use `pnpm chain:status` | anyone following a doc comment |
@@ -461,6 +497,103 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-09 (night) — Claude — v3: the weight steps join the frozen record, and a weight becomes checkable
+
+**What I did.** Closed the residual half of gap #1, and in doing so closed a transparency gap that
+had been sitting in a code comment for days.
+
+## The two turned out to be the same problem
+
+The residual fail-open was an account never successfully observed: nothing to remember, so absent
+ancestry read as absent relationship and the counterparty was weighted INDEPENDENT. Fixing it means
+adding a discount, and a discount is a parameter — which is when I noticed that the five discount
+steps *already in use* were not parameters at all. They lived in `apps/engine/src/recompute.ts`,
+and the comment sitting there had been naming it as a gap since it was written: *"they influence a
+published ceiling, so by the rule this project set itself they belong in the versioned parameter
+set where verify-ceiling can find them."*
+
+So v3 does both, because they are one version bump.
+
+**The consequence of the old arrangement was not stylistic.** A weight message says
+`bp 3360 · why [SHARED_FUNDING_ROOT, YOUNG_ACCOUNT, CONCENTRATED]`, and no stranger could check
+that 3360 follows from those reasons, because the steps were nowhere readable. `verify-ceiling`
+proved the last step of the calculation and none of the steps that decided it.
+
+## `UNVERIFIED_FUNDING`, and why 50%
+
+- **Not 0.** Blocking would turn routine Mirror Node lag into a simultaneous refusal for every
+  counterparty — an outage caused by an index. The original fail-open existed partly for that
+  reason and the reason was sound; only its magnitude was wrong.
+- **Not gentler than the unattested discount (60%).** "I cannot tell you who this counterparty is"
+  is a weaker position than "money arrived without a receipt", so it must not count for more.
+  Pinned by a test so a future version cannot quietly loosen it.
+- **Self-healing**, which is what makes a discount this size safe to impose: the moment provenance
+  IS observed it is published, and a published fact is never forgotten, so it cannot apply to the
+  same account twice. An agent is not permanently penalised for our indexer's bad day. The starter
+  floor also still binds for a new or small agent, so it cannot stop one from opening.
+
+Applied FIRST in `@tab/graph`'s ORDER, and the position is frozen too — multiplication commutes,
+integer truncation does not.
+
+## The decision I nearly got wrong
+
+The schema's stated rule is that every field is required, because *a default is a parameter nobody
+chose*. Adding `weights` as required would have meant back-filling it into v1 and v2 — and their
+frozen hashes are pinned in `params.test.ts` with the comment *"that is not a test to update"*.
+
+I checked whether those hashes are on a topic. They are not; they exist only in the test file. So
+back-filling would have broken nothing externally verifiable, and I could have routed around my own
+rule with no consequence.
+
+The reason not to is better than the tripwire: **v1 and v2 genuinely had no frozen weight policy.**
+Recording one would claim a weight published under `tab-v1` is reproducible from the frozen record
+when it is not. That is rewriting history rather than recording it — the same class of mistake as
+taking a newer funder in `factsFromMessages`. So `weights` is the schema's one optional field, with
+the exception's reason written next to it, and pre-v3 weights report NOT VERIFIABLE.
+
+`weightPolicyFor` returns `undefined` for pre-v3 while an unknown *version* still throws: a lookup
+bug and a fact about history must not present identically.
+
+## Weights are now verifiable
+
+`weightUpdate` gained `model`, and `verify-ceiling` gained a weights section. Live:
+
+    PASS  seq 34 · 0.0.10393567 · window 5963123
+          published        3360bp · discount
+          reasons          SHARED_FUNDING_ROOT × YOUNG_ACCOUNT × CONCENTRATED
+          recomputed       3360bp  (frozen parameter set v3)
+
+    9 of 9 verifiable weight(s) reproduce · 4 not verifiable (no frozen policy before v3)
+
+`reweigh` re-implements the arithmetic rather than importing `@tab/graph`. Calling the function that
+produced the number would prove only that it is deterministic; a verifier has to reach the answer
+independently, as a stranger with a spreadsheet would. The ORDER array is a deliberate second copy —
+if it drifts, the check fails, which is the signal wanted.
+
+`not_verifiable` is NOT counted as a failure, unlike an unverifiable ceiling, and the distinction is
+load-bearing: an unverifiable ceiling means a published claim cannot be checked, while a pre-v3
+weight is unverifiable because of a limitation we document. Marking it FAIL would make the tool cry
+wolf.
+
+The blocking consistency check runs BEFORE the version lookup, because zero is zero in every
+version — so an old message with no model can still fail it. Checked both ways: a blocking reason
+with a non-zero weight is a hard block that did not block, and a zero weight with no blocking
+reason is a refusal nobody can explain.
+
+## Tests: 266 → 299
+
+The ones worth having are the negative ones. Inflating `bp` while keeping the reasons fails;
+keeping `bp` while DROPPING a reason fails (the same fraud, other direction); shuffling the reason
+array still passes, because the checker applies its own frozen ORDER rather than the message's, so
+a publisher cannot shift a number by a micro-unit through presentation.
+
+**Live check that mattered most:** `pnpm verify-ceiling` passes ceilings under `tab-v1`, `tab-v2`
+AND `tab-v3`, each against its own frozen set. A version bump that broke historical verification
+would have defeated the entire point of having versions.
+
+**Next.** `gateway` (1,132 lines) is the largest untested surface. Everything else on the ranked
+list is presentation or scaling, none of it demo-blocking.
 
 ### 2026-09-09 (later) — Claude — the graph fail-open closed on HCS, and 49 tests for `mirror`
 
