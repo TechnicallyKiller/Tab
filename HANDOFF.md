@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-09 by Claude · **21 of 27 packages · 335 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3 · MCP**
+**Last updated:** 2026-09-09 by Claude · **21 of 27 packages · 361 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3 · MCP**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -59,8 +59,11 @@ Zero Solidity, enforced by `pnpm guard`.
 
 **Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` · `agentkit-plugin`
 
-**335 tests:** ledger 53 · mirror 49 · gateway 36 · engine 34 · graph 32 · scoring 28 ·
-params 27 · sdk 26 · verify 22 · money 13 · mcp 12 · protocol 9.
+**361 tests:** ledger 53 · mirror 49 · gateway 36 · engine 34 · graph 32 · scoring 28 ·
+params 27 · sdk 26 · settlement 26 · verify 22 · money 13 · mcp 12 · protocol 9.
+
+**No app or package over 400 lines is untested.** `hedera` (629) and `x402` (404) remain, and both
+are thin wrappers over an SDK whose behaviour a unit test cannot assert — see test debt.
 
 ### Parameters: v3 is in force
 
@@ -179,9 +182,9 @@ for this.
 |---|---|---|
 | ~~`mirror`~~ | ~~1,060~~ | **49 tests as of 2026-09-09**, and they found a real bug — see the log |
 | ~~`gateway`~~ | ~~1,646~~ | **36 tests as of 2026-09-09**, and they found a fifth private copy of a shared function |
-| `settlement` | 961 | Money movement and netting. **Now the biggest** |
-| `hedera` | 629 | Every chain write |
-| `x402` | 404 | Four separate bugs already hid here |
+| ~~`settlement`~~ | ~~963~~ | **26 tests as of 2026-09-09** — all three of its historic incidents locked down |
+| `hedera` | 629 | Every chain write. **Now the biggest**, and the hardest to unit-test honestly: it is a thin wrapper over `@hiero-ledger/sdk`, so a mock would assert that we called the SDK the way we already know we call it. The probes cover it against a real chain |
+| `x402` | 404 | Four separate bugs already hid here, and every one was a LIVE behaviour a mock would have reproduced wrongly (`paymentFlow` vs `assetTransferMethod`, V1 vs v2 field names, a 10s connect timeout surfacing as a signature error) |
 
 **Presentation.**
 
@@ -244,7 +247,9 @@ for this.
    question (standalone server vs documenting an Agent Kit plugin path) is settled in favour of
    standalone, with the reasoning recorded there. `cli` and `agentkit-plugin` are still not worth
    it.
-7. **Tests for `settlement`** (961 lines) — now the largest untested surface, and it moves money.
+7. ~~Tests for `settlement`~~ — **done 2026-09-09, 26 tests.** The matching had to be extracted to
+   `matching.ts` first: `reconcile.ts` reads `process.env` and throws at module level, so importing
+   the pure function ran the whole CLI.
 8. **Not worth building:** `fastpath`, `observability`. Their absence is documented as named limits
    with causes, which reads better to a judge than a half-built version.
 
@@ -502,6 +507,55 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-09 (very late) — Claude — settlement tested; the test-debt table is effectively closed
+
+**What I did.** 26 tests for `apps/settlement`, the last large untested surface and the site of the
+three worst incidents this project has had.
+
+**An extraction had to come first.** `reconcile.ts` reads `process.env` and throws at module level,
+so importing the pure matching function ran the whole CLI. The matching moved to `matching.ts`
+unchanged — the third time this shape has come up, after `recheck.ts` and `ancestry.ts`. The rule
+is now clear enough to state: **if a file both computes and prints, the computing half will need to
+be extracted the moment anyone tries to test it.** Worth doing at write time rather than later.
+
+**The three incidents, now locked down:**
+
+- **The dry run that moved money.** The first `--dry-run` suppressed only the receipt write, so it
+  scheduled and executed a real transfer and then omitted the receipt marking the window settled —
+  leaving the next real pass ready to pay it again. The test's fake Hedera and Mirror clients
+  **throw on any property access**, so if `execute: false` ever stops short-circuiting the test
+  fails loudly rather than quietly scheduling a transfer. That is deliberate: the original was bad
+  precisely because the flag is what convinced you it was safe.
+- **The self-transfer that reported CLEAN.** Two tests — that it is refused, and that the refusal
+  happens BEFORE anything is scheduled, asserted by checking the error is the config error and not
+  "the chain must not be touched".
+- **The window paid twice.** The merge fix lives in `main.ts`; the test asserts the question itself
+  is right once a settlement entry is present, plus that a window with only a hold or only a
+  refusal is not settleable, because nothing moved.
+
+**Idempotence is tested across BOTH transaction id spellings**, which matters: idempotence that
+worked for only one spelling would silently repair twice, and that is the money bug of the worst
+kind — `--repair` turning a −0.04 error into +0.36 after ten runs.
+
+**Verified live after the refactor.** `pnpm reconcile` runs and reports correctly. Over a wide
+window: `checked 4 outbound · matched 1 · violations 6 · questions 1` plus 1 unreconcilable — all
+pre-existing live-data state, not introduced. Over the default 3600s window it prints "NOTHING TO
+RECONCILE ... This is NOT a clean bill of health", which is the window-bounded behaviour refusing to
+call an empty range a pass.
+
+**On the two packages left untested, and why I am stopping here rather than continuing.** `hedera`
+(629 lines) and `x402` (404) are thin wrappers over `@hiero-ledger/sdk` and `@x402/*`. A unit test
+for either would assert that we call the SDK the way we already know we call it — and every bug
+those two have had was a LIVE behaviour a mock would have reproduced wrongly: `paymentFlow` vs
+`assetTransferMethod`, V1 vs v2 field names, a 10s connect timeout surfacing as a signature error.
+`tools/probes` covers them against a real chain, which is the only place that class of bug shows
+up. Writing mocks here would raise the test count and lower the signal.
+
+**Next.** Nothing on the ranked list is both correctness-critical and unbuilt. What remains is
+scaling (`@tab/cache` for multi-instance, checkpoints for replay cost), the registration flow — the
+biggest remaining FUNCTIONAL gap and the thing a sharp reviewer finds first — and the two items only
+the user can do: the demo video and user-testing evidence.
 
 ### 2026-09-09 (late night) — Claude — @tab/mcp, and the gateway finally has tests
 
