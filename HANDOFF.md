@@ -21,15 +21,14 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 197 tests · 5/5 guards · REAL USDC**
+**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 199 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
 gets refused when the ceiling shrinks, and every claim above is checkable from public data.
 
-**Seven of eight console views now read live data.** Only `agents` remains mocked, and it is
-mocked because it needs multi-tab support rather than an endpoint. **No budget: everything is
-testnet and free tiers, and nothing in the design costs money.**
+**All eight console views read live data. No view is on mock data any more.** **No budget:
+everything is testnet and free tiers, and nothing in the design costs money.**
 
 ---
 
@@ -61,7 +60,7 @@ Zero Solidity, enforced by `pnpm guard`.
 **Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` ·
 `agentkit-plugin` · `mcp`
 
-**197 tests:** ledger 47 · scoring 28 · graph 27 · sdk 24 · params 19 · engine 19 · money 13 ·
+**199 tests:** ledger 47 · scoring 28 · graph 27 · sdk 26 · params 19 · engine 19 · money 13 ·
 verify 11 · protocol 9. (`mirror` still 0 — see test debt.)
 
 ### Parameters: v2 is in force
@@ -143,12 +142,17 @@ for this.
 
 **Presentation.**
 
-10. **`apps/web` is live except `agents`** — `tab`, `receipts`, `refusals`, `counterparties`,
-    `config`, `settlements` and `ceiling` all read real data, and the console states
-    `LIVE`/`MOCK DATA`/`GATEWAY UNREACHABLE` on screen. `agents` is the last one, and it is blocked
-    on multi-tab support rather than on an endpoint: every current hook reads
-    `NEXT_PUBLIC_TAB_ACCOUNT_ID`, one tab, and an agents *list* needs the gateway to enumerate
-    tabs it knows about (`state.tabs()` already does; there is no route for it).
+10. ~~`apps/web` is partly live~~ — **all eight views read live data as of 2026-09-09.** The
+    console states `LIVE` / `MOCK DATA` / `GATEWAY UNREACHABLE` on screen, and two views
+    (`ceiling`, `agents`) deliberately have NO mock fallback: a fabricated ceiling with a
+    fabricated input hash, or an invented list of agents under a "Registry" heading, are the two
+    screens where mock data would actively mislead rather than merely stand in.
+
+    Wiring them found **eleven invented figures on screens that were already live**, which is
+    the real lesson: a view marked LIVE is not the same as a view whose every figure is live.
+    Worst three were a `MODEL_VERSION` that appears on no topic, a `window spend` tile reading a
+    hardcoded `0.62 / 1.00` beside a live balance, and a **"Recompute and verify" button that
+    flipped a boolean and stamped VERIFIED in green.**
 11. **No demo video, no user-testing evidence.** Only the user can produce these.
 12. **The plan's demo script is stale in two places**: it says the attack collapses the ceiling
     (it does not — the fake revenue never inflates it), and "ramp 15% → 30%" (it reads 25% → 40%).
@@ -158,12 +162,9 @@ for this.
 
 ### What is next, in order
 
-1. ~~Wire `apps/web` THROUGH `@tab/sdk`~~ — **done 2026-09-09, except `agents`.** Seven of eight
-   views read live data. What remains is `agents`, which needs a `GET /v1/tabs` route enumerating
-   `state.tabs()` plus a hook that is not pinned to a single `NEXT_PUBLIC_TAB_ACCOUNT_ID`. Roughly
-   an hour, and the least valuable of the eight for the demo — one agent's tab is the story.
+1. ~~Wire `apps/web` THROUGH `@tab/sdk`~~ — **DONE 2026-09-09. All eight views are live.**
 
-   Three things worth knowing from that work:
+   Four things worth knowing from that work:
    - The console printed `MODEL_VERSION = ceiling-v0.4.1` in five places. Every published ceiling
      says `tab-v2`, and `verify-ceiling` picks the frozen parameter set by that field, so a
      verifier reading the console was hunting a set that does not exist. `config` now derives every
@@ -177,6 +178,11 @@ for this.
      derives from the rows and surfaces the **real double settlement** (window 5962288, seq 1 and
      seq 2, two transaction ids). HCS is append-only; printing CLEAN over a permanent scar was the
      more dishonest option.
+   - The `agents` view was headed **"Registry"**, with a `registered` column and a green
+     `STARTER TAB ISSUED` stamp — for a registration flow that **does not exist** (gap #2). It now
+     lists the tabs the gateway saw on the receipt topic and states the unenforced rule at the top.
+     `GET /v1/tabs` carries `registrationEnforced: false` on the response so no consumer can make
+     that mistake again, and the SDK reads a *missing* field as false.
 2. ~~Fix the false attack-catalogue claims~~ — **done 2026-09-08.** Five lines corrected; two moved
    from *Caught* to *OPEN*. The spend-side concentration cap and the registration flow are the two
    genuinely unbuilt rules, and both are now labelled OPEN in the README.
@@ -528,10 +534,37 @@ a late settlement cannot reorder the table.
 than lucky — see the new lessons row. Testnet only, public Mirror Node, free tiers everywhere,
 and the one paid thing we were tempted by (The Graph) was declined last session.
 
-**Next.** `agents` needs a `GET /v1/tabs` route over `state.tabs()` and a hook not pinned to a
-single `NEXT_PUBLIC_TAB_ACCOUNT_ID` — roughly an hour, and the least valuable of the eight views
-for the demo. After that the ranked gaps are unchanged: `@tab/db` to close the fail-open
-exposure, then tests for `mirror` (1,060 lines, still zero).
+**Then I did `agents` too, and it was the worst of the eight.** Not because it was hard — a
+`GET /v1/tabs` route over `state.tabs()`, an SDK verb, one hook — but because the view was headed
+**"Registry"**, with a `registered` column reading `4d ago` / `4s ago`, a green
+`STARTER TAB ISSUED` stamp, and the sentence *"the funding-root check means minting a hundred
+agents from one wallet yields one Starter Tab, not a hundred"*. Nothing writes a `register`
+message; that check is gap #2 on this very page. The screen was describing the one rule the system
+does not have.
+
+It now lists the tabs the gateway saw on the receipt topic and states the unenforced rule in a
+caution card at the top. `registrationEnforced: false` rides on the endpoint response rather than
+being left to a caller's assumption, and the SDK reads a *missing* field as false — an older
+gateway that omits it has no registration flow either, and defaulting the permissive way round
+would let a stale server silently license the heading.
+
+Two of the three live tabs have never had a ceiling published, so their tier comes back absent and
+renders as **`not published`** with a footnote: a tab the engine has never run for has no tier,
+while `Unrated` is the tier that carries a ×0 multiple and therefore no credit at all.
+
+**And three more hardcodes on the tab view, which was already LIVE** — which is the lesson worth
+carrying: a view marked LIVE is not a view whose every figure is live. `window spend` read the
+string `0.62 / 1.00` beside a live balance; `tier` read the character `C`; the stale banner read
+`snapshot age 41s · max 15s`, two numbers nothing measured. The STARTER TAB ISSUED panel rendered
+*always*, including beside a tab with 37 receipts.
+
+Eleven invented figures across screens already shipped as live. Worth re-reading any view before
+trusting its badge.
+
+**Next.** The ranked gaps are unchanged and the presentation gap is closed: `@tab/db` to close the
+fail-open exposure, then tests for `mirror` (1,060 lines, still zero). The registration flow is
+now the most visible open gap, since the console names it on screen — and `@tab/graph` already
+resolves funding roots, so it is cheap.
 
 ### 2026-09-08 (night) — Claude — the independence table is on the public record
 
