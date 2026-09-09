@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-09 by Claude · **21 of 27 packages · 361 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3 · MCP**
+**Last updated:** 2026-09-09 by Claude · **21 of 27 packages · 386 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3 · MCP · DEPLOYABLE**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -59,8 +59,10 @@ Zero Solidity, enforced by `pnpm guard`.
 
 **Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` · `agentkit-plugin`
 
-**361 tests:** ledger 53 · mirror 49 · gateway 36 · engine 34 · graph 32 · scoring 28 ·
+**386 tests:** ledger 62 · mirror 49 · graph 41 · gateway 41 · engine 38 · scoring 28 ·
 params 27 · sdk 26 · settlement 26 · verify 22 · money 13 · mcp 12 · protocol 9.
+
+**`pnpm verify-tab` passes clean** — 3 checks, all passed, against live testnet.
 
 **No app or package over 400 lines is untested.** `hedera` (629) and `x402` (404) remain, and both
 are thin wrappers over an SDK whose behaviour a unit test cannot assert — see test debt.
@@ -150,10 +152,19 @@ for this.
    counterparty whose provenance we have never seen counts for half rather than nothing, which is
    a deliberate calibration and is stated in `v3.ts`, in the console's config view, and on the
    Counterparties evidence panel.
-2. **No registration flow.** Nothing writes a `register` message, so one Starter Tab per funding
-   root is unenforced and bulk-minting agents to farm Starter Tabs is not prevented. The README
-   labels it OPEN as of 2026-09-08. `@tab/graph` already resolves funding roots, so the check is
-   cheap once a registration flow exists.
+2. ~~No registration flow~~ — **CLOSED 2026-09-09.** The engine resolves each tab's funding root
+   from the published `graphFact` messages and claims it on the ceiling topic; the FIRST claim wins
+   permanently, so a hundred agents minted from one wallet yield ONE starter floor. A denied tab is
+   not frozen — it gets `floor: 0` and must earn its ceiling from independent revenue, which is the
+   point.
+
+   Not an operator command, deliberately: a `pnpm tab:register` would defend against nothing
+   because an attacker simply would not run it. **The root is the furthest NON-SYSTEM ancestor** —
+   the first live run claimed `0.0.2`, the Hedera treasury, which funds every account on the
+   network, and would have denied the starter grant to every other agent on Hedera forever.
+
+   Verified live: four sibling accounts under `0.0.8812188` all report `TAKEN — held by
+   0.0.10390398`.
 3. **No spend-side concentration cap.** The cap that exists measures REVENUE concentration on the
    earn leg — a different rule. A spend-side version needs a minimum-volume floor first, or a new
    tab's first spend is 100% concentrated by definition and every opening call is refused. README
@@ -456,6 +467,11 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-09-06 | **A Hedera transaction id is spelled two ways**: `0.0.x@s.n` in our receipts, `0.0.x-s-n` by Mirror Node. Use `normalizeTransactionId` / `sameTransaction` from `@tab/mirror` on BOTH sides of any comparison | `mirror`, `settlement`, `verify`, `engine` |
 | 2026-09-06 | **`reconcile` is window-bounded** (`--since=<seconds.nanos>`, else `RECONCILE_LOOKBACK_SECONDS`, default 3600). Walking the float's full history hung at 5–15s/page and gets slower forever; the spec's unit is the window | `settlement` |
 | 2026-09-06 | **OPEN DEFECT — the spend path writes `unsettled:<holdId>` as the debit's transaction id** whenever the x402 facilitator returns no settlement transaction. Those debits can never be reconciled: there is no id to match. The reconciler counts them as `unreconcilable` rather than skipping them, but **the fix belongs in `apps/gateway`** — write the real id once the transfer lands, or emit a follow-up receipt carrying it. Until then the reconciler has never made a single positive match, so the demo's proof-of-reconciliation is not yet demonstrated | `gateway`, `x402`, `settlement`, demo |
+| 2026-09-09 | **`node --env-file=X` EXITS when X does not exist.** Every deployable used it, so all three would have crashed on boot on any host that supplies configuration as environment variables rather than a file. Use `--env-file-if-exists` (Node **22.9+**, which is why `engines` requires it) | anyone deploying anything |
+| 2026-09-09 | **Bind `PORT`.** Render, Fly, Heroku and Cloud Run all inject it and expect the service to listen there. Listening elsewhere fails the health check and the deploy is marked dead **with nothing in the logs**, because from the process's point of view it started fine | `gateway`, any future service |
+| 2026-09-09 | **A funding root must exclude SYSTEM accounts.** `0.0.2` is the Hedera treasury and funds every account on the network, so "furthest ancestor" resolves to it for everyone — the first tab registered would have denied the starter grant to every other agent on Hedera. Entity numbers below 1000 are the network, not an operator | `graph`, `engine`, anything reasoning about provenance |
+| 2026-09-09 | **An invariant is code, and a fix to a WRITER can silently invalidate a CHECKER.** Fixing the gateway to debit the charge rather than the cap made `commit_amount_matches_hold` fail on a correct ledger, reporting "the difference is unaccounted for" — the most alarming phrasing available, for the most benign cause. Every fixture had been written when the two numbers were always equal, so the suite was self-consistent and wrong together | `ledger`, `verify`, anyone changing a money path |
+| 2026-09-09 | **A deploy rehearsal that leaves the dev environment in place rehearses the dev environment.** My first `PORT` simulation "passed" while binding 8080, because the local `.env` still supplied `GATEWAY_PORT` | anyone verifying a deployment |
 | 2026-09-09 | **A private copy of a shared function or type has now hidden or re-created a defect FIVE times.** Three replay decoders each lost a message type; `whoami.ts`'s inline `{decimals: number}` re-created the string-decimals bug; `spend.ts` carried its own `toWire` while `server.ts` in the same app imported the shared one. The last was byte-equivalent — the point is that it was the SETUP for drift. If a package exports it, import it | everyone |
 | 2026-09-09 | **Anything that influences a published ceiling belongs in `@tab/params`, and "influences" includes the WEIGHT steps.** They lived in `apps/engine` and the engine's own comment named it as a gap for days. The consequence was not stylistic: a weight message said `bp 3360 · why [...]` and no stranger could check that 3360 followed from those reasons. v3 moved them; `verify-ceiling` now reproduces weights | `params`, `graph`, `engine`, `verify` |
 | 2026-09-09 | **A version bump must never back-fill a new field into a frozen set.** v1 and v2 genuinely had no weight policy, so `weights` is OPTIONAL and pre-v3 weights report NOT VERIFIABLE. Filling it in would claim a historical weight is reproducible from the frozen record when it is not — the same class of mistake as taking a newer funder in `factsFromMessages`. Absence of proof is not evidence of a problem, and the two must not print the same | `params`, `verify` |
@@ -507,6 +523,88 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-09 (final) — Claude — the registration flow, and the repo is deployable
+
+**What I did.** Closed the last functional gap, then made the thing actually deployable — which
+turned out to mean fixing two boot blockers and one bug in the verifier.
+
+## The registration flow — gap #2, closed
+
+One Starter Tab per funding root was the last unenforced claim in the README, and the first thing a
+sharp reviewer would have found.
+
+**It is not an operator command, and that was the whole design question.** A `pnpm tab:register`
+defends against nothing: an attacker simply does not run it, and a rule keyed on registration
+*presence* then blocks nobody. So the ENGINE resolves each tab's funding root from the `graphFact`
+messages already on the topic and claims it automatically. First claim wins, decided by consensus
+order, and nobody has to be trusted to opt in.
+
+`registrationsFromMessages` takes the FIRST claim per root, deliberately unlike every other reader
+here. "Latest wins" would break the defence completely — a hundred agents each register in turn,
+each overwrites the last, and all hundred hold the grant.
+
+**No model change.** `floor` is already a published input to `ceilingInputs`, so a denied tab gets
+`floor: 0` and `verify-ceiling` recomputes it from the public record exactly as before. A denied tab
+is not frozen: it still spends what it earns and still settles. It is denied the free headroom, not
+the rail — and a test asserts a denied tab with real independent revenue still earns a ceiling.
+
+**The treasury bug, caught by the first live run.** It claimed root `0.0.2` — the Hedera treasury,
+which funds every account on the network. The first tab ever registered would have denied the
+starter grant to every other agent on Hedera, forever. `isSystemAccount` now excludes entity
+numbers below 1000. No unit test would have found this, because a hand-built fixture has no
+genesis; two of my own earlier fixtures used `0.0.100` and `0.0.1` and failed immediately once the
+exclusion landed.
+
+Verified live: four sibling accounts under `0.0.8812188` all report `TAKEN — held by
+0.0.10390398`.
+
+## Then my own claims had to catch up
+
+The flow immediately made four of my own statements false — the gateway's hardcoded
+`registrationEnforced: false`, the console's amber `NO REGISTRATION FLOW` card, the README's
+`NOT BUILT` on steps 1 and 2, and the attack catalogue's **OPEN**. All corrected. My own gateway
+test also failed, which is the test doing its job rather than a test to delete.
+
+`rootsClaimed` was served as `registrations.size`, which counts TABS. On live data that reported 1
+where 2 roots were claimed. Caught by reading the live response, not by a test — the number was
+plausible, which is exactly why it needed looking at.
+
+## Deployable, and two blockers found doing it
+
+**`node --env-file=X` EXITS when X does not exist.** All three services used it, so every one would
+have crashed on boot on Render before its first line ran. `--env-file-if-exists` (Node 22.9+, now
+the `engines` floor, which had said 22.0).
+
+**The gateway ignored `PORT`.** It read only `GATEWAY_PORT`. Render injects `PORT` and expects the
+service to bind it; listening elsewhere fails the health check and marks the deploy dead with
+nothing in the logs.
+
+Both verified by simulating a deploy rather than reading the config — real env vars,
+`--env-file-if-exists` pointing at a nonexistent path, `PORT` injected. My first attempt "passed"
+while binding 8080, because the local `.env` still supplied `GATEWAY_PORT`; the simulation was
+wrong, not the code.
+
+`render.yaml` declares the gateway and nothing else, with `numInstances: 1` and the reason inline.
+`docs/DEPLOY.md` covers Vercel for the console, why the engine and settler are not servers, the
+free GitHub Actions path with its honest note about testnet keys in repository secrets, and the
+five things that will bite in the order they will.
+
+## And a bug in the verifier itself
+
+`pnpm verify-tab` was exiting non-zero on a CORRECT ledger. `commit_amount_matches_hold` required
+the debit to EQUAL the hold — true only while the gateway debited the cap, which was itself the bug
+fixed days ago. **Fixing the writer invalidated a checker nobody re-read**, and it reported "the
+difference is unaccounted for": the most alarming phrasing available, for the most benign cause.
+
+Now `commit_within_hold`, one-directional. Debiting more than authorised is a violation; debiting
+less is the system working. `pnpm verify-tab` passes clean — 3 checks, all passed.
+
+## Where this leaves it
+
+Nothing on the ranked list is both correctness-critical and unbuilt. What remains is scaling
+(`@tab/cache` for multi-instance, checkpoints for replay cost), and the two things only the user can
+do: the demo video and user-testing evidence.
 
 ### 2026-09-09 (very late) — Claude — settlement tested; the test-debt table is effectively closed
 
