@@ -414,6 +414,7 @@ async function pass(): Promise<void> {
       tab: tabAccount,
       window: currentWindow,
       tokenId,
+      modelId: MODEL_ID,
       weights: result.weights,
       revenue: revenue.revenueByCounterparty,
     })

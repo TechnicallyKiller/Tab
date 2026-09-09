@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { reweigh } from './reweigh.ts'
 import { canonicalHash } from '@tab/protocol'
 import { format, usdc } from '@tab/money'
 import { MODEL_ID } from '@tab/params'
@@ -158,4 +159,136 @@ test('the same published record verifies identically twice', async () => {
   assert.equal(a.rehash, b.rehash)
   assert.equal(a.recomputed, b.recomputed)
   assert.equal(format(a.recomputed), format(b.recomputed))
+})
+
+/* ── reweigh: proving a published WEIGHT, not just reading it ─────────────── */
+
+const WEIGHT = {
+  counterparty: '0.0.10393567',
+  bp: 3360,
+  reasons: ['SHARED_FUNDING_ROOT', 'YOUNG_ACCOUNT', 'CONCENTRATED'] as const,
+  blocking: false,
+  model: 'tab-v3',
+}
+
+test('a live weight reproduces from its published reasons — 0.7 × 0.6 × 0.8', () => {
+  /*
+   * The actual message on testnet, seq 28. Before v3 the discount steps lived
+   * in `apps/engine`, so this number was readable and uncheckable; freezing
+   * them in `@tab/params` is what makes the arithmetic available to a stranger.
+   */
+  const r = reweigh(WEIGHT)
+  assert.equal(r.verdict, 'ok')
+  assert.equal(r.recomputed, 3360)
+  assert.equal(r.parameterVersion, 3)
+})
+
+test('a TAMPERED weight fails — which is the only thing that makes a PASS worth anything', () => {
+  // Same reasons, a better number. This is what a publisher inflating its own
+  // credit would look like on the topic.
+  const r = reweigh({ ...WEIGHT, bp: 9000 })
+  assert.equal(r.verdict, 'bp_mismatch')
+  assert.equal(r.recomputed, 3360)
+  assert.match(r.note!, /reproduce 3360bp, but the message published 9000bp/)
+})
+
+test('DROPPING a reason to justify a higher weight also fails', () => {
+  // The other direction of the same fraud: keep the number, shorten the story.
+  const r = reweigh({ ...WEIGHT, reasons: ['SHARED_FUNDING_ROOT'], bp: 3360 })
+  assert.equal(r.verdict, 'bp_mismatch')
+  assert.equal(r.recomputed, 7000)
+})
+
+test('a pre-v3 weight is NOT VERIFIABLE, and that is not a failure', () => {
+  /*
+   * v1 and v2 genuinely had no frozen weight policy — the steps lived in the
+   * engine. So a weight published under them cannot be reproduced from the
+   * frozen record, and the honest verdict is absence of proof rather than
+   * evidence of a problem. Reporting FAIL would make the tool cry wolf about a
+   * limitation it documents.
+   */
+  const r = reweigh({ ...WEIGHT, model: 'tab-v2' })
+  assert.equal(r.verdict, 'not_verifiable')
+  assert.match(r.note!, /no weight policy/)
+  assert.equal(r.parameterVersion, 2)
+})
+
+test('a weight with NO model id is not verifiable — never "assume current"', () => {
+  // Guessing the current set would check an old weight against numbers that
+  // were not in force when it was written, and report PASS for it.
+  const { model, ...noModel } = WEIGHT
+  const r = reweigh(noModel)
+  assert.equal(r.verdict, 'not_verifiable')
+  assert.match(r.note!, /carries no model id/)
+})
+
+test('an unknown parameter version is not verifiable rather than a crash', () => {
+  const r = reweigh({ ...WEIGHT, model: 'tab-v99' })
+  assert.equal(r.verdict, 'not_verifiable')
+  assert.match(r.note!, /No parameter set for model version 99/)
+})
+
+test('a hard block must be exactly zero AND carry a blocking reason', () => {
+  const good = reweigh({
+    counterparty: '0.0.10385196', bp: 0, reasons: ['COMMON_FUNDER'], blocking: true, model: 'tab-v3',
+  })
+  assert.equal(good.verdict, 'ok')
+
+  // A blocking reason that did not block.
+  const notZero = reweigh({
+    counterparty: '0.0.1', bp: 5000, reasons: ['COMMON_FUNDER'], blocking: true, model: 'tab-v3',
+  })
+  assert.equal(notZero.verdict, 'blocking_inconsistent')
+
+  // Zero weight with no blocking reason — a refusal nobody can explain.
+  const unexplained = reweigh({
+    counterparty: '0.0.1', bp: 0, reasons: ['YOUNG_ACCOUNT'], blocking: false, model: 'tab-v3',
+  })
+  assert.equal(unexplained.verdict, 'blocking_inconsistent')
+
+  // Blocking flag set without a blocking reason.
+  const mislabelled = reweigh({
+    counterparty: '0.0.1', bp: 0, reasons: ['YOUNG_ACCOUNT'], blocking: true, model: 'tab-v3',
+  })
+  assert.equal(mislabelled.verdict, 'blocking_inconsistent')
+})
+
+test('a blocking inconsistency is caught WITHOUT a model id', () => {
+  // It needs no parameter set — zero is zero in every version — so an old
+  // message with no model can still fail this check rather than being skipped.
+  const r = reweigh({ counterparty: '0.0.1', bp: 0, reasons: ['YOUNG_ACCOUNT'], blocking: false })
+  assert.equal(r.verdict, 'blocking_inconsistent')
+})
+
+test('INDEPENDENT reproduces full weight, and carries no step', () => {
+  const r = reweigh({
+    counterparty: '0.0.1', bp: 10_000, reasons: ['INDEPENDENT'], blocking: false, model: 'tab-v3',
+  })
+  assert.equal(r.verdict, 'ok')
+  assert.equal(r.recomputed, 10_000)
+})
+
+test('the new UNVERIFIED_FUNDING step reproduces, and applies FIRST', () => {
+  const r = reweigh({
+    counterparty: '0.0.1',
+    bp: 2400,
+    reasons: ['UNVERIFIED_FUNDING', 'YOUNG_ACCOUNT', 'CONCENTRATED'],
+    blocking: false,
+    model: 'tab-v3',
+  })
+  // 10000 → 5000 → 3000 → 2400. Order matters because truncation is not
+  // commutative, so this pins the sequence as well as the numbers.
+  assert.equal(r.verdict, 'ok')
+  assert.equal(r.recomputed, 2400)
+})
+
+test('reason ORDER on the message does not change the result', () => {
+  /*
+   * The checker applies its own frozen ORDER, not the order the message happens
+   * to list. A publisher that shuffled its reason array must not be able to
+   * shift the number by a micro-unit and still pass.
+   */
+  const r = reweigh({ ...WEIGHT, reasons: ['CONCENTRATED', 'YOUNG_ACCOUNT', 'SHARED_FUNDING_ROOT'] })
+  assert.equal(r.verdict, 'ok')
+  assert.equal(r.recomputed, 3360)
 })

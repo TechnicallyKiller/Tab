@@ -24,6 +24,8 @@ export interface PublishWeightsParams {
   tab: string
   window: number
   tokenId: string
+  /** The frozen parameter set the discount steps came from, e.g. `tab-v3`. */
+  modelId: string
   weights: readonly Weight[]
   /** Revenue per counterparty, for the share the console renders. */
   revenue: ReadonlyMap<string, MicroUsdc>
@@ -53,6 +55,16 @@ export async function publishWeights(
       w: params.window,
       cp: weight.counterparty,
       bp: weight.bp,
+      /*
+       * The parameter set the discount steps came from.
+       *
+       * A weight without it is readable but not verifiable: checking that `bp`
+       * follows from `why` needs the steps, which are frozen per version, and a
+       * reader with no version cannot know which set to resolve. Guessing the
+       * current one would check an old weight against numbers that were not in
+       * force when it was written.
+       */
+      model: params.modelId,
       /*
        * Every reason, not just the first.
        *

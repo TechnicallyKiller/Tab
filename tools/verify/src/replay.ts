@@ -10,7 +10,7 @@
  */
 import { entriesFromMessages, type Entry, type Replay } from '@tab/ledger'
 import { decodeUtf8, readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
-import { decode } from '@tab/protocol'
+import { decode, type WeightReason } from '@tab/protocol'
 import { usdc, type MicroUsdc } from '@tab/money'
 
 export async function replayTopic(mirror: MirrorClient, topicId: string): Promise<Replay> {
@@ -82,6 +82,55 @@ export async function readCeilings(
       model: msg.model,
       hash: msg.hash,
       inputs: msg.inputs as unknown as Record<string, unknown>,
+    })
+  }
+  return out
+}
+
+/** One published weight, exactly as it appears on the topic. */
+export interface PublishedWeightRecord {
+  sequenceNumber: number
+  consensusTimestamp: string
+  tab: string
+  window: number
+  counterparty: string
+  bp: number
+  reasons: readonly WeightReason[]
+  blocking: boolean
+  /** Absent on messages published before the field existed. */
+  model?: string
+}
+
+/**
+ * Read published weights.
+ *
+ * On the same topic as the ceilings, so this walks it a second time rather than
+ * threading two collectors through one pass. The cost is one extra Mirror Node
+ * read in a tool nobody runs in a loop; the benefit is that a bug in one reader
+ * cannot silently change what the other sees.
+ */
+export async function readWeights(
+  mirror: MirrorClient,
+  topicId: string,
+): Promise<PublishedWeightRecord[]> {
+  const walk = await readTopic(mirror, { topicId })
+  const { assembled } = reassembleChunks(walk.items)
+
+  const out: PublishedWeightRecord[] = []
+  for (const message of assembled) {
+    const result = decode(decodeUtf8(message.payload))
+    if (!result.ok || result.message.t !== 'weight') continue
+    const msg = result.message
+    out.push({
+      sequenceNumber: message.sequenceNumber,
+      consensusTimestamp: message.consensusTimestamp,
+      tab: msg.tab,
+      window: msg.w,
+      counterparty: msg.cp,
+      bp: msg.bp,
+      reasons: msg.why,
+      blocking: msg.block,
+      ...(msg.model ? { model: msg.model } : {}),
     })
   }
   return out

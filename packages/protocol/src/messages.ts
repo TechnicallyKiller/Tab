@@ -172,6 +172,23 @@ export const weightUpdate = base.extend({
   rev: amount,
   /** Its share of total revenue, basis points. */
   share: basisPoints,
+  /**
+   * The parameter set the discount steps came from, e.g. `tab-v3`.
+   *
+   * Without this a published weight is not verifiable, only readable. The
+   * message says `bp 3360 · why [SHARED_FUNDING_ROOT, YOUNG_ACCOUNT,
+   * CONCENTRATED]` — and checking that 3360 follows from those reasons needs
+   * the discount steps, which are frozen per version. A reader with no version
+   * cannot know which set to resolve, so `verify-weights` reports such a
+   * message as NOT VERIFIABLE rather than guessing at the current one.
+   *
+   * Optional for backward compatibility with the weight messages published
+   * before it existed, and with those published under v1 and v2, which had no
+   * frozen weight policy at all. Absent means unverifiable — never "assume
+   * current", which would check an old weight against numbers that were not in
+   * force when it was written.
+   */
+  model: z.string().min(3).max(32).optional(),
 })
 
 

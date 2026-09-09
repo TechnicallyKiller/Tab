@@ -27,9 +27,10 @@
  */
 import { configureGlobalHttp, MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
-import { readCeilings } from './replay.ts'
+import { readCeilings, readWeights } from './replay.ts'
 // The tested logic, so the code that runs is the code the tests cover.
 import { recheck } from './recheck.ts'
+import { reweigh } from './reweigh.ts'
 import { CEILING_GUIDANCE, claim, field, heading, verdict } from './report.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -135,7 +136,54 @@ for (const published of targets) {
   }
 }
 
-for (const r of results) console.log(r.text)
+/*
+ * ── the WEIGHTS behind those ceilings ────────────────────────────────────────
+ *
+ * A ceiling check proves the number follows from its published inputs. It says
+ * nothing about the weights that produced those inputs, and until v3 it could
+ * not: the discount steps lived in `apps/engine`, so `bp 3360` was readable and
+ * uncheckable. Freezing them made this possible, and leaving it out would mean
+ * the tool proved the last step of the calculation and none of the ones that
+ * decided it.
+ *
+ * A `not_verifiable` weight is NOT counted as a failure, unlike an unverifiable
+ * ceiling. The difference is real: an unverifiable ceiling means a published
+ * claim cannot be checked, while a weight published under v1 or v2 is
+ * unverifiable because those sets genuinely had no frozen weight policy. That is
+ * absence of proof about our own history, not evidence of a problem — and
+ * marking it FAIL would make the tool cry wolf about a limitation it documents.
+ */
+const weights = await readWeights(mirror, ceilingTopic)
+if (weights.length > 0) {
+  console.log('\nweights\n───────')
+  let verifiable = 0
+  let checked = 0
+  for (const w of weights) {
+    const label = `seq ${w.sequenceNumber} · ${w.counterparty} · window ${w.window}`
+    const r = reweigh(w)
+
+    if (r.verdict === 'not_verifiable') {
+      console.log(`  SKIP  ${label}\n        ${r.note}`)
+      continue
+    }
+    verifiable++
+    if (r.verdict === 'ok') checked++
+
+    const detail = [
+      `published        ${w.bp}bp · ${w.blocking ? 'BLOCKING' : 'discount'}`,
+      `reasons          ${w.reasons.join(' × ')}`,
+      `recomputed       ${r.recomputed}bp${r.verdict === 'ok' ? '' : '   MISMATCH'}` +
+        (r.parameterVersion !== undefined ? `  (frozen parameter set v${r.parameterVersion})` : ''),
+      ...(r.note ? [r.note] : []),
+    ]
+    console.log(claim(r.verdict === 'ok', label, detail))
+    results.push({ ok: r.verdict === 'ok', text: claim(r.verdict === 'ok', label, detail) })
+  }
+  console.log(
+    `\n  ${checked} of ${verifiable} verifiable weight(s) reproduce from their published reasons` +
+      ` · ${weights.length - verifiable} not verifiable (no frozen weight policy before v3)`,
+  )
+}
 
 const failed = results.find((r) => !r.ok)
 console.log(verdict(!failed, results.length, failed?.text.trim().split('\n')[0], CEILING_GUIDANCE))
