@@ -832,3 +832,23 @@ test('settlements pass through absent gross legs rather than defaulting to zero'
   assert.equal(rows[0].receiptCount, undefined)
   await app.close()
 })
+
+/* ── the port a managed host actually sets ───────────────────────────────── */
+
+test('PORT is honoured, because that is what Render and every other host sets', () => {
+  /*
+   * Render, Fly, Heroku and Cloud Run all inject `PORT` and expect the service
+   * to bind it. A service listening anywhere else fails its health check and the
+   * deploy is marked dead with NO error in the logs — from the process's point
+   * of view nothing went wrong, which is what makes it hard to diagnose.
+   */
+  assert.equal(loadEnv({ ...FULL_ENV, PORT: '10000' }).port, 10_000)
+})
+
+test('GATEWAY_PORT still wins, so a local override is unchanged', () => {
+  assert.equal(loadEnv({ ...FULL_ENV, PORT: '10000', GATEWAY_PORT: '8080' }).port, 8080)
+})
+
+test('with neither set it falls back to 8080', () => {
+  assert.equal(loadEnv(FULL_ENV).port, 8080)
+})

@@ -1,0 +1,83 @@
+# Render blueprint — the gateway, and only the gateway.
+#
+# Three of the four services do NOT belong here, and the reasons are in
+# docs/DEPLOY.md rather than buried in a comment nobody reads:
+#
+#   apps/web         → Vercel. It is a Next.js app; Vercel is its native host
+#                      and the hobby tier is free.
+#   apps/engine      → not a server. One pass per window, then it exits.
+#   apps/settlement  → not a server. Runs on the window boundary.
+#
+# Render cron jobs are a paid feature, and this project has no budget, so the
+# engine and the settlement worker run from a laptop or a GitHub Actions
+# schedule. See docs/DEPLOY.md.
+
+services:
+  - type: web
+    name: tab-gateway
+    runtime: node
+    plan: free
+    region: oregon
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ONE INSTANCE. This is a correctness constraint, not a cost decision.
+    #
+    # Holds live in process memory (`apps/gateway/src/state.ts`). Two instances
+    # would each allow spending up to the full ceiling, because neither can see
+    # the other's reservations — so the agent could spend twice its limit and
+    # the ledger would be right about every individual debit and wrong about the
+    # total. `@tab/cache` fixes it; until then, one.
+    # ─────────────────────────────────────────────────────────────────────────
+    numInstances: 1
+
+    # No build step: the services run TypeScript directly under
+    # `--experimental-strip-types`, so there is nothing to compile.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @tab/gateway start
+
+    # The gateway binds `process.env.PORT`, which Render injects. See
+    # `apps/gateway/src/env.ts` — reading only GATEWAY_PORT made the health
+    # check fail with nothing in the logs.
+    healthCheckPath: /health
+
+    envVars:
+      # Node 22.9+ is REQUIRED, not preferred: every service starts with
+      # `--env-file-if-exists`, which does not exist before 22.9 and makes node
+      # exit with an unknown-flag error.
+      - key: NODE_VERSION
+        value: "22.20.0"
+
+      - key: HEDERA_NETWORK
+        value: testnet
+
+      # ── secrets: set these in the Render dashboard, never in this file ─────
+      # `sync: false` means "Render will prompt for it and will not read it from
+      # the repo". The two KEY values are private keys; `pnpm guard:secrets`
+      # fails the build if one ever lands in a tracked file, and this file is
+      # tracked.
+      - key: HEDERA_OPERATOR_ID
+        sync: false
+      - key: HEDERA_OPERATOR_KEY
+        sync: false
+      - key: FAUCET_ACCOUNT_ID
+        sync: false
+      - key: FAUCET_ACCOUNT_KEY
+        sync: false
+
+      # ── identity and topics: from `pnpm bootstrap` / `pnpm tab:create` ─────
+      - key: USDC_TOKEN_ID
+        sync: false
+      - key: TAB_ACCOUNT_ID
+        sync: false
+      - key: TOPIC_RECEIPTS
+        sync: false
+      - key: TOPIC_CEILINGS
+        sync: false
+      - key: TOPIC_SETTLEMENTS
+        sync: false
+
+      # ── optional ──────────────────────────────────────────────────────────
+      # Set to front the agent's own paid endpoint at /v1/earn. Leave unset and
+      # the earn leg is simply off — the gateway says so at boot.
+      - key: AGENT_ENDPOINT_URL
+        sync: false

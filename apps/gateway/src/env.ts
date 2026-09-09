@@ -66,7 +66,16 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): GatewayEnv {
     settlementTopic: required('TOPIC_SETTLEMENTS', source['TOPIC_SETTLEMENTS'], missing),
     feePayerId: required('FAUCET_ACCOUNT_ID', source['FAUCET_ACCOUNT_ID'], missing),
     feePayerKey: required('FAUCET_ACCOUNT_KEY', source['FAUCET_ACCOUNT_KEY'], missing),
-    port: Number(source['GATEWAY_PORT'] ?? 8080),
+    /*
+     * `PORT` is what every managed host actually sets.
+     *
+     * Render, Fly, Heroku and Cloud Run all inject `PORT` and expect the
+     * service to bind it; a service listening anywhere else fails its health
+     * check and the deploy is marked dead with no error in the logs, because
+     * from the process's point of view nothing went wrong. `GATEWAY_PORT` still
+     * wins when set, so a local override is unchanged.
+     */
+    port: Number(source['GATEWAY_PORT'] ?? source['PORT'] ?? 8080),
     windowSeconds: Number(source['WINDOW_SECONDS'] ?? 600),
     demoMode: source['DEMO_MODE'] === 'true',
     /*
