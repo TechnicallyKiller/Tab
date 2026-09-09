@@ -21,12 +21,15 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-08 by Claude · **20 of 27 packages · 181 tests · 5/5 guards · REAL USDC**
+**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 197 tests · 5/5 guards · REAL USDC**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
-gets refused when the ceiling shrinks, and every claim above is checkable from public data. The
-frontend is the last major surface still on mocks.
+gets refused when the ceiling shrinks, and every claim above is checkable from public data.
+
+**Seven of eight console views now read live data.** Only `agents` remains mocked, and it is
+mocked because it needs multi-tab support rather than an endpoint. **No budget: everything is
+testnet and free tiers, and nothing in the design costs money.**
 
 ---
 
@@ -58,8 +61,8 @@ Zero Solidity, enforced by `pnpm guard`.
 **Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` ·
 `agentkit-plugin` · `mcp`
 
-**165 tests:** ledger 39 · scoring 28 · graph 27 · params 19 · engine 19 · money 13 · verify 11 ·
-protocol 9.
+**197 tests:** ledger 47 · scoring 28 · graph 27 · sdk 24 · params 19 · engine 19 · money 13 ·
+verify 11 · protocol 9. (`mirror` still 0 — see test debt.)
 
 ### Parameters: v2 is in force
 
@@ -140,7 +143,12 @@ for this.
 
 **Presentation.**
 
-10. **`apps/web` is PARTLY live** — `tab`, `receipts`, `refusals` poll the gateway and the console states `LIVE`/`MOCK DATA` on screen. `settlements`, `ceiling`, `agents` and `config` are still mocked. `counterparties` went live once the engine started **publishing weights to HCS**.
+10. **`apps/web` is live except `agents`** — `tab`, `receipts`, `refusals`, `counterparties`,
+    `config`, `settlements` and `ceiling` all read real data, and the console states
+    `LIVE`/`MOCK DATA`/`GATEWAY UNREACHABLE` on screen. `agents` is the last one, and it is blocked
+    on multi-tab support rather than on an endpoint: every current hook reads
+    `NEXT_PUBLIC_TAB_ACCOUNT_ID`, one tab, and an agents *list* needs the gateway to enumerate
+    tabs it knows about (`state.tabs()` already does; there is no route for it).
 11. **No demo video, no user-testing evidence.** Only the user can produce these.
 12. **The plan's demo script is stale in two places**: it says the attack collapses the ceiling
     (it does not — the fake revenue never inflates it), and "ramp 15% → 30%" (it reads 25% → 40%).
@@ -150,11 +158,25 @@ for this.
 
 ### What is next, in order
 
-1. **Wire `apps/web` THROUGH `@tab/sdk`** (written 2026-09-08 — `web` may not import anything
-   else). First task is reconciling the UI's `WeightReason` enum with `@tab/graph`'s: the UI has no
-   `COMMON_FUNDER`, which is the rule that actually fires, and it should render the real codes
-   rather than a translation of them. A mocked dashboard on camera is a credibility risk — one
-   number failing a HashScan cross-check makes every other claim suspect.
+1. ~~Wire `apps/web` THROUGH `@tab/sdk`~~ — **done 2026-09-09, except `agents`.** Seven of eight
+   views read live data. What remains is `agents`, which needs a `GET /v1/tabs` route enumerating
+   `state.tabs()` plus a hook that is not pinned to a single `NEXT_PUBLIC_TAB_ACCOUNT_ID`. Roughly
+   an hour, and the least valuable of the eight for the demo — one agent's tab is the story.
+
+   Three things worth knowing from that work:
+   - The console printed `MODEL_VERSION = ceiling-v0.4.1` in five places. Every published ceiling
+     says `tab-v2`, and `verify-ceiling` picks the frozen parameter set by that field, so a
+     verifier reading the console was hunting a set that does not exist. `config` now derives every
+     row from `@tab/params`.
+   - The ceiling view had a **"Recompute and verify" button that flipped a boolean and stamped
+     VERIFIED in green.** It recomputed nothing and could not — `web` cannot import
+     `@tab/scoring`. Deleted. In its place: seq, model id, input hash, a HashScan link and
+     `pnpm verify-ceiling`, with a sentence saying this panel is not the verifier. A checker
+     running inside the thing it checks proves nothing.
+   - The settlements banner printed `checked 43 · matched 43 · repaired 0` from a mock. It now
+     derives from the rows and surfaces the **real double settlement** (window 5962288, seq 1 and
+     seq 2, two transaction ids). HCS is append-only; printing CLEAN over a permanent scar was the
+     more dishonest option.
 2. ~~Fix the false attack-catalogue claims~~ — **done 2026-09-08.** Five lines corrected; two moved
    from *Caught* to *OPEN*. The spend-side concentration cap and the registration flow are the two
    genuinely unbuilt rules, and both are now labelled OPEN in the README.
@@ -368,6 +390,8 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-09-06 | **A Hedera transaction id is spelled two ways**: `0.0.x@s.n` in our receipts, `0.0.x-s-n` by Mirror Node. Use `normalizeTransactionId` / `sameTransaction` from `@tab/mirror` on BOTH sides of any comparison | `mirror`, `settlement`, `verify`, `engine` |
 | 2026-09-06 | **`reconcile` is window-bounded** (`--since=<seconds.nanos>`, else `RECONCILE_LOOKBACK_SECONDS`, default 3600). Walking the float's full history hung at 5–15s/page and gets slower forever; the spec's unit is the window | `settlement` |
 | 2026-09-06 | **OPEN DEFECT — the spend path writes `unsettled:<holdId>` as the debit's transaction id** whenever the x402 facilitator returns no settlement transaction. Those debits can never be reconciled: there is no id to match. The reconciler counts them as `unreconcilable` rather than skipping them, but **the fix belongs in `apps/gateway`** — write the real id once the transfer lands, or emit a follow-up receipt carrying it. Until then the reconciler has never made a single positive match, so the demo's proof-of-reconciliation is not yet demonstrated | `gateway`, `x402`, `settlement`, demo |
+| 2026-09-09 | **The published settlement `debits` and `interest` are NEGATIVE**, and `net = credits + debits + interest`. `@tab/protocol`'s comment said `credits − debits − interest`, which describes positive magnitudes and is not what any producer writes. A console built on that comment negated `debits` and showed a netting panel summing to 0.190000 above a published net of 0.110000 | anyone rendering or auditing a settlement |
+| 2026-09-09 | **NO BUDGET — everything must be free, and everything is.** Hedera *testnet* only: HBAR from the portal faucet, USDC from the Circle testnet faucet (the 20.000000 in the float came free). Mirror Node is the public endpoint, no key. Supabase free tier for `@tab/db`, local Redis or Upstash free for `@tab/cache`, Vercel hobby for the console. Declining The Graph also avoided the one paid indexer. **The only thing that would cost money is mainnet, which we do not touch** | everyone; check before adding any dependency or service |
 | 2026-09-06 | **An x402 payment needs THREE distinct accounts** — payer, `payTo`, fee payer. The scheme rejects a transfer the fee payer is a party to. Same rule that bit us on the seller, now general | `x402`, `gateway`, `testkit`, any demo |
 | 2026-09-06 | **The earn leg forwards even if the receipt write fails.** The money has already moved by then — refusing to serve a request the payer paid for would be theft; a missing receipt is repairable. A payment taken but not served is `attested: false` | `gateway`, `settlement` reconciler |
 | 2026-09-06 | **The gateway is SINGLE INSTANCE.** Holds live in process memory, so two instances would each allow up to the ceiling. `@tab/cache` fixes it; Probe 5 says why the hop cannot be removed | `gateway`, `cache`, deployment |
@@ -409,6 +433,105 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-09 — Claude — the console reads real data, and a fake VERIFIED stamp is gone
+
+**What I did.** Wired the last three mocked console views — `config`, `settlements`, `ceiling` —
+which took a protocol read, two gateway endpoints, two SDK verbs and one deletion I should have
+made much earlier. Then ran the gateway against the real topics, which found three more bugs that
+typechecking could not.
+
+Seven of eight views now read live data. `agents` is the last, and it needs multi-tab support
+rather than an endpoint.
+
+**The deletion, first, because it is the one that mattered.** The ceiling view had a
+"Recompute and verify" button. It flipped a boolean and stamped VERIFIED in green. It recomputed
+nothing, compared nothing, and had no access to anything that could — `apps/web` cannot import
+`@tab/scoring`, by design. On the one screen whose entire purpose is the claim *you do not have to
+trust us*, that was the worst thing in this console, and it would have been filmed.
+
+It is gone. In its place: the sequence number, the model id, the canonical input hash, a HashScan
+link to the topic, `pnpm verify-ceiling` with a copy button, and a sentence saying plainly that
+this panel is **not** the verifier. A checker that runs inside the thing being checked proves
+nothing.
+
+**Three things the console was asserting that were false.**
+
+1. `MODEL_VERSION = 'ceiling-v0.4.1'`, in five places including the docs header. Every published
+   ceiling carries `tab-v2`, and `verify-ceiling` resolves each message's own `model` field to
+   pick the frozen set to recompute against — so the console was sending a verifier looking for a
+   parameter set that does not exist. `config` now derives every row from `@tab/params`. Four
+   other values were also wrong: `AGE_FULL_DAYS` said 3 (it is 7), `STARTER_CEILING` said 1.0000
+   (it is 0.250000), and the ramp clamp and hold TTL were absent entirely.
+2. The reconciliation banner printed `checked 43 · matched 43 · repaired 0`, three numbers from a
+   mock. It now derives from the rows and surfaces the **real** finding: window 5962288 appears
+   twice, seq 1 and seq 2, two transaction ids. HCS is append-only — the scar is permanent, and
+   printing CLEAN over it was the more dishonest of the two options.
+3. `SETTLE_MODE` and `MAX_SNAPSHOT_AGE_S` were in the config table. Those are gateway
+   environment, not model parameters, and the console cannot read the gateway's environment.
+   Dropped rather than invented — showing made-up values would leave the table exactly as
+   trustworthy as the mock it replaced.
+
+**What the topics now carry to a reader.** `PublishedCeiling` gained `inputs` and `seq`, so a
+ceiling arrives with the arithmetic that produced it: a `0.0000` with no numbers beside it reads as
+a bug, while the same zero next to `tier Unrated · ×0 · cause graph_change` reads as the rail
+working. `ceilingHistoryFromMessages` returns the whole series ascending, because a collapse is
+only visible next to what it collapsed from — and `replayCeilings` now derives "the ceiling in
+force" as the last element of that series rather than reading it separately, so the number and the
+chart cannot disagree.
+
+`SettlementEntry` gained the gross legs. The settlements view exists to make one claim — many
+receipts became one transfer — and `net` alone shows the transfer while hiding the netting. They
+are optional on the entry, and both paths render `—`, never `0.0000`: a window whose credits were
+genuinely zero and one that never recorded its credits are different facts.
+
+The gateway finally opens `TOPIC_SETTLEMENTS`, which had been in its environment since the first
+commit and never read. Read-only, on its own 120s timer, and never consulted by `spend` — the
+gateway makes no claim about whether a window settled, so it must not appear to.
+
+**Then I ran it, and found three more.**
+
+1. **Mine, an hour old.** I assumed the topic stored `debits` as a positive magnitude and negated
+   it. It does not: `@tab/ledger`'s `WindowNet` documents both `debits` and `interest` as negative
+   and defines `net = credits + debits + interest`. The negation turned a debit into a credit on
+   screen and made the panel sum to 0.190000 above a published net of 0.110000. I was misled by
+   `@tab/protocol`'s own comment, which read `credits − debits − interest` — now corrected, with
+   the sign stated on the field. Verified against all five settled windows: every one sums exactly.
+   The panel now **checks** the sum rather than assuming it, and says so when it fails.
+2. **The ceiling chart drew a flat line.** I seeded the scale with `inputs.cap`, thinking that was
+   safer. On live data the cap is 100.000000 while no ceiling this tab ever held exceeded 1.000000,
+   so the entire eleven-point series — including the one collapse worth showing — rendered a pixel
+   off the bottom axis. Scales from the largest ceiling actually published now.
+3. **The gateway's boot log rendered as garbage** —
+   `ceilings          settlements       settlements boot  5 window(s)` — because the ceiling sync
+   only logs a tab whose ceiling *changed*, so a restart resuming the ceiling it already had
+   printed nothing after its progress prefix.
+
+**Live evidence.** Both endpoints work against the real topics. `/ceiling` returns 11 publications
+spanning `tab-v1` and `tab-v2` on one tab, which is exactly why parameter sets are frozen and never
+edited; seq 8 is the one time earned credit actually bound (`computed 0.352800`). A tab with no
+published ceiling returns `published: false` with the enforced starter ceiling and a note, not a
+404 — that is the normal state for a tab's first minutes, and a 404 would render an error for a
+healthy tab while hiding that a real limit is in force.
+
+**Also.** One poller (`usePolled`) replaced the third copy of the same cancelled-flag / interval /
+keep-last-good effect. The duplication was harmless; each copy independently having to get the
+failure behaviour right was not — blanking a table on a transient timeout reads as "no
+settlements", a very different claim from "the last poll failed".
+
+**Tests: 181 → 197.** ledger 39 → 47, sdk 16 → 24. The new ones assert what a reader may not
+invent: absent gross legs stay absent, an unknown tier degrades to `Unrated` and an unknown outcome
+to `carried` (both the conservative side, never the permissive one), and history sorts by window so
+a late settlement cannot reorder the table.
+
+**Budget, confirmed explicitly.** Nothing in this design costs money, and that is structural rather
+than lucky — see the new lessons row. Testnet only, public Mirror Node, free tiers everywhere,
+and the one paid thing we were tempted by (The Graph) was declined last session.
+
+**Next.** `agents` needs a `GET /v1/tabs` route over `state.tabs()` and a hook not pinned to a
+single `NEXT_PUBLIC_TAB_ACCOUNT_ID` — roughly an hour, and the least valuable of the eight views
+for the demo. After that the ranked gaps are unchanged: `@tab/db` to close the fail-open
+exposure, then tests for `mirror` (1,060 lines, still zero).
 
 ### 2026-09-08 (night) — Claude — the independence table is on the public record
 
