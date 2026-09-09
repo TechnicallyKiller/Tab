@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 299 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3**
+**Last updated:** 2026-09-09 by Claude · **21 of 27 packages · 335 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE · PARAMS v3 · MCP**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -55,13 +55,12 @@ Zero Solidity, enforced by `pnpm guard`.
 
 **Written.** `money` · `protocol` · `params` · `ledger` · `graph` · `scoring` · `mirror` ·
 `hedera` · `x402` · `testkit` · `gateway` · `settlement` · `engine` · `web` · `verify` ·
-`bootstrap` · `probes` · `honest-agent` · `loop-attacker` · `sdk`
+`bootstrap` · `probes` · `honest-agent` · `loop-attacker` · `sdk` · `mcp`
 
-**Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` ·
-`agentkit-plugin` · `mcp`
+**Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` · `agentkit-plugin`
 
-**299 tests:** ledger 53 · mirror 49 · engine 34 · graph 32 · scoring 28 · params 27 · sdk 26 ·
-verify 22 · money 13 · protocol 9.
+**335 tests:** ledger 53 · mirror 49 · gateway 36 · engine 34 · graph 32 · scoring 28 ·
+params 27 · sdk 26 · verify 22 · money 13 · mcp 12 · protocol 9.
 
 ### Parameters: v3 is in force
 
@@ -179,8 +178,8 @@ for this.
 | Package | Untested | Why it matters |
 |---|---|---|
 | ~~`mirror`~~ | ~~1,060~~ | **49 tests as of 2026-09-09**, and they found a real bug — see the log |
-| `gateway` | 1,132 | Holds, refusals, both legs. Now the biggest |
-| `settlement` | 961 | Money movement and netting |
+| ~~`gateway`~~ | ~~1,646~~ | **36 tests as of 2026-09-09**, and they found a fifth private copy of a shared function |
+| `settlement` | 961 | Money movement and netting. **Now the biggest** |
 | `hedera` | 629 | Every chain write |
 | `x402` | 404 | Four separate bugs already hid here |
 
@@ -239,9 +238,14 @@ for this.
    been observed, instead of trusting it. A policy change that moves ceilings, so it needs a new
    frozen parameter set rather than an edit; `paramsForVersion` and the freeze machinery already
    exist.
-6. **`@tab/sdk` → `@tab/mcp`** if time. MCP is the one with real demo value: Claude Desktop calling
-   a paid API through Tab, agent holding no key. `cli` and `agentkit-plugin` are not worth it.
-7. **Not worth building:** `fastpath`, `observability`. Their absence is documented as named limits
+6. ~~`@tab/sdk` → `@tab/mcp`~~ — **DONE 2026-09-09.** 7 tools, 12 tests through a real MCP client,
+   verified over JSON-RPC on stdio against the live gateway. Three lines in
+   `claude_desktop_config.json` and Claude Desktop is spending on a Hedera tab. The README's open
+   question (standalone server vs documenting an Agent Kit plugin path) is settled in favour of
+   standalone, with the reasoning recorded there. `cli` and `agentkit-plugin` are still not worth
+   it.
+7. **Tests for `settlement`** (961 lines) — now the largest untested surface, and it moves money.
+8. **Not worth building:** `fastpath`, `observability`. Their absence is documented as named limits
    with causes, which reads better to a judge than a half-built version.
 
 ### Read these before you write code
@@ -447,6 +451,7 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-09-06 | **A Hedera transaction id is spelled two ways**: `0.0.x@s.n` in our receipts, `0.0.x-s-n` by Mirror Node. Use `normalizeTransactionId` / `sameTransaction` from `@tab/mirror` on BOTH sides of any comparison | `mirror`, `settlement`, `verify`, `engine` |
 | 2026-09-06 | **`reconcile` is window-bounded** (`--since=<seconds.nanos>`, else `RECONCILE_LOOKBACK_SECONDS`, default 3600). Walking the float's full history hung at 5–15s/page and gets slower forever; the spec's unit is the window | `settlement` |
 | 2026-09-06 | **OPEN DEFECT — the spend path writes `unsettled:<holdId>` as the debit's transaction id** whenever the x402 facilitator returns no settlement transaction. Those debits can never be reconciled: there is no id to match. The reconciler counts them as `unreconcilable` rather than skipping them, but **the fix belongs in `apps/gateway`** — write the real id once the transfer lands, or emit a follow-up receipt carrying it. Until then the reconciler has never made a single positive match, so the demo's proof-of-reconciliation is not yet demonstrated | `gateway`, `x402`, `settlement`, demo |
+| 2026-09-09 | **A private copy of a shared function or type has now hidden or re-created a defect FIVE times.** Three replay decoders each lost a message type; `whoami.ts`'s inline `{decimals: number}` re-created the string-decimals bug; `spend.ts` carried its own `toWire` while `server.ts` in the same app imported the shared one. The last was byte-equivalent — the point is that it was the SETUP for drift. If a package exports it, import it | everyone |
 | 2026-09-09 | **Anything that influences a published ceiling belongs in `@tab/params`, and "influences" includes the WEIGHT steps.** They lived in `apps/engine` and the engine's own comment named it as a gap for days. The consequence was not stylistic: a weight message said `bp 3360 · why [...]` and no stranger could check that 3360 followed from those reasons. v3 moved them; `verify-ceiling` now reproduces weights | `params`, `graph`, `engine`, `verify` |
 | 2026-09-09 | **A version bump must never back-fill a new field into a frozen set.** v1 and v2 genuinely had no weight policy, so `weights` is OPTIONAL and pre-v3 weights report NOT VERIFIABLE. Filling it in would claim a historical weight is reproducible from the frozen record when it is not — the same class of mistake as taking a newer funder in `factsFromMessages`. Absence of proof is not evidence of a problem, and the two must not print the same | `params`, `verify` |
 | 2026-09-09 | **A verifier must re-implement, not import.** `tools/verify/src/reweigh.ts` duplicates `@tab/graph`'s discount ORDER on purpose: calling the function that produced a number proves only that it is deterministic. If the copy drifts, the check fails — which is the signal wanted. `boundaries.json` bars `verify` from `graph` for this reason | `verify`, anyone "de-duplicating" it |
@@ -497,6 +502,86 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-09 (late night) — Claude — @tab/mcp, and the gateway finally has tests
+
+**What I did.** Two things off the ranked list: the MCP server, and 36 tests for the component that
+moves money.
+
+## @tab/mcp — the product-evidence gap, narrowed
+
+Until now "agents use Tab" was demonstrated by OUR demo scripts. A judge could watch it and not
+drive it. Three lines in `claude_desktop_config.json` and any MCP-capable runtime is transacting on
+a tab, holding no key and signing nothing.
+
+**The README's open question, settled: standalone server, not an Agent Kit plugin path.** Option 2
+is the better ecosystem story and it is not the one to ship first — it depends on two things that do
+not exist (the plugin is unwritten) plus an external server accepting third-party plugins in a shape
+nobody here has verified, and it cannot be driven by a judge in one step. It is additive later; a
+plugin can wrap the same `@tab/sdk` verbs whenever that path is confirmed.
+
+**The invariant: a refusal is a structured RESULT, not an error.** `isError: true` makes a client
+surface a failure and invites a model to retry — and a `CEILING_EXCEEDED` retried immediately is
+refused again for the same reason. So a refusal returns the rule, the evidence, and the guidance
+from `@tab/protocol` (not strings invented in the server), plus the line that stops a retry loop.
+A `failed` outcome IS an error and hands back the hold id, because nobody knows whether the seller
+was paid and a retry with a new key would be a second payment.
+
+Only `tab_spend` moves money, and it is annotated `destructiveHint: true · idempotentHint: false`
+so a client knows which tool to confirm with a human. Every read tool asserts `readOnlyHint: true`
+in a test — marking a money-moving tool read-only would let a model spend without the decision ever
+surfacing.
+
+**12 tests, driven through a REAL MCP client** over an in-memory transport pair. Asserting against
+our own idea of the protocol would prove only that we are self-consistent.
+
+**Verified over actual JSON-RPC on stdio** against the live gateway and topics — `tab_ceiling`
+returned `0.2500 bound by starter_floor · model tab-v3 · HCS seq 35`, and `tab_counterparties`
+returned the three-way table WITH its evidence:
+`funded by 0.0.8812188 · tab funded by 0.0.8812188 ← SAME, which is what COMMON_FUNDER tests`.
+
+That is the demo beat: ask a model *"why is my ceiling only 0.25?"* and it answers with the
+funding-graph evidence and the two account ids that decided it.
+
+## The gateway: 36 tests, and a fifth private copy
+
+1,646 lines, no tests, and it moves the money. Reading it to write them turned up `spend.ts`
+carrying its own `toWire` while `server.ts` — the same app — imported `@tab/money`'s. Byte-
+equivalent, so nothing was wrong yet. That is the point: it was the SETUP for drift, and it is the
+fifth private copy of something shared to appear here. Now a lessons row.
+
+Each test names the failure its rule came from. The ones worth knowing:
+
+- **The debit is the CHARGE, not the cap** — and the first *fix* for that bug read
+  `maxAmountRequired`, the x402 V1 field name, so it silently fell back to the cap and reproduced
+  the bug behind a patch that looked like it worked.
+- **A failed hold write fails CLOSED**, asserted by counting calls on the fake client rather than
+  by reading the code.
+- **A seller that throws leaves the hold standing and writes no debit** — the money may or may not
+  have moved, and the ledger must not claim it did.
+- **Every JSON amount is six decimals**, checked with a regex across every amount field.
+- **Placeholder env values count as missing** — `.env.example` ships `0.0.xxxxx`, and treating one
+  as real is worse than an empty string.
+
+Also fixed a `guard:money` false positive honestly rather than with an annotation: a test asserted
+`doesNotMatch(line, /1000000/)`, and the literal is now derived from `usdc('1.000000')`. The guard
+is right to flag a bare raw micro-unit string in a money path.
+
+## Where the product stands, since I was asked
+
+Strong on verifiability, weak on user evidence. A stranger can reproduce a ceiling AND a weight from
+public data with no access to us; `0.7 × 0.6 × 0.8 = 0.336` matching seq 34 is a real artifact. What
+a sharp reviewer will push on, correctly: no registration flow (the Sybil story has a known hole,
+labelled OPEN everywhere), single-instance gateway, no users, no demo video.
+
+**Hosting, decided:** only the gateway needs Render (free web service, ONE instance — holds live in
+process memory). The console belongs on Vercel hobby, not Render, because it is a Next app. `engine`
+and `settlement` are not servers; run them locally for the demo, since Render cron is a paid
+feature. Two gotchas: a free Render service spins down after ~15 min and the gateway's cold start
+replays the whole receipt topic, so warm it before demoing; and `NEXT_PUBLIC_*` is inlined at BUILD
+time, so the gateway URL must be set before the console is built.
+
+**Next.** `settlement` (961 lines) is the largest untested surface and it moves money.
 
 ### 2026-09-09 (night) — Claude — v3: the weight steps join the frozen record, and a weight becomes checkable
 
