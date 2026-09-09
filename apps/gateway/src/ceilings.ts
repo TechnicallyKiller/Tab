@@ -16,7 +16,7 @@
 import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
 import {
-  ceilingsFromMessages, weightsFromMessages,
+  ceilingHistoryFromMessages, weightsFromMessages,
   type PublishedCeiling, type PublishedWeight,
 } from '@tab/ledger'
 
@@ -41,6 +41,15 @@ export interface CeilingReplay {
    * one read gives the console both the number and the reasons for it.
    */
   weights: Map<string, PublishedWeight>
+  /**
+   * Every ceiling ever published, per tab, ascending.
+   *
+   * The console's ceiling view needs the SERIES, not the latest value: the
+   * demo's central moment is a collapse, and a collapse is only visible next to
+   * what it collapsed from. Served from the same replay so the number in force
+   * and the history behind it cannot disagree on screen.
+   */
+  history: Map<string, PublishedCeiling[]>
   read: number
 }
 
@@ -58,9 +67,25 @@ export async function replayCeilings(
 ): Promise<CeilingReplay> {
   const walk = await readTopic(mirror, { topicId })
   const { assembled } = reassembleChunks(walk.items)
-  const byTab = ceilingsFromMessages(assembled)
   const weights = weightsFromMessages(assembled)
-  return { byTab, weights, read: assembled.length }
+
+  /*
+   * `byTab` is derived from the history rather than read separately.
+   *
+   * `ceilingsFromMessages` would give the same answer, and calling both would
+   * decode the topic twice — but the real reason is that two independent
+   * readers can disagree. The history is ascending by consensus timestamp, so
+   * its last element IS the latest, and deriving it here makes "the ceiling in
+   * force" and "the last row of the chart" the same fact by construction.
+   */
+  const history = ceilingHistoryFromMessages(assembled)
+  const byTab = new Map<string, CeilingSnapshot>()
+  for (const [tab, list] of history) {
+    const latest = list.at(-1)
+    if (latest) byTab.set(tab, latest)
+  }
+
+  return { byTab, weights, history, read: assembled.length }
 }
 
 /**

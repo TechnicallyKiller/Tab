@@ -247,8 +247,14 @@ test('every verb is present exactly once', () => {
   // The same surface appears in the Agent Kit plugin, MCP and CLI. Defined
   // once, here, is what stops those three drifting.
   assert.deepEqual(Object.keys(tab).sort(), [
-    'counterparties', 'health', 'holds', 'quote', 'receipts', 'spend', 'state',
+    'ceiling', 'counterparties', 'health', 'holds', 'quote',
+    'receipts', 'settlements', 'spend', 'state',
   ])
+  // Exactly TWO of the nine act. The other seven read what was published, and
+  // this package cannot import `@tab/scoring` or `@tab/graph`, so it is
+  // structurally incapable of offering a second opinion about a ceiling.
+  const acting = ['spend', 'quote']
+  assert.equal(Object.keys(tab).filter((k) => acting.includes(k)).length, 2)
 })
 
 test('an unknown weight reason is dropped, not typed as a real one', async () => {
@@ -302,4 +308,208 @@ test('an infrastructure failure returns `failed` and keeps the hold id', async (
   // The caller needs the hold id to reason about what happened; an exception
   // would discard it.
   assert.equal(result.holdId, 'h_abc')
+})
+
+/* ── ceiling and settlements: published, never recomputed ────────────────── */
+
+const CEILING_ROW = {
+  ceiling: '0.250000',
+  window: 5962354,
+  binding: 'starter_floor',
+  cause: 'registration',
+  at: '1788686819.057159551',
+  model: 'tab-v2',
+  hash: '5c08590b1234',
+  seq: 1,
+  inputs: {
+    revenue: '0.000000',
+    revenueAttested: '0.000000',
+    revenueUnattested: '0.000000',
+    tier: 'Unrated',
+    multBp: 0,
+    rampBp: 2500,
+    cap: '2.000000',
+    floor: '0.250000',
+    defaulted: false,
+  },
+}
+
+test('a ceiling comes back with the arithmetic that produced it', async () => {
+  const { doFetch } = fakeGateway(() => ({
+    body: { tab: '0.0.1000', published: true, enforced: '0.250000', ...CEILING_ROW, history: [CEILING_ROW] },
+  }))
+  const view = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).ceiling('0.0.1000')
+
+  assert.equal(view.published, true)
+  assert.equal(view.enforced, usdc('0.250000'))
+  assert.equal(view.current?.inputs.tier, 'Unrated')
+  // An Unrated tab that has NOT defaulted still gets the starter floor. This is
+  // the pair of facts that once made a brand-new agent unable to ever start.
+  assert.equal(view.current?.inputs.defaulted, false)
+  assert.equal(view.current?.inputs.multBp, 0)
+  assert.equal(view.current?.binding, 'starter_floor')
+  assert.equal(view.current?.seq, 1)
+})
+
+test('`current` IS the last history element, so a chart cannot contradict the number', async () => {
+  const collapsed = {
+    ...CEILING_ROW,
+    ceiling: '0.000000',
+    window: 5962355,
+    binding: 'unrated',
+    cause: 'graph_change',
+    seq: 2,
+    inputs: { ...CEILING_ROW.inputs, defaulted: false },
+  }
+  const { doFetch } = fakeGateway(() => ({
+    body: {
+      tab: '0.0.1000',
+      published: true,
+      enforced: '0.000000',
+      history: [CEILING_ROW, collapsed],
+    },
+  }))
+  const view = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).ceiling('0.0.1000')
+
+  assert.equal(view.history.length, 2)
+  assert.equal(view.current?.ceiling, usdc('0.000000'))
+  assert.equal(view.current, view.history[view.history.length - 1])
+  // The cause is what makes a zero explainable rather than alarming.
+  assert.equal(view.current?.cause, 'graph_change')
+})
+
+test('no ceiling published yet is a normal state, not an error', async () => {
+  const { doFetch } = fakeGateway(() => ({
+    body: {
+      tab: '0.0.1000',
+      published: false,
+      enforced: '0.250000',
+      note: 'No ceiling published yet — the starter ceiling is in force.',
+      history: [],
+    },
+  }))
+  const view = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).ceiling('0.0.1000')
+
+  assert.equal(view.published, false)
+  assert.equal(view.current, undefined)
+  // Something is ALWAYS being enforced. A view that showed nothing here would
+  // imply the tab is unlimited, which is the opposite of the truth.
+  assert.equal(view.enforced, usdc('0.250000'))
+  assert.ok(view.note)
+})
+
+test('a settled window carries the netting, not just the transfer', async () => {
+  const { doFetch } = fakeGateway(() => ({
+    body: [
+      {
+        window: 5962354,
+        at: '1788686819.057159551',
+        seq: 30,
+        credits: '0.180000',
+        debits: '0.070000',
+        interest: '0.000000',
+        net: '0.110000',
+        outstanding: '0.000000',
+        receiptCount: 4,
+        outcome: 'clean',
+        rampFromBp: 2500,
+        rampToBp: 4000,
+        transactionId: '0.0.8812188@1788686819.000000000',
+      },
+    ],
+  }))
+  const rows = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).settlements('0.0.1000')
+
+  assert.equal(rows.length, 1)
+  // The claim this view exists to make: four receipts became one transfer.
+  assert.equal(rows[0]?.receiptCount, 4)
+  assert.equal(rows[0]?.credits, usdc('0.180000'))
+  assert.equal(rows[0]?.net, usdc('0.110000'))
+  assert.equal(rows[0]?.outcome, 'clean')
+})
+
+test('absent gross legs stay absent — a reader must not read them as zero', async () => {
+  // A settlement published before the gross legs existed. Defaulting these to
+  // 0.000000 would invent a netting that was never on the topic, and the
+  // console would show `4 receipts → 1 transfer` beside four zeroes.
+  const { doFetch } = fakeGateway(() => ({
+    body: [
+      {
+        window: 5962300,
+        at: '1788600000.000000000',
+        net: '0.110000',
+        outcome: 'clean',
+        rampFromBp: 2500,
+        rampToBp: 4000,
+      },
+    ],
+  }))
+  const rows = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).settlements('0.0.1000')
+
+  assert.equal(rows[0]?.credits, undefined)
+  assert.equal(rows[0]?.debits, undefined)
+  assert.equal(rows[0]?.receiptCount, undefined)
+  // The net is still there — that IS published.
+  assert.equal(rows[0]?.net, usdc('0.110000'))
+})
+
+test('a missed window has no transaction id, and none is invented', async () => {
+  const { doFetch } = fakeGateway(() => ({
+    body: [
+      {
+        window: 5962355,
+        at: '1788687400.000000000',
+        credits: '0.000000',
+        debits: '0.050000',
+        interest: '0.000100',
+        net: '-0.050100',
+        outstanding: '0.050100',
+        receiptCount: 1,
+        outcome: 'missed',
+        rampFromBp: 4000,
+        rampToBp: 1000,
+      },
+    ],
+  }))
+  const rows = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).settlements('0.0.1000')
+
+  assert.equal(rows[0]?.transactionId, undefined)
+  assert.equal(rows[0]?.net, usdc('-0.050100'))
+  // The ramp fell 4000 → 1000. Trust is slower to earn than to lose.
+  assert.equal(rows[0]?.rampToBp, 1000)
+})
+
+test('an unknown outcome or tier degrades safely rather than typing a fiction', async () => {
+  const { doFetch } = fakeGateway((url) =>
+    url.includes('/settlements')
+      ? {
+          body: [
+            { window: 1, at: '1.0', net: '0.000000', outcome: 'reticulated', rampFromBp: 0, rampToBp: 0 },
+          ],
+        }
+      : {
+          body: {
+            tab: '0.0.1000',
+            published: true,
+            enforced: '0.250000',
+            history: [{ ...CEILING_ROW, inputs: { ...CEILING_ROW.inputs, tier: 'S+' } }],
+          },
+        },
+  )
+  const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
+
+  // Both fall back to the CONSERVATIVE value, not the permissive one: an
+  // unrecognised outcome is `carried` (still owing) and an unrecognised tier is
+  // `Unrated` (no credit). A cast would have typed `S+` as a real tier and the
+  // console would have rendered a rating that does not exist.
+  assert.equal((await tab.settlements('0.0.1000'))[0]?.outcome, 'carried')
+  assert.equal((await tab.ceiling('0.0.1000')).current?.inputs.tier, 'Unrated')
+})
+
+test('the read verbs refuse an empty tab id before touching the network', async () => {
+  const { doFetch, calls } = fakeGateway(() => ({ body: {} }))
+  const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
+  await assert.rejects(() => tab.ceiling(''), /needs a tab id/)
+  await assert.rejects(() => tab.settlements(''), /needs a tab id/)
+  assert.equal(calls.length, 0)
 })

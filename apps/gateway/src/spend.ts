@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { format, micro, usdc, type MicroUsdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
-import type { Entry, PublishedWeight } from '@tab/ledger'
+import type { Entry, PublishedCeiling, PublishedWeight } from '@tab/ledger'
+import type { SettlementEntry } from './settlements.ts'
 import type { SpendClient } from '@tab/x402'
 import type { GatewayEnv } from './env.ts'
 import { nowConsensus, type ReceiptWriter } from './receipts.ts'
@@ -78,6 +79,23 @@ export interface SpendDeps {
    * talk to nothing but the gateway.
    */
   weights?: () => ReadonlyMap<string, PublishedWeight>
+  /**
+   * Published ceiling history, for the console to read.
+   *
+   * Also unused by the spend path, which enforces `state.ceilingFor(tab)` —
+   * the single value the ceiling poll wrote. Serving the series here would be
+   * a second place a ceiling could come from if the spend path ever reached for
+   * it, so it does not: this is a read surface, and the two must not converge.
+   */
+  ceilings?: () => ReadonlyMap<string, PublishedCeiling[]>
+  /**
+   * Published settlements, for the console to read.
+   *
+   * The gateway makes no claim about whether a window settled — the worker does,
+   * and it reads both topics to make it. This is the console's window onto that
+   * claim, nothing more.
+   */
+  settlements?: () => ReadonlyMap<string, SettlementEntry[]>
 }
 
 /** Hash the request, never store the request. Receipts carry the hash. */

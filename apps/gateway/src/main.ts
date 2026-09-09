@@ -13,6 +13,7 @@ import { ReceiptWriter } from './receipts.ts'
 import { buildServer } from './server.ts'
 import { windowOf } from '@tab/params'
 import { describeCeiling, replayCeilings } from './ceilings.ts'
+import { replaySettlements, type SettlementEntry } from './settlements.ts'
 import { LedgerState } from './state.ts'
 
 // Node's fetch dies after a 10s CONNECT timeout that no AbortController can
@@ -70,13 +71,30 @@ for (const t of state.tabs()) {
  */
 let latestWeights = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['weights'] extends Map<string, infer W> ? W : never>()
 
+/**
+ * The published ceiling SERIES, kept for the console.
+ *
+ * Separate from `state.setCeiling`, which holds the one value the fast path
+ * enforces. Deliberately two things: the fast path must have exactly one
+ * ceiling to check, and the console must be able to show that a zero was
+ * preceded by a 0.2500 and caused by a graph change. Collapsing them would
+ * either give the spend path a series to choose from or give the console a
+ * number with no story.
+ */
+let latestCeilings = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['history'] extends Map<string, infer C> ? C : never>()
+
 export function weightsSnapshot() {
   return latestWeights
+}
+
+export function ceilingsSnapshot() {
+  return latestCeilings
 }
 
 async function syncCeilings(label: string): Promise<void> {
   const replay = await replayCeilings(mirror, env.ceilingTopic)
   latestWeights = replay.weights
+  latestCeilings = replay.history
   for (const [t, snapshot] of replay.byTab) {
     const before = state.ceilingFor(t)
     if (before === snapshot.ceiling) continue
@@ -126,6 +144,50 @@ const ceilingPoll = setInterval(() => {
 }, CEILING_POLL_MS)
 ceilingPoll.unref()
 
+/*
+ * Settled windows, for the console.
+ *
+ * Its own timer, at a much slower cadence, because a settlement happens once
+ * per 600s window while a ceiling can collapse mid-window and must be picked
+ * up in seconds. Sharing the ceiling's 15s poll would read the settlements
+ * topic forty times per window to see one new message.
+ *
+ * Read-only, and never consulted by the spend path. The gateway makes no claim
+ * about whether a window settled — that claim belongs to the worker, which
+ * reads both topics to make it. This is the console's window onto it.
+ */
+let latestSettlements = new Map<string, SettlementEntry[]>()
+
+export function settlementsSnapshot(): ReadonlyMap<string, SettlementEntry[]> {
+  return latestSettlements
+}
+
+async function syncSettlements(label: string): Promise<void> {
+  const replay = await replaySettlements(mirror, env.settlementTopic)
+  latestSettlements = replay.byTab
+  const total = [...replay.byTab.values()].reduce((n, list) => n + list.length, 0)
+  console.log(`  settlements ${label} ${total} window(s) across ${replay.byTab.size} tab(s)`)
+}
+
+process.stdout.write('  settlements     ')
+try {
+  await syncSettlements('boot ')
+} catch (error) {
+  // Same reasoning as the ceiling: this is a read surface for the console, so
+  // an unreadable topic degrades one view rather than stopping the rail.
+  console.log(
+    `unavailable (${error instanceof Error ? error.message : String(error)}) — the settlements view will be empty`,
+  )
+}
+
+const SETTLEMENT_POLL_MS = Number(process.env['SETTLEMENT_POLL_MS'] ?? 120_000)
+const settlementPoll = setInterval(() => {
+  void syncSettlements('update').catch(() => {
+    // Silent, for the same reason the ceiling poll is.
+  })
+}, SETTLEMENT_POLL_MS)
+settlementPoll.unref()
+
 const client = createSpendClient({
   network: NETWORKS.testnet,
   payerId: env.operatorId,
@@ -158,8 +220,10 @@ const app = buildServer(
     client,
     receipts: new ReceiptWriter(tab, env.receiptTopic),
     window: currentWindow,
-    // Read-only, for the console. The spend path never consults it.
+    // Read-only, for the console. The spend path never consults any of these.
     weights: weightsSnapshot,
+    ceilings: ceilingsSnapshot,
+    settlements: settlementsSnapshot,
   },
   agentUpstream
     ? {

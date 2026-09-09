@@ -17,10 +17,11 @@
  */
 import { TabClient, type TabClientConfig } from './client.ts'
 import { quote, spend, state } from './spend.ts'
-import { counterparties, health, holds, receipts } from './receipts.ts'
+import { ceiling, counterparties, health, holds, receipts, settlements } from './receipts.ts'
 import type { MicroUsdc } from '@tab/money'
 import type {
-  CounterpartyWeight, Hold, Quote, ReceiptRow, SpendRequest, SpendResult, TabState,
+  CeilingView, CounterpartyWeight, Hold, Quote, ReceiptRow, SettlementView,
+  SpendRequest, SpendResult, TabState,
 } from './types.ts'
 
 export interface Tab {
@@ -30,15 +31,24 @@ export interface Tab {
   holds(tab: string): Promise<Hold[]>
   receipts(tab: string): Promise<ReceiptRow[]>
   counterparties(tab: string): Promise<CounterpartyWeight[]>
+  /** The ceiling in force, its arithmetic, and the series behind it. */
+  ceiling(tab: string): Promise<CeilingView>
+  /** Settled windows, ascending by window. */
+  settlements(tab: string): Promise<SettlementView[]>
   health(): Promise<Awaited<ReturnType<typeof health>>>
 }
 
 /**
- * The six verbs, bound to one client.
+ * The nine verbs, bound to one client.
  *
- * Object-with-methods rather than loose functions because the same six appear
- * in the Agent Kit plugin, the MCP server and the CLI — defining the surface
+ * Object-with-methods rather than loose functions because the same surface
+ * appears in the Agent Kit plugin, the MCP server and the CLI — defining it
  * once, here, is what stops those three drifting apart.
+ *
+ * Two of the nine (`spend`, `quote`) act. The other seven only read, and every
+ * one of them reads what was PUBLISHED rather than recomputing it: this package
+ * cannot import `@tab/scoring` or `@tab/graph`, so it is structurally incapable
+ * of offering a second opinion about a ceiling or a weight. That is the point.
  */
 export function createTab(config: TabClientConfig): Tab {
   const client = new TabClient(config)
@@ -49,13 +59,15 @@ export function createTab(config: TabClientConfig): Tab {
     holds: (tab) => holds(client, tab),
     receipts: (tab) => receipts(client, tab),
     counterparties: (tab) => counterparties(client, tab),
+    ceiling: (tab) => ceiling(client, tab),
+    settlements: (tab) => settlements(client, tab),
     health: () => health(client),
   }
 }
 
 export { TabClient, type TabClientConfig } from './client.ts'
 export { spend, quote, state, parseAmount } from './spend.ts'
-export { holds, receipts, counterparties, health } from './receipts.ts'
+export { holds, receipts, counterparties, ceiling, settlements, health } from './receipts.ts'
 export {
   TabInvalidError,
   TabProtocolError,
@@ -64,8 +76,12 @@ export {
   type TabError,
 } from './errors.ts'
 export type {
+  CeilingInputsView,
+  CeilingView,
   CounterpartyWeight,
   Hold,
+  PublishedCeilingView,
+  SettlementView,
   Quote,
   ReceiptLeg,
   ReceiptRow,

@@ -70,10 +70,12 @@ export {
 } from './invariants.ts'
 
 export {
+  ceilingHistoryFromMessages,
   ceilingsFromMessages,
   weightsFromMessages,
   entriesFromMessages,
   type PublishedCeiling,
+  type PublishedCeilingInputs,
   type PublishedWeight,
   type Replay,
   type TopicMessage,

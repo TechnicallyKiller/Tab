@@ -153,6 +153,96 @@ export interface CounterpartyWeight {
   token?: string
 }
 
+/* ── ceiling ─────────────────────────────────────────────────────────────── */
+
+/** The inputs a ceiling was computed from, as published. */
+export interface CeilingInputsView {
+  revenue: MicroUsdc
+  revenueAttested: MicroUsdc
+  revenueUnattested: MicroUsdc
+  tier: 'A' | 'B' | 'C' | 'Unrated'
+  /** Tier multiple, basis points. 10000 = 1.0x, 0 = no credit at all. */
+  multBp: number
+  /** Ramp factor, basis points. */
+  rampBp: number
+  cap: MicroUsdc
+  floor: MicroUsdc
+  /** Has this tab ever missed a settlement? Zero credit if so, whatever the revenue. */
+  defaulted: boolean
+}
+
+/** One published ceiling. */
+export interface PublishedCeilingView {
+  ceiling: MicroUsdc
+  /** The formula's result, when the asymmetry rule is holding a growth back. */
+  computed?: MicroUsdc
+  window: number
+  binding: string
+  cause: string
+  at: string
+  model: string
+  hash: string
+  seq?: number
+  inputs: CeilingInputsView
+}
+
+/**
+ * A tab's ceiling, with the series behind it.
+ *
+ * `published: false` is the NORMAL state for a tab's first minutes — the engine
+ * has not run yet and the starter ceiling is in force. It is not an error, and
+ * `enforced` is populated either way, because something is always being
+ * enforced.
+ */
+export interface CeilingView {
+  tab: string
+  published: boolean
+  /**
+   * What the fast path is actually checking right now.
+   *
+   * Normally equal to `current.ceiling`. When it is not, the gap is the most
+   * useful number on the screen: the gateway polls the topic every 15s, so a
+   * fresh collapse can be published and not yet enforced.
+   */
+  enforced: MicroUsdc
+  current?: PublishedCeilingView
+  /** Ascending. The last element is `current`. */
+  history: readonly PublishedCeilingView[]
+  /** Set when nothing has been published — says what is in force instead. */
+  note?: string
+}
+
+/* ── settlements ─────────────────────────────────────────────────────────── */
+
+/**
+ * One settled window.
+ *
+ * The gross legs are OPTIONAL because settlements published before those fields
+ * existed do not carry them. A reader must render absent as "not published"
+ * rather than as `0.0000` — a window whose credits were genuinely zero and one
+ * that never recorded its credits are different facts, and showing both as zero
+ * invents a netting that was never published.
+ */
+export interface SettlementView {
+  window: number
+  at: string
+  seq?: number
+  /** Signed. Positive paid out to the agent, negative carried as outstanding. */
+  net: MicroUsdc
+  credits?: MicroUsdc
+  debits?: MicroUsdc
+  interest?: MicroUsdc
+  outstanding?: MicroUsdc
+  /** How many receipts collapsed into the one movement. */
+  receiptCount?: number
+  outcome: 'clean' | 'missed' | 'carried'
+  rampFromBp: number
+  rampToBp: number
+  /** Absent when the window was missed and nothing moved. */
+  transactionId?: string
+  token?: string
+}
+
 /* ── receipts ───────────────────────────────────────────────────────────── */
 
 export type ReceiptLeg = 'hold' | 'debit' | 'credit' | 'refusal' | 'repair' | 'settlement'

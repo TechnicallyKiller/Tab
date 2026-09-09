@@ -135,6 +135,29 @@ export interface SettlementEntry extends EntryBase {
    */
   rampFromBp: number
   rampToBp: number
+  /**
+   * The gross legs the net collapsed from, and how many receipts collapsed.
+   *
+   * On the entry rather than in a second decoder because the console's
+   * settlements view exists to show ONE claim: many receipts became one
+   * transfer. Showing only `net` shows the transfer and hides the netting,
+   * which is the part worth proving — and a parallel `settlementsFromMessages`
+   * would be a fourth private replay copy, the exact mistake that lost holds on
+   * every gateway restart.
+   *
+   * Optional because settlements published before these fields existed decode
+   * without them. A reader must treat absent as unknown, NOT as zero: a
+   * settlement whose credits are genuinely 0.000000 and one that never recorded
+   * its credits are different facts, and rendering both as `0.0000` invents
+   * a netting that was never published.
+   */
+  credits?: MicroUsdc
+  debits?: MicroUsdc
+  interest?: MicroUsdc
+  /** How many receipts collapsed into the one movement. */
+  receiptCount?: number
+  /** Carried into the next window when net is negative. */
+  outstanding?: MicroUsdc
 }
 
 export type Entry =

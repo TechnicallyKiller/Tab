@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { paymentMiddleware } from '@x402/fastify'
 import { format, usdc, toWire } from '@tab/money'
 import { REFUSAL_GUIDANCE, isRetryable } from '@tab/protocol'
+import type { PublishedCeiling } from '@tab/ledger'
 import { createEarnServer, type Asset, type TabFacilitator } from '@tab/x402'
 import { serveAndCredit, type AgentEndpoint } from './earn.ts'
 import { nowConsensus } from './receipts.ts'
@@ -20,6 +21,41 @@ export interface EarnConfig {
   asset: Asset
   network: string
   endpoint: AgentEndpoint
+}
+
+/**
+ * One published ceiling, on the wire.
+ *
+ * Amounts through `toWire`; basis points stay integers. `inputs` is renamed
+ * from the terse on-topic keys (`revAtt`, `mult`) to readable ones, which is
+ * safe ONLY because nothing rehashes this: `hash` is over the canonical
+ * on-topic object, and `tools/verify` reads the topic directly rather than
+ * this endpoint. Renaming keys in a payload someone might rehash would make
+ * every ceiling look forged.
+ */
+function wireCeiling(c: PublishedCeiling) {
+  return {
+    ceiling: toWire(c.ceiling),
+    ...(c.computed ? { computed: toWire(c.computed) } : {}),
+    window: c.window,
+    binding: c.binding,
+    cause: c.cause,
+    at: c.at,
+    model: c.model,
+    hash: c.hash,
+    ...(c.seq !== undefined ? { seq: c.seq } : {}),
+    inputs: {
+      revenue: toWire(c.inputs.rev),
+      revenueAttested: toWire(c.inputs.revAttested),
+      revenueUnattested: toWire(c.inputs.revUnattested),
+      tier: c.inputs.tier,
+      multBp: c.inputs.multBp,
+      rampBp: c.inputs.rampBp,
+      cap: toWire(c.inputs.cap),
+      floor: toWire(c.inputs.floor),
+      defaulted: c.inputs.defaulted,
+    },
+  }
 }
 
 export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance {
@@ -226,6 +262,94 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
         at: w.at,
         ...(w.token ? { token: w.token } : {}),
       }))
+  })
+
+  /**
+   * The ceiling in force, its arithmetic, and the series behind it.
+   *
+   * Served from the CEILING TOPIC, not recomputed. The gateway cannot import
+   * `@tab/scoring` and should not: a console that recomputed the ceiling would
+   * give a viewer a second answer to compare against the topic, and the whole
+   * argument for having no contract is that there is one public record and
+   * everyone reads it.
+   *
+   * `inputs` is included so the view can show the calculation. A ceiling of
+   * `0.0000` with no arithmetic beside it reads as a bug; the same zero next to
+   * `tier Unrated · mult 0x · cause graph_change` reads as the rail working,
+   * which is what it is.
+   */
+  app.get('/v1/tabs/:tab/ceiling', async (request, reply) => {
+    const { tab } = request.params as { tab: string }
+    const history = deps.ceilings?.().get(tab) ?? []
+    const current = history.at(-1)
+
+    if (!current) {
+      /*
+       * 200 with an explicit `published: false`, not a 404.
+       *
+       * A tab with no published ceiling yet is the NORMAL state for the first
+       * minutes of its life — the engine has not run — and the gateway is
+       * enforcing the starter ceiling meanwhile. A 404 would make the console
+       * render an error for a healthy tab, and would hide the fact that a real
+       * limit is in force.
+       */
+      return reply.send({
+        tab,
+        published: false,
+        enforced: toWire(deps.state.ceilingFor(tab)),
+        note: 'No ceiling published yet — the starter ceiling is in force. Run the engine.',
+        history: [],
+      })
+    }
+
+    return reply.send({
+      tab,
+      published: true,
+      ...wireCeiling(current),
+      /*
+       * What the FAST PATH is actually enforcing, alongside what was published.
+       *
+       * These are normally equal, and when they are not, that gap is the single
+       * most useful number on the screen: the ceiling poll runs every 15s, so a
+       * fresh collapse can be on the topic and not yet in force. A console
+       * showing only the published value would tell an operator a spend will be
+       * refused when it is about to succeed.
+       */
+      enforced: toWire(deps.state.ceilingFor(tab)),
+      history: history.map(wireCeiling),
+    })
+  })
+
+  /**
+   * Settled windows, from the settlements topic.
+   *
+   * The gross legs travel with the net on purpose. This view exists to show one
+   * claim — many receipts became one transfer — and `net` alone shows the
+   * transfer while hiding the netting, which is the part worth proving.
+   */
+  app.get('/v1/tabs/:tab/settlements', async (request) => {
+    const { tab } = request.params as { tab: string }
+    const rows = deps.settlements?.().get(tab) ?? []
+    return rows.map((s) => ({
+      window: s.window,
+      at: s.at,
+      ...(s.seq !== undefined ? { seq: s.seq } : {}),
+      net: toWire(s.net),
+      // Absent on settlements published before these fields existed. Passed
+      // through as absent rather than defaulted to "0.000000": a window whose
+      // credits were genuinely zero and one that never recorded them are
+      // different facts, and the console must be able to say "not published".
+      ...(s.credits !== undefined ? { credits: toWire(s.credits) } : {}),
+      ...(s.debits !== undefined ? { debits: toWire(s.debits) } : {}),
+      ...(s.interest !== undefined ? { interest: toWire(s.interest) } : {}),
+      ...(s.outstanding !== undefined ? { outstanding: toWire(s.outstanding) } : {}),
+      ...(s.receiptCount !== undefined ? { receiptCount: s.receiptCount } : {}),
+      outcome: s.outcome,
+      rampFromBp: s.rampFromBp,
+      rampToBp: s.rampToBp,
+      ...(s.transactionId ? { transactionId: s.transactionId } : {}),
+      ...(s.token ? { token: s.token } : {}),
+    }))
   })
 
   app.get('/v1/tabs/:tab/entries', async (request) => {

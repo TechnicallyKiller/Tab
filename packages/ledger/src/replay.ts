@@ -1,5 +1,5 @@
 import { usdc, type MicroUsdc } from '@tab/money'
-import { decode, type WeightReason } from '@tab/protocol'
+import { decode, type CeilingUpdate, type WeightReason } from '@tab/protocol'
 import { inConsensusOrder, type Entry } from './entries.ts'
 
 /**
@@ -106,6 +106,12 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
           kind: 'settlement', at: message.consensusTimestamp, window: msg.w, ...audit,
           net: usdc(msg.net), outcome: msg.outcome,
           rampFromBp: msg.rampFrom, rampToBp: msg.rampTo,
+          // The gross legs, so a reader can see the netting rather than only
+          // its result. Required by the schema, so always present here — the
+          // entry types them optional for messages written before they were.
+          credits: usdc(msg.credits), debits: usdc(msg.debits),
+          interest: usdc(msg.interest), receiptCount: msg.n,
+          outstanding: usdc(msg.outstanding),
           ...(msg.tx ? { transactionId: msg.tx } : {}),
         }
         break
@@ -125,6 +131,31 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
   return { byTab, replayed, skipped }
 }
 
+/**
+ * The published inputs a ceiling was computed from.
+ *
+ * Carried through verbatim in TYPE but not in SHAPE: `tools/verify` keeps its
+ * own untyped reader precisely because it must rehash the object with its key
+ * order intact, and a typed round-trip through this interface could reorder
+ * keys. This copy is for READING — showing an operator the arithmetic — and
+ * must never be rehashed.
+ */
+export interface PublishedCeilingInputs {
+  /** Trailing revenue, and the split that makes the unattested discount auditable. */
+  rev: MicroUsdc
+  revAttested: MicroUsdc
+  revUnattested: MicroUsdc
+  tier: 'A' | 'B' | 'C' | 'Unrated'
+  /** Tier multiple, basis points. 10000 = 1.0x. */
+  multBp: number
+  /** Ramp factor, basis points. */
+  rampBp: number
+  cap: MicroUsdc
+  floor: MicroUsdc
+  /** Has this tab ever missed a settlement? Absent on older messages = false. */
+  defaulted: boolean
+}
+
 /** The ceiling in force for a tab, as published. */
 export interface PublishedCeiling {
   tab: string
@@ -137,6 +168,54 @@ export interface PublishedCeiling {
   at: string
   model: string
   hash: string
+  /**
+   * The numbers behind the decision.
+   *
+   * Published on the message itself, so a console can show the calculation
+   * rather than only its result — a ceiling of `0.0000` with no arithmetic
+   * beside it reads as a bug, and the whole claim of this rail is that a
+   * refusal is explainable from the public record.
+   */
+  inputs: PublishedCeilingInputs
+  /** HCS sequence number, the thing to cite in an audit. */
+  seq?: number
+}
+
+/**
+ * One ceiling message → a snapshot. Shared by both readers below.
+ *
+ * `def` is normalised to a boolean here rather than left optional. It is absent
+ * on ceilings published before the field existed, and absent means false —
+ * making that explicit at the decode boundary stops every downstream reader
+ * from having to remember which of `undefined` and `false` it is looking at.
+ * The distinction matters: a tab with no history and a tab that DEFAULTED both
+ * read as Unrated, and only this flag separates "gets the starter floor" from
+ * "gets exactly zero".
+ */
+function publishedCeiling(msg: CeilingUpdate, message: TopicMessage): PublishedCeiling {
+  return {
+    tab: msg.tab,
+    ceiling: usdc(msg.ceil),
+    ...(msg.computed ? { computed: usdc(msg.computed) } : {}),
+    window: msg.w,
+    binding: msg.bind,
+    cause: msg.cause,
+    at: message.consensusTimestamp,
+    model: msg.model,
+    hash: msg.hash,
+    inputs: {
+      rev: usdc(msg.inputs.rev),
+      revAttested: usdc(msg.inputs.revAtt),
+      revUnattested: usdc(msg.inputs.revUnatt),
+      tier: msg.inputs.tier,
+      multBp: msg.inputs.mult,
+      rampBp: msg.inputs.ramp,
+      cap: usdc(msg.inputs.cap),
+      floor: usdc(msg.inputs.floor),
+      defaulted: msg.inputs.def ?? false,
+    },
+    ...(message.sequenceNumber !== undefined ? { seq: message.sequenceNumber } : {}),
+  }
 }
 
 /**
@@ -160,19 +239,39 @@ export function ceilingsFromMessages(
     const result = decode(utf8.decode(message.payload))
     if (!result.ok || result.message.t !== 'ceiling') continue
     const msg = result.message
-    const snapshot: PublishedCeiling = {
-      tab: msg.tab,
-      ceiling: usdc(msg.ceil),
-      ...(msg.computed ? { computed: usdc(msg.computed) } : {}),
-      window: msg.w,
-      binding: msg.bind,
-      cause: msg.cause,
-      at: message.consensusTimestamp,
-      model: msg.model,
-      hash: msg.hash,
-    }
+    const snapshot = publishedCeiling(msg, message)
     const existing = byTab.get(msg.tab)
     if (!existing || snapshot.at > existing.at) byTab.set(msg.tab, snapshot)
+  }
+  return byTab
+}
+
+/**
+ * Every ceiling ever published for a tab, in consensus order.
+ *
+ * A second function rather than a flag on `ceilingsFromMessages`, because the
+ * two have genuinely different failure modes: the gateway wants ONE ceiling and
+ * must be wrong deterministically if two engines published, while the console
+ * wants the whole series and should show both. Collapsing them behind a
+ * parameter would let a caller pass the wrong one and get a plausible answer.
+ */
+export function ceilingHistoryFromMessages(
+  messages: readonly TopicMessage[],
+): Map<string, PublishedCeiling[]> {
+  const byTab = new Map<string, PublishedCeiling[]>()
+  for (const message of messages) {
+    const result = decode(utf8.decode(message.payload))
+    if (!result.ok || result.message.t !== 'ceiling') continue
+    const snapshot = publishedCeiling(result.message, message)
+    const list = byTab.get(snapshot.tab)
+    if (list) list.push(snapshot)
+    else byTab.set(snapshot.tab, [snapshot])
+  }
+  // Ascending, so the last element is the one in force and a chart reads
+  // left to right. Sorted on the consensus timestamp string, which is
+  // lexicographically ordered because the nanos field is zero-padded.
+  for (const [tab, list] of byTab) {
+    byTab.set(tab, [...list].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)))
   }
   return byTab
 }

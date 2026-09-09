@@ -5,7 +5,9 @@ import {
   REFUSAL_CODES, WEIGHT_REASONS,
   type RefusalCode, type WeightReason,
 } from '@tab/protocol'
-import type { CounterpartyWeight, Hold, ReceiptRow } from './types.ts'
+import type {
+  CeilingView, CounterpartyWeight, Hold, PublishedCeilingView, ReceiptRow, SettlementView,
+} from './types.ts'
 
 /**
  * Validated, not cast.
@@ -138,4 +140,124 @@ export async function counterparties(
 
 function knownReason(value: unknown): value is WeightReason {
   return typeof value === 'string' && (WEIGHT_REASONS as readonly string[]).includes(value)
+}
+
+const TIERS = ['A', 'B', 'C', 'Unrated'] as const
+const OUTCOMES = ['clean', 'missed', 'carried'] as const
+
+/** Validated, not cast — an unknown tier would render as a real one. */
+function tierOf(value: unknown): PublishedCeilingView['inputs']['tier'] {
+  return typeof value === 'string' && (TIERS as readonly string[]).includes(value)
+    ? (value as PublishedCeilingView['inputs']['tier'])
+    : 'Unrated'
+}
+
+function outcomeOf(value: unknown): SettlementView['outcome'] {
+  return typeof value === 'string' && (OUTCOMES as readonly string[]).includes(value)
+    ? (value as SettlementView['outcome'])
+    : 'carried'
+}
+
+function ceilingOf(r: Record<string, unknown>): PublishedCeilingView {
+  const inputs = (r['inputs'] ?? {}) as Record<string, unknown>
+  return {
+    ceiling: parseAmount(r['ceiling'], 'ceiling.ceiling'),
+    ...(r['computed'] !== undefined && r['computed'] !== null
+      ? { computed: parseAmount(r['computed'], 'ceiling.computed') }
+      : {}),
+    window: Number(r['window'] ?? 0),
+    binding: String(r['binding'] ?? 'unknown'),
+    cause: String(r['cause'] ?? 'unknown'),
+    at: String(r['at'] ?? ''),
+    model: String(r['model'] ?? ''),
+    hash: String(r['hash'] ?? ''),
+    ...(r['seq'] !== undefined && r['seq'] !== null ? { seq: Number(r['seq']) } : {}),
+    inputs: {
+      revenue: parseAmount(inputs['revenue'], 'ceiling.inputs.revenue'),
+      revenueAttested: parseAmount(inputs['revenueAttested'], 'ceiling.inputs.revenueAttested'),
+      revenueUnattested: parseAmount(inputs['revenueUnattested'], 'ceiling.inputs.revenueUnattested'),
+      tier: tierOf(inputs['tier']),
+      multBp: Number(inputs['multBp'] ?? 0),
+      rampBp: Number(inputs['rampBp'] ?? 0),
+      cap: parseAmount(inputs['cap'], 'ceiling.inputs.cap'),
+      floor: parseAmount(inputs['floor'], 'ceiling.inputs.floor'),
+      defaulted: inputs['defaulted'] === true,
+    },
+  }
+}
+
+/**
+ * The ceiling in force, its arithmetic, and the series behind it.
+ *
+ * Read from what the ENGINE published, never recomputed — the SDK is
+ * browser-safe and cannot import `@tab/scoring`, and that is the right
+ * constraint. A client that recomputed the ceiling would hand a viewer a second
+ * answer to compare against the topic, and two answers is worse than one even
+ * when they agree.
+ *
+ * `published: false` is not an error. It means the engine has not run for this
+ * tab yet and the starter ceiling is in force — `enforced` says what that is.
+ */
+export async function ceiling(client: TabClient, tab: string): Promise<CeilingView> {
+  if (!tab) throw new TabInvalidError('ceiling() needs a tab id')
+  const body = await client.request<Record<string, unknown>>('GET', `/v1/tabs/${tab}/ceiling`)
+  const history = (Array.isArray(body['history']) ? body['history'] : []).map(
+    (row) => ceilingOf(row as Record<string, unknown>),
+  )
+  const published = body['published'] === true
+  return {
+    tab: String(body['tab'] ?? tab),
+    published,
+    enforced: parseAmount(body['enforced'], 'ceiling.enforced'),
+    // `current` is the last history element rather than a separate parse of the
+    // top-level fields, so "the number in force" and "the last point on the
+    // chart" cannot disagree on screen.
+    ...(published && history.length > 0 ? { current: history[history.length - 1]! } : {}),
+    history,
+    ...(body['note'] ? { note: String(body['note']) } : {}),
+  }
+}
+
+/**
+ * Settled windows, ascending by window.
+ *
+ * Ordered by WINDOW rather than by arrival: a repaired or late settlement lands
+ * on the topic after the windows that follow it, and a table sorted by
+ * timestamp would put window 41 above window 39 with no explanation.
+ *
+ * The gross legs come through as absent when the topic did not carry them. A
+ * caller must render that as "not published", never as zero.
+ */
+export async function settlements(client: TabClient, tab: string): Promise<SettlementView[]> {
+  if (!tab) throw new TabInvalidError('settlements() needs a tab id')
+  const rows = await client.request<Record<string, unknown>[]>(
+    'GET',
+    `/v1/tabs/${tab}/settlements`,
+  )
+  return rows.map((r) => ({
+    window: Number(r['window'] ?? 0),
+    at: String(r['at'] ?? ''),
+    ...(r['seq'] !== undefined && r['seq'] !== null ? { seq: Number(r['seq']) } : {}),
+    net: parseAmount(r['net'], 'settlement.net'),
+    ...(r['credits'] !== undefined && r['credits'] !== null
+      ? { credits: parseAmount(r['credits'], 'settlement.credits') }
+      : {}),
+    ...(r['debits'] !== undefined && r['debits'] !== null
+      ? { debits: parseAmount(r['debits'], 'settlement.debits') }
+      : {}),
+    ...(r['interest'] !== undefined && r['interest'] !== null
+      ? { interest: parseAmount(r['interest'], 'settlement.interest') }
+      : {}),
+    ...(r['outstanding'] !== undefined && r['outstanding'] !== null
+      ? { outstanding: parseAmount(r['outstanding'], 'settlement.outstanding') }
+      : {}),
+    ...(r['receiptCount'] !== undefined && r['receiptCount'] !== null
+      ? { receiptCount: Number(r['receiptCount']) }
+      : {}),
+    outcome: outcomeOf(r['outcome']),
+    rampFromBp: Number(r['rampFromBp'] ?? 0),
+    rampToBp: Number(r['rampToBp'] ?? 0),
+    ...(r['transactionId'] ? { transactionId: String(r['transactionId']) } : {}),
+    ...(r['token'] ? { token: String(r['token']) } : {}),
+  }))
 }
