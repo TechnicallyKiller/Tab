@@ -37,6 +37,7 @@
     "token:mint": "pnpm --filter @tab/bootstrap token:mint",
     "probe3": "pnpm --filter @tab/bootstrap probe3",
     "chain:status": "pnpm --filter @tab/bootstrap status",
+    "mcp": "pnpm --filter @tab/mcp start",
     "evm:account": "pnpm --filter @tab/bootstrap evm:account",
     "faucet:sweep": "pnpm --filter @tab/bootstrap faucet:sweep",
     "faucet:watch": "pnpm --filter @tab/bootstrap faucet:watch",
