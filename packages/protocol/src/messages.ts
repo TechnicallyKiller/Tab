@@ -251,9 +251,18 @@ export const ceilingUpdate = base.extend({
 export const settlement = base.extend({
   t: z.literal('settlement'),
   credits: amount,
+  /**
+   * NEGATIVE, as `@tab/ledger`'s `WindowNet` holds it. So is `interest`.
+   *
+   * Stated because the comment below used to read `credits − debits −
+   * interest`, which describes positive magnitudes and is not what is
+   * published. A console built on that comment negated `debits`, turned a debit
+   * into a credit on screen, and showed a netting panel summing to 0.190000
+   * above a published net of 0.110000.
+   */
   debits: amount,
   interest: amount,
-  /** credits − debits − interest. One transfer for the whole window. */
+  /** credits + debits + interest, the latter two negative. One transfer per window. */
   net: amount,
   /** How many receipts collapsed into that one movement. */
   n: z.number().int().nonnegative(),

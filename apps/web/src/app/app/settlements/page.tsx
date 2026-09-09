@@ -63,10 +63,20 @@ function fromLive(s: SettlementView): Row {
     window: fmtSeq(s.window),
     range: rangeOf(s.window),
     credits: s.credits ?? usdc('0.000000'),
-    // Debits are published as a positive magnitude and displayed as a negative
-    // leg, because the netting panel reads as a calculation and a plus sign on
-    // a debit breaks the arithmetic on screen.
-    debits: s.debits === undefined ? usdc('0.000000') : micro(-s.debits),
+    /*
+     * Debits and interest are published NEGATIVE, and passed through as-is.
+     *
+     * My first version negated `debits`, assuming the topic stored a positive
+     * magnitude. It does not: `@tab/ledger`'s `WindowNet` documents both as
+     * negative and defines `net = credits + debits + interest`. The live topic
+     * agrees — window 5962288 carries `credits 0.150000 · debits -0.040000 ·
+     * net 0.110000`. Negating here turned a debit into a credit on screen and
+     * made the netting panel sum to 0.190000 against a published net of
+     * 0.110000.
+     *
+     * So the column reads as a vertical addition, which is what it should be.
+     */
+    debits: s.debits ?? usdc('0.000000'),
     interest: s.interest ?? usdc('0.000000'),
     net: s.net,
     rampFromBp: bp(s.rampFromBp),
@@ -217,9 +227,20 @@ function Netting({ s }: { s: Row }) {
   const rows: [string, string, string, number][] = [
     ['credits', format(s.credits, { sign: 'always' }), 'var(--credit)', 400],
     ['debits', format(s.debits, { sign: 'always' }), 'var(--debit)', 400],
-    ['interest', format(s.interest), 'var(--ink-2)', 400],
+    ['interest', format(s.interest, { sign: 'always' }), 'var(--ink-2)', 400],
     ['net transfer', format(s.net, { sign: 'always' }), 'var(--ink)', 600],
   ]
+
+  /*
+   * Does the column actually add up?
+   *
+   * `net = credits + debits + interest`, the latter two negative. Checked on
+   * screen rather than assumed, because this exact assumption was wrong once:
+   * an earlier version of this file negated `debits`, and the panel then showed
+   * four figures summing to 0.190000 above a published net of 0.110000. Nobody
+   * would have noticed until someone added them up on camera.
+   */
+  const sums = !s.netted || s.credits + s.debits + s.interest === s.net
   return (
     <div className="rule-t" style={{ background: 'var(--sunk)', padding: 20, display: 'flex', flexWrap: 'wrap', gap: 40 }}>
       <div>
@@ -265,6 +286,16 @@ function Netting({ s }: { s: Row }) {
         {s.netted ? (
           <div className="t-figure" style={{ fontSize: 24, color: 'var(--ink)' }}>
             {s.receiptCount} receipts → 1 transfer
+          </div>
+        ) : null}
+        {!sums ? (
+          <div style={{ color: 'var(--debit)', lineHeight: 1.6, maxWidth: 320 }}>
+            <strong>The legs do not sum to the net.</strong> Published{' '}
+            {format(s.credits, { sign: 'always' })} {format(s.debits, { sign: 'always' })}{' '}
+            {format(s.interest, { sign: 'always' })} ={' '}
+            {format(micro(s.credits + s.debits + s.interest), { sign: 'always' })}, but the net on
+            the topic is {format(s.net, { sign: 'always' })}. Shown rather than reconciled — run{' '}
+            <code>pnpm reconcile</code>, which audits the money against Mirror Node.
           </div>
         ) : null}
         <div>

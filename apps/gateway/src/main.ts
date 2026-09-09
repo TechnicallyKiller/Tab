@@ -103,6 +103,19 @@ async function syncCeilings(label: string): Promise<void> {
   }
   if (replay.read === 0) {
     console.log(`  ceiling ${label}   none published yet — holding the starter ceiling`)
+    return
+  }
+  if (label === 'boot ') {
+    /*
+     * Always print SOMETHING on boot.
+     *
+     * The loop above only logs a tab whose ceiling CHANGED, so a restart that
+     * resumed the exact ceiling it already had printed nothing after the
+     * `ceilings` progress prefix — and the next line ran on directly, giving
+     * `ceilings          settlements       settlements boot  5 window(s)`. A
+     * boot line that renders as garbage is a boot line nobody reads.
+     */
+    console.log(`${replay.byTab.size} tab(s) · ${replay.read} message(s) on the ceiling topic`)
   }
 }
 
@@ -166,7 +179,9 @@ async function syncSettlements(label: string): Promise<void> {
   const replay = await replaySettlements(mirror, env.settlementTopic)
   latestSettlements = replay.byTab
   const total = [...replay.byTab.values()].reduce((n, list) => n + list.length, 0)
-  console.log(`  settlements ${label} ${total} window(s) across ${replay.byTab.size} tab(s)`)
+  if (label === 'boot ') {
+    console.log(`${total} settlement(s) across ${replay.byTab.size} tab(s)`)
+  }
 }
 
 process.stdout.write('  settlements     ')

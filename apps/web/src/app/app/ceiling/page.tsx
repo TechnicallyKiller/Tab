@@ -1,6 +1,6 @@
 'use client'
 
-import { MODEL_ID as MODEL_VERSION, params } from '@tab/params'
+import { MODEL_ID as MODEL_VERSION, caps, params } from '@tab/params'
 import type { PublishedCeilingView } from '@tab/sdk'
 import { Card, CardHead, Chip } from '@/components/ui'
 import { CopyButton } from '@/components/ui/copy-button'
@@ -148,20 +148,33 @@ export default function CeilingView() {
   const current = value.current
   const history = value.history
 
-  // Scale from the real maximum ever published, or the hard cap if that is
-  // higher — so a collapse to zero reads as a drop from somewhere rather than a
-  // flat line at the bottom of a chart fitted to zero.
+  /*
+   * Scale from the largest ceiling ever PUBLISHED — never from the hard cap.
+   *
+   * Seeding this with `inputs.cap` seemed safer and was wrong on live data: the
+   * cap is 100.000000 while no ceiling this tab ever held exceeded 1.000000, so
+   * the whole eleven-point series — including the one collapse worth showing —
+   * drew as a flat line one pixel off the bottom axis.
+   *
+   * The starter floor is the fallback when every published ceiling is zero, so
+   * a tab that has only ever been blocked still gets a scale rather than a
+   * division by zero.
+   */
   const ceilingMax = history.reduce(
     (m, c) => (c.ceiling > m ? c.ceiling : m),
-    current?.inputs.cap ?? micro(0n),
+    micro(0n),
   )
-  const path = stepPath(history, ceilingMax)
-  const lastX =
-    PLOT.left + (history.length <= 1 ? PLOT.right - PLOT.left : PLOT.right - PLOT.left)
+  const scaleMax =
+    ceilingMax > 0n ? ceilingMax : (current?.inputs.floor ?? caps.starterCeiling)
+  const path = stepPath(history, scaleMax)
+  // The endpoint marker always sits at the right edge, because `stepPath` maps
+  // the last element there. (This was a ternary whose two branches computed the
+  // same number — dead choice, kept nothing.)
+  const lastX = PLOT.right
   const lastY =
-    ceilingMax <= 0n || !current
+    scaleMax <= 0n || !current
       ? PLOT.bottom
-      : PLOT.bottom - ((PLOT.bottom - PLOT.top) * Number(current.ceiling)) / Number(ceilingMax)
+      : PLOT.bottom - ((PLOT.bottom - PLOT.top) * Number(current.ceiling)) / Number(scaleMax)
 
   /** The gap that matters: published vs what the fast path is checking now. */
   const lagging = current !== undefined && current.ceiling !== value.enforced
@@ -326,7 +339,7 @@ export default function CeilingView() {
                       series is honest rather than fitted to a fixed scale. */}
                   {[0, 1, 2, 3, 4].map((i) => (
                     <text key={i} x={8} y={PLOT.bottom + 4 - ((PLOT.bottom - PLOT.top) * i) / 4}>
-                      {format(micro((ceilingMax * BigInt(i)) / 4n))}
+                      {format(micro((scaleMax * BigInt(i)) / 4n))}
                     </text>
                   ))}
                 </g>
