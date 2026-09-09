@@ -7,6 +7,7 @@ import {
 } from '@tab/protocol'
 import type {
   CeilingView, CounterpartyWeight, Hold, PublishedCeilingView, ReceiptRow, SettlementView,
+  TabList, TabSummary,
 } from './types.ts'
 
 /**
@@ -260,4 +261,53 @@ export async function settlements(client: TabClient, tab: string): Promise<Settl
     ...(r['transactionId'] ? { transactionId: String(r['transactionId']) } : {}),
     ...(r['token'] ? { token: String(r['token']) } : {}),
   }))
+}
+
+/**
+ * The tabs this gateway knows about.
+ *
+ * Named `tabs`, not `registry`, and the response carries
+ * `registrationEnforced: false` so a caller cannot mistake it for one. Nothing
+ * writes a `register` message yet — one Starter Tab per funding root is
+ * unenforced and the README labels it OPEN — so a tab appears here the first
+ * time it spends or earns, and there is no registration time to report.
+ */
+export async function tabs(client: TabClient): Promise<TabList> {
+  const body = await client.request<Record<string, unknown>>('GET', '/v1/tabs')
+  const rows = Array.isArray(body['tabs']) ? body['tabs'] : []
+  return {
+    window: Number(body['window'] ?? 0),
+    /*
+     * Defaults to FALSE when the field is absent, never true.
+     *
+     * An older gateway that does not send it has no registration flow either,
+     * so absence means unenforced. Defaulting the permissive way round would
+     * let a stale server silently license the "Registry" heading.
+     */
+    registrationEnforced: body['registrationEnforced'] === true,
+    note: String(body['note'] ?? ''),
+    tabs: rows.map((raw) => {
+      const r = raw as Record<string, unknown>
+      const summary: TabSummary = {
+        tab: String(r['tab']),
+        balance: parseAmount(r['balance'], 'tab.balance'),
+        outstanding: parseAmount(r['outstanding'], 'tab.outstanding'),
+        holds: parseAmount(r['holds'], 'tab.holds'),
+        available: parseAmount(r['available'], 'tab.available'),
+        ceiling: parseAmount(r['ceiling'], 'tab.ceiling'),
+        entries: Number(r['entries'] ?? 0),
+        // Absent stays absent. An unpublished tab has no tier, which is not the
+        // same as being Unrated.
+        ...(r['tier'] !== undefined && r['tier'] !== null ? { tier: tierOf(r['tier']) } : {}),
+        ...(r['publishedCeiling'] !== undefined && r['publishedCeiling'] !== null
+          ? { publishedCeiling: parseAmount(r['publishedCeiling'], 'tab.publishedCeiling') }
+          : {}),
+        ...(r['binding'] ? { binding: String(r['binding']) } : {}),
+        ...(r['cause'] ? { cause: String(r['cause']) } : {}),
+        ...(r['model'] ? { model: String(r['model']) } : {}),
+        ...(r['seq'] !== undefined && r['seq'] !== null ? { seq: Number(r['seq']) } : {}),
+      }
+      return summary
+    }),
+  }
 }

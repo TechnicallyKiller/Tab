@@ -68,6 +68,9 @@ function toReceipt(row: ReceiptRow): Receipt {
     attested: row.attested ?? false,
     ...(row.requestHash ? { requestHash: row.requestHash } : {}),
     ...(row.seq !== undefined ? { seq: row.seq } : {}),
+    // Carried so the tab view can sum THIS window's spend from the rows it
+    // already holds, instead of printing a constant.
+    window: row.window,
   }
 }
 

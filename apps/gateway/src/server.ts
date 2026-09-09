@@ -212,6 +212,67 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
   })
 
   /** What the SDK and dashboard read. */
+  /**
+   * Every tab this gateway knows about.
+   *
+   * "Knows about" is the honest framing, and the console says so: this is
+   * whatever appeared on the RECEIPT TOPIC during replay, not a registry.
+   * **Nothing writes a `register` message yet** — one Starter Tab per funding
+   * root is unenforced, and the README labels it OPEN — so there is no
+   * registration timestamp to report and none is invented. A tab appears here
+   * the first time it spends or earns, and that is all this endpoint claims.
+   *
+   * Deliberately unpaginated. `state.tabs()` is bounded by the number of tabs
+   * that have ever transacted against this gateway, which on testnet is three;
+   * a cursor here would be an interface promising a scale the projection does
+   * not have (it is a single-instance in-memory map — see `state.ts`).
+   */
+  app.get('/v1/tabs', async () => {
+    const at = nowConsensus()
+    const ceilings = deps.ceilings?.()
+    return {
+      window: deps.window(),
+      /*
+       * Stated on the response, not left for a reader to assume.
+       *
+       * A console that renders this list under the heading "Registry" is making
+       * a claim the system does not support, and the fix belongs here rather
+       * than in the view — every consumer of this endpoint needs to know.
+       */
+      registrationEnforced: false,
+      note:
+        'Tabs seen on the receipt topic during replay. No registration flow exists yet, so ' +
+        'there is no registration time and one Starter Tab per funding root is UNENFORCED.',
+      tabs: deps.state.tabs().map((tab) => {
+        const p = deps.state.position(tab, at)
+        const published = ceilings?.get(tab)?.at(-1)
+        return {
+          tab,
+          balance: toWire(p.balance),
+          outstanding: toWire(p.outstanding),
+          holds: toWire(p.holds),
+          available: toWire(p.available),
+          /** What the fast path enforces for this tab, right now. */
+          ceiling: toWire(p.ceiling),
+          entries: deps.state.entriesFor(tab).length,
+          // Present only when the engine has published for this tab. A tier is
+          // never guessed from the balance — an unpublished tab has no tier,
+          // which is a different fact from being Unrated.
+          ...(published
+            ? {
+                tier: published.inputs.tier,
+                publishedCeiling: toWire(published.ceiling),
+                binding: published.binding,
+                cause: published.cause,
+                model: published.model,
+                seq: published.seq,
+              }
+            : {}),
+        }
+      }),
+    }
+  })
+
   app.get('/v1/tabs/:tab', async (request) => {
     const { tab } = request.params as { tab: string }
     const at = nowConsensus()

@@ -243,6 +243,50 @@ export interface SettlementView {
   token?: string
 }
 
+/* ── tabs ────────────────────────────────────────────────────────────────── */
+
+/**
+ * One tab as the gateway knows it.
+ *
+ * `tier` and the `published*` fields are OPTIONAL and absent until the engine
+ * has published a ceiling for this tab. An unpublished tab has NO tier, which
+ * is a different fact from being `Unrated` — guessing one from the balance
+ * would put a rating on screen that no topic carries.
+ */
+export interface TabSummary {
+  tab: string
+  balance: MicroUsdc
+  outstanding: MicroUsdc
+  holds: MicroUsdc
+  available: MicroUsdc
+  /** What the fast path enforces for this tab right now. */
+  ceiling: MicroUsdc
+  entries: number
+  tier?: 'A' | 'B' | 'C' | 'Unrated'
+  publishedCeiling?: MicroUsdc
+  binding?: string
+  cause?: string
+  model?: string
+  seq?: number
+}
+
+/**
+ * The tabs this gateway has seen — NOT a registry.
+ *
+ * `registrationEnforced` is `false` and will stay false until a registration
+ * flow exists: nothing writes a `register` message, so there is no registration
+ * time and one Starter Tab per funding root is unenforced. It is on the
+ * response rather than left to a caller's assumption, because a consumer
+ * rendering this list under the heading "Registry" would be making a claim the
+ * system does not support.
+ */
+export interface TabList {
+  window: number
+  registrationEnforced: boolean
+  note: string
+  tabs: readonly TabSummary[]
+}
+
 /* ── receipts ───────────────────────────────────────────────────────────── */
 
 export type ReceiptLeg = 'hold' | 'debit' | 'credit' | 'refusal' | 'repair' | 'settlement'

@@ -248,7 +248,7 @@ test('every verb is present exactly once', () => {
   // once, here, is what stops those three drifting.
   assert.deepEqual(Object.keys(tab).sort(), [
     'ceiling', 'counterparties', 'health', 'holds', 'quote',
-    'receipts', 'settlements', 'spend', 'state',
+    'receipts', 'settlements', 'spend', 'state', 'tabs',
   ])
   // Exactly TWO of the nine act. The other seven read what was published, and
   // this package cannot import `@tab/scoring` or `@tab/graph`, so it is
@@ -512,4 +512,63 @@ test('the read verbs refuse an empty tab id before touching the network', async 
   await assert.rejects(() => tab.ceiling(''), /needs a tab id/)
   await assert.rejects(() => tab.settlements(''), /needs a tab id/)
   assert.equal(calls.length, 0)
+})
+
+test('the tab list is not a registry, and says so', async () => {
+  const { doFetch } = fakeGateway(() => ({
+    body: {
+      window: 5963112,
+      registrationEnforced: false,
+      note: 'Tabs seen on the receipt topic during replay.',
+      tabs: [
+        {
+          tab: '0.0.10390398',
+          balance: '4.750000',
+          outstanding: '0.000000',
+          holds: '0.000000',
+          available: '0.250000',
+          ceiling: '0.250000',
+          entries: 21,
+          tier: 'C',
+          publishedCeiling: '0.250000',
+          binding: 'starter_floor',
+          model: 'tab-v2',
+          seq: 12,
+        },
+        // Never published for — so no tier, not `Unrated`.
+        {
+          tab: '0.0.10385196',
+          balance: '-0.040000',
+          outstanding: '0.040000',
+          holds: '0.000000',
+          available: '0.210000',
+          ceiling: '0.250000',
+          entries: 4,
+        },
+      ],
+    },
+  }))
+  const list = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).tabs()
+
+  assert.equal(list.registrationEnforced, false)
+  assert.equal(list.tabs.length, 2)
+  assert.equal(list.tabs[0]?.tier, 'C')
+  assert.equal(list.tabs[0]?.publishedCeiling, usdc('0.250000'))
+  // The important one: an unpublished tab has NO tier. Reading `undefined` as
+  // `Unrated` would put a rating on screen that no topic carries — and
+  // `Unrated` is not a neutral placeholder, it is the tier that means no
+  // credit at all.
+  assert.equal(list.tabs[1]?.tier, undefined)
+  assert.equal(list.tabs[1]?.publishedCeiling, undefined)
+  // The enforced ceiling is still there, because something is always enforced.
+  assert.equal(list.tabs[1]?.ceiling, usdc('0.250000'))
+})
+
+test('a gateway that omits `registrationEnforced` is read as NOT enforcing', async () => {
+  // An older gateway that does not send the field has no registration flow
+  // either. Defaulting the permissive way round would let a stale server
+  // silently license a "Registry" heading the system cannot support.
+  const { doFetch } = fakeGateway(() => ({ body: { window: 1, tabs: [] } }))
+  const list = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).tabs()
+  assert.equal(list.registrationEnforced, false)
 })

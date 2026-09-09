@@ -26,6 +26,15 @@ export interface Receipt {
    */
   requestHash?: string
   seq?: number
+  /**
+   * The window this receipt was filed into.
+   *
+   * Carried so a view can compute this window's spend from the rows it already
+   * has, rather than showing a hardcoded figure — the tab view's "window spend"
+   * tile read `0.62 / 1.00` for its entire life. Optional because the mock
+   * stream has no windows.
+   */
+  window?: number
   /** Set only on rows that arrived while the page was open, to drive the flash. */
   flash?: string
 }

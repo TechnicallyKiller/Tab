@@ -41,12 +41,6 @@ export const CEILING_ROWS: CeilingRow[] = [
 export const BINDING_NOTE =
   'the starter floor, not the computed value, is what the agent spends against'
 
-export const STARTER_TAB = [
-  { k: 'ceiling', v: '1.0000' },
-  { k: 'per-call cap', v: '0.0500' },
-  { k: 'sellers', v: 'allowlist' },
-  { k: 'graduates', v: 'first clean settlement' },
-]
 
 /** Stepped, because a ceiling changes discretely. A smooth curve would lie. */
 export const CEILING_HISTORY = {

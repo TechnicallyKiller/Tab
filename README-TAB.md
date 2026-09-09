@@ -399,7 +399,7 @@ A prompt-injected agent is stopped at the hook. A compromised or bypassed hook i
 
 ```mermaid
 flowchart TD
-    S1["1 · Register agent<br/>CLI or Agent Kit plugin"] --> S2["2 · Starter Tab issued<br/>$1 ceiling, allowlist sellers"]
+    S1["1 · Register agent<br/>NOT BUILT — nothing writes a register message"]:::open --> S2["2 · Starter Tab<br/>$0.25 floor · one per funding root NOT ENFORCED"]:::open
     S2 --> S3["3 · Agent spends<br/>gateway pays sellers, tab goes negative"]
     S3 --> S4["4 · Agent serves paid requests<br/>gateway collects, tab goes positive"]
     S4 --> S5["5 · Window closes<br/>net settles in one transfer"]
@@ -412,14 +412,27 @@ flowchart TD
     S10 --> S3
     S11 --> S3
     S8 --> S3
+    classDef open fill:#fff3cd,stroke:#b8860b,stroke-width:2px;
 ```
+
+**Steps 1 and 2 are OPEN, and marked so above.** Nothing writes a `register` message, so there is
+no registration time and one Starter Tab per funding root is unenforced — minting many agents from
+one wallet to farm Starter Tabs is not prevented today. `@tab/graph` already resolves funding
+roots, so the check itself is cheap once a registration flow exists. Steps 3 through 11 all run on
+live testnet. The console's `agents` view states this on screen rather than implying a registry it
+does not have.
+
+The `$0.25` is v2's starter floor. v1's was `$1.00`, and it was too high: earned credit for one
+young customer computes to `0.2352`, so the floor decided a new agent's ceiling for its entire
+early life and the *grant* dominated the *earning* — which made the product's central claim
+untestable. See `packages/params/src/versions/v2.ts`.
 
 **Dashboard views:**
 
 | View | Contents |
 |---|---|
 | **Tab** | Live balance, ceiling, available, pending holds, window countdown |
-| **Ceiling** | Current ceiling with every input broken out, tier, ramp, model version, verify button |
+| **Ceiling** | Current ceiling with every input broken out, tier, ramp, model version, published series, input hash and HCS seq — **no verify button**: a checker running inside the thing it checks proves nothing, so the view hands over the facts and the `pnpm verify-ceiling` command instead |
 | **Counterparties** | Per counterparty: weight, why counted, why discounted, why rejected |
 | **Receipts** | Live HCS receipt stream, both legs, with request hashes |
 | **Settlements** | Window history, net amounts, ramp changes |
