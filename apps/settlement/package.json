@@ -7,7 +7,8 @@
     "start": "node --experimental-strip-types --env-file=../../.env src/main.ts",
     "tick": "node --experimental-strip-types --env-file=../../.env src/main.ts --once",
     "reconcile": "node --experimental-strip-types --env-file=../../.env src/reconcile.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",
