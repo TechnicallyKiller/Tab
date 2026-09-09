@@ -21,7 +21,7 @@ written.
 
 ## Current State
 
-**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 199 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE**
+**Last updated:** 2026-09-09 by Claude · **20 of 27 packages · 266 tests · 5/5 guards · REAL USDC · CONSOLE FULLY LIVE**
 
 **Phase: the whole rail works end to end on Hedera testnet, and a stranger can verify it.** An
 agent with no key spends against a ceiling, earns through its own endpoint, settles by consensus,
@@ -60,8 +60,8 @@ Zero Solidity, enforced by `pnpm guard`.
 **Not written.** `db` · `cache` · `fastpath` · `observability` · `cli` ·
 `agentkit-plugin` · `mcp`
 
-**199 tests:** ledger 47 · scoring 28 · graph 27 · sdk 26 · params 19 · engine 19 · money 13 ·
-verify 11 · protocol 9. (`mirror` still 0 — see test debt.)
+**266 tests:** ledger 53 · mirror 49 · engine 31 · scoring 28 · graph 27 · sdk 26 · params 19 ·
+money 13 · verify 11 · protocol 9.
 
 ### Parameters: v2 is in force
 
@@ -98,12 +98,23 @@ for this.
 
 **Correctness and security. Fix these before scaling anything.**
 
-1. **The independence graph FAILS OPEN.** It re-derives funding ancestry from Mirror Node's
-   transactions-by-account index, which is *intermittent* for new accounts — measured returning 5
-   transactions once and 0 both before and after, minutes apart. When the fetch fails the
-   counterparty is weighted **independent**. Not theoretical: **the loop attacker went uncaught on
-   its first full run because of exactly this.** The point-lookup on `created_timestamp` narrowed
-   the window; only `@tab/db` closes it, by recording the edge when observed and never forgetting.
+1. **The independence graph fail-open is MOSTLY CLOSED (2026-09-09), with a named residual.**
+   Ancestry was re-derived every pass from Mirror Node's transactions-by-account index, which is
+   *intermittent* for new accounts — measured returning 5 transactions once and 0 both before and
+   after, minutes apart. A failed fetch weighted the counterparty **independent**, and the loop
+   attacker went uncaught on its first full run because of exactly this.
+
+   Observed facts now go on the **ceiling topic** as `graphFact` messages, and `factsFromMessages`
+   merges monotonically — once a funder is known, later silence cannot erase it. So an outage now
+   costs a cheaper answer rather than a wrong one. **Not `@tab/db`, deliberately:** a private
+   database would have put the graph's inputs somewhere a stranger cannot see, which is why
+   `verify-ceiling` could check a ceiling's arithmetic but never its graph. It also needs no
+   database, which matters given there is no budget.
+
+   **The residual, precisely:** an account *never successfully observed*, during an outage, is
+   still weighted independent — there is nothing to remember. Closing that needs a POLICY change
+   (discount the unverifiable rather than trust it), which moves ceilings, which needs a new
+   frozen parameter set (v3). That is the next real correctness item.
 2. **No registration flow.** Nothing writes a `register` message, so one Starter Tab per funding
    root is unenforced and bulk-minting agents to farm Starter Tabs is not prevented. The README
    labels it OPEN as of 2026-09-08. `@tab/graph` already resolves funding roots, so the check is
@@ -130,12 +141,12 @@ for this.
 9. **Replay cost grows with topic length** — every worker boot and every `verify-tab` replays from
    sequence 1. Needs periodic checkpoints.
 
-**Test debt. 11,039 lines have zero tests; ~4,200 of them are load-bearing.**
+**Test debt. `mirror` is DONE; `gateway` is now the largest untested surface.**
 
 | Package | Untested | Why it matters |
 |---|---|---|
-| `mirror` | 1,060 | **The read path everything depends on.** Every bug found this session came through it |
-| `gateway` | 1,132 | Holds, refusals, both legs |
+| ~~`mirror`~~ | ~~1,060~~ | **49 tests as of 2026-09-09**, and they found a real bug — see the log |
+| `gateway` | 1,132 | Holds, refusals, both legs. Now the biggest |
 | `settlement` | 961 | Money movement and netting |
 | `hedera` | 629 | Every chain write |
 | `x402` | 404 | Four separate bugs already hid here |
@@ -186,11 +197,18 @@ for this.
 2. ~~Fix the false attack-catalogue claims~~ — **done 2026-09-08.** Five lines corrected; two moved
    from *Caught* to *OPEN*. The spend-side concentration cap and the registration flow are the two
    genuinely unbuilt rules, and both are now labelled OPEN in the README.
-3. **`@tab/db`** — closes the fail-open exposure properly.
-4. **Tests for `mirror`** — the highest-risk untested surface.
-5. **`@tab/sdk` → `@tab/mcp`** if time. MCP is the one with real demo value: Claude Desktop calling
+3. ~~`@tab/db`~~ — **not needed for the fail-open, and not built.** Facts on HCS closed it
+   without a database and left the graph's inputs stranger-checkable, which a private store would
+   not. `@tab/db` is still the right answer for *replay cost* (gap 9) rather than for correctness.
+4. ~~Tests for `mirror`~~ — **done 2026-09-09, 49 tests.** `gateway` is now the largest untested
+   surface at 1,132 lines.
+5. **v3, to close the residual fail-open** — discount a counterparty whose provenance has never
+   been observed, instead of trusting it. A policy change that moves ceilings, so it needs a new
+   frozen parameter set rather than an edit; `paramsForVersion` and the freeze machinery already
+   exist.
+6. **`@tab/sdk` → `@tab/mcp`** if time. MCP is the one with real demo value: Claude Desktop calling
    a paid API through Tab, agent holding no key. `cli` and `agentkit-plugin` are not worth it.
-6. **Not worth building:** `fastpath`, `observability`. Their absence is documented as named limits
+7. **Not worth building:** `fastpath`, `observability`. Their absence is documented as named limits
    with causes, which reads better to a judge than a half-built version.
 
 ### Read these before you write code
@@ -396,6 +414,10 @@ most likely to save someone an hour**, so be generous here even when the change 
 | 2026-09-06 | **A Hedera transaction id is spelled two ways**: `0.0.x@s.n` in our receipts, `0.0.x-s-n` by Mirror Node. Use `normalizeTransactionId` / `sameTransaction` from `@tab/mirror` on BOTH sides of any comparison | `mirror`, `settlement`, `verify`, `engine` |
 | 2026-09-06 | **`reconcile` is window-bounded** (`--since=<seconds.nanos>`, else `RECONCILE_LOOKBACK_SECONDS`, default 3600). Walking the float's full history hung at 5–15s/page and gets slower forever; the spec's unit is the window | `settlement` |
 | 2026-09-06 | **OPEN DEFECT — the spend path writes `unsettled:<holdId>` as the debit's transaction id** whenever the x402 facilitator returns no settlement transaction. Those debits can never be reconciled: there is no id to match. The reconciler counts them as `unreconcilable` rather than skipping them, but **the fix belongs in `apps/gateway`** — write the real id once the transfer lands, or emit a follow-up receipt carrying it. Until then the reconciler has never made a single positive match, so the demo's proof-of-reconciliation is not yet demonstrated | `gateway`, `x402`, `settlement`, demo |
+| 2026-09-09 | **Mirror Node's `decimals` is a STRING from `/tokens/{id}` and a number from `/accounts/{id}/tokens`.** A strict `!== 6` against `"6"` throws `Token 0.0.429274 has 6 decimals, not 6` — a sentence that has now cost an hour twice. Coerce with `decimalsOf` before ANY comparison; it returns NaN rather than a default, so an unreadable token is refused instead of assumed to be USDC | anyone reading a token balance |
+| 2026-09-09 | **A private copy of a shared shape has now hidden a defect FOUR times.** Three replay copies each lost a message type (holds on gateway restart, settlements in the worker, `weightUpdate` in the console), and `whoami.ts`'s inline `{ decimals: number }` dodged the fix above while keeping the bug. If a type exists in a package, import it — a local copy that typechecks is not a local copy that is right | everyone |
+| 2026-09-09 | **`pnpm whoami` does not work and never did** — pnpm has a builtin of that name and shadows any script, failing with `401 Unauthorized` from the npm registry, which reads as an auth problem. Use `pnpm chain:status` | anyone following a doc comment |
+| 2026-09-09 | **Graph facts are on the CEILING TOPIC, and the reader is MONOTONIC.** Once a funder is published for an account, a later message that omits it must not erase it — a reader keeping "newest per account" would let one Mirror Node outage wipe a correctly observed funding edge and un-catch the loop attacker through the mechanism meant to catch it. Absence means NOT OBSERVED, never "has no funder"; a *different* funder is rejected and reported, because an account has one creating payer forever | `ledger`, `engine`, anyone reading the ceiling topic |
 | 2026-09-09 | **The published settlement `debits` and `interest` are NEGATIVE**, and `net = credits + debits + interest`. `@tab/protocol`'s comment said `credits − debits − interest`, which describes positive magnitudes and is not what any producer writes. A console built on that comment negated `debits` and showed a netting panel summing to 0.190000 above a published net of 0.110000 | anyone rendering or auditing a settlement |
 | 2026-09-09 | **NO BUDGET — everything must be free, and everything is.** Hedera *testnet* only: HBAR from the portal faucet, USDC from the Circle testnet faucet (the 20.000000 in the float came free). Mirror Node is the public endpoint, no key. Supabase free tier for `@tab/db`, local Redis or Upstash free for `@tab/cache`, Vercel hobby for the console. Declining The Graph also avoided the one paid indexer. **The only thing that would cost money is mainnet, which we do not touch** | everyone; check before adding any dependency or service |
 | 2026-09-06 | **An x402 payment needs THREE distinct accounts** — payer, `payTo`, fee payer. The scheme rejects a transfer the fee payer is a party to. Same rule that bit us on the seller, now general | `x402`, `gateway`, `testkit`, any demo |
@@ -439,6 +461,101 @@ with it, write it down so nobody else does.
 ```
 
 ---
+
+### 2026-09-09 (later) — Claude — the graph fail-open closed on HCS, and 49 tests for `mirror`
+
+**What I did.** Gap #1 and the top of the test-debt table, in that order. Both had been sitting on
+this page for days as the two things that mattered most and were not presentation.
+
+## The fail-open, closed — on a topic rather than in a database
+
+The independence graph re-derived funding ancestry every pass from Mirror Node's
+transactions-by-account index, which is *intermittent* for new accounts. A failed lookup meant no
+`fundedBy`, so `COMMON_FUNDER` could not fire, so one operator on both sides of a trade looked
+like independent demand. **The loop attacker went uncaught on its first full run because of exactly
+this**, and the code named `@tab/db` as the fix in three separate comments.
+
+I did not build `@tab/db`. Observed facts now go on the **ceiling topic** as `graphFact` messages.
+Reasons, in the order they actually decided it:
+
+1. A private database puts the graph's inputs somewhere a stranger cannot see. Every other input to
+   a ceiling is on a topic — which is precisely why `verify-ceiling` could check a ceiling's
+   arithmetic but never its graph. Fixing a transparency gap by adding a private store would have
+   been the wrong direction.
+2. It needs no database, and there is no budget.
+3. The engine is not on the latency path, so an HCS write costs nothing that matters.
+4. It is a derived index of already-public data. Every field is readable by anyone from Mirror
+   Node; publishing reveals nothing private, it only saves the next reader from an index that may
+   not answer.
+
+**The merge is the actual fix, not the publishing.** `factsFromMessages` merges rather than
+replaces. A reader that kept the newest message per account would reintroduce the bug through the
+mechanism meant to close it: an outage publishes a fact with no funder, that message is newest, and
+an edge correctly observed a week ago is erased. So a funder is sticky, absence means "not
+observed", and a message claiming a *different* funder is rejected and reported — an account has
+one creating payer forever, and taking the newer would let a later writer rewrite its origin.
+
+The same rule applies on a *successful* fetch that finds no funder — a 200 from the accounts
+endpoint with nothing from the transactions index. Taking that at face value is the same bug wearing
+a different hat, and it is the case I would have got wrong without writing the test.
+
+**Extracted to `ancestry.ts` so it could be tested.** The walk was inline in `main.ts`, and the
+branch that matters most — Mirror down, topic answering — is the one a live run is *least* likely
+to exercise, because Mirror usually works. A security rule that fails open should not be trusted on
+a coincidence. The tests drive a Mirror Node that is down for specific accounts: without a memory
+the shill resolves to no funder, with one it resolves to the operator, keeps walking past the
+remembered edge to the shared root, and cites the seq that established it.
+
+**Also fell out of it:** `funderOf` and `isYoung` each made their own `getAccount` call — three
+requests per counterparty to answer two questions from the same document, and the two answers could
+disagree when one call succeeded and the other failed. `observeAccount` answers both from one pair,
+`isYoungFrom` is pure so a *remembered* birth time answers the age question too, and both old
+functions are deleted rather than left exported.
+
+**Live:** 7 facts published, seq 13-19. `0.0.2` — a genesis account — correctly got a birth time
+with no funder invented. A second pass printed `facts none new`, so the gating works.
+
+**The residual, stated precisely:** an account never successfully observed, during an outage, is
+still weighted independent. There is nothing to remember. Closing that needs a policy change
+(discount the unverifiable rather than trust it), which moves ceilings, which needs v3.
+
+## The Evidence panel is real
+
+Publishing the facts also fixed the thing the code had flagged as "the obvious next protocol
+addition". The Counterparties Evidence panel returned `null` for every live row and the table showed
+`firstSeen —` and `age 0d`, so the strongest claim in the demo displayed with none of its supporting
+values. A viewer could read the verdict and had no way to check it.
+
+It now shows the two values the rule actually compared, verbatim, with the seq that established
+them. Live: two counterparties show `funder == tabFunder == 0.0.8812188` beside their
+`COMMON_FUNDER` blocks, and a third shows a *different* funder — which is why it gets
+`SHARED_FUNDING_ROOT` at bp 3360 = 0.7 × 0.6 × 0.8 rather than a block.
+
+No hop chain on live rows, deliberately: it is reconstructible from the published facts, but walking
+it in the console would make it re-derive part of the graph, and one wrong path beside a correct
+reason is worse than no path.
+
+## 49 tests for `mirror`, and they found a bug
+
+1,060 lines, zero tests, and the highest-risk surface in the repo — every bug found across these
+sessions came through it. Its doc comments are a catalogue of rules learned the expensive way and
+not one was enforced by anything but a comment.
+
+47 of 49 passed first run, which is what I expected from comments written from live failures rather
+than from documentation. The two that did not:
+
+- **`getUsdcBalance` rejected a perfectly good 6-decimal token.** Mirror returns `decimals` as a
+  string from one endpoint and a number from another; a strict `!== 6` against `"6"` throws
+  `Token 0.0.429274 has 6 decimals, not 6`. That sentence cost an hour in an earlier session where
+  it was blamed on a script — it is reproducible straight from this function.
+- **`whoami.ts` dodged the type fix by declaring its own inline copy of the shape.** Fourth time a
+  private copy of a shared shape has hidden a defect.
+
+Both are now lessons rows. So is `pnpm whoami`, which pnpm shadows and which therefore never worked
+despite being the documented command in that file for its whole life.
+
+**Next.** v3 to close the residual fail-open is the top correctness item. `gateway` (1,132 lines) is
+now the largest untested surface. Everything else on the ranked list is unchanged.
 
 ### 2026-09-09 — Claude — the console reads real data, and a fake VERIFIED stamp is gone
 
