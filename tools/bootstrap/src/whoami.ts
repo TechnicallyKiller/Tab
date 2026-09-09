@@ -2,10 +2,19 @@
  * What can this operator actually spend, and is the configured token the right
  * one? Answers both in one command.
  *
- *   pnpm whoami
+ *   pnpm chain:status
+ *
+ * NOT `pnpm whoami`, which this file claimed for its whole life. pnpm has a
+ * builtin of that name and shadows any script, so the documented command failed
+ * with `401 Unauthorized` from the npm registry — a message that reads as an
+ * auth problem rather than a naming clash. There is no root `whoami` script
+ * either; `chain:status` has always been the one that runs this.
  */
 import { clientFromEnv } from '@tab/hedera'
-import { MirrorClient, canReceiveToken, getAccount, getToken } from '@tab/mirror'
+import {
+  MirrorClient, canReceiveToken, decimalsOf, getAccount, getToken,
+  type TokenRelationship,
+} from '@tab/mirror'
 import { format, micro } from '@tab/money'
 
 const REAL_USDC = '0.0.429274'
@@ -17,9 +26,18 @@ const mirror = new MirrorClient({ network: tab.network, timeoutMs: 30_000, maxRe
 const operator = tab.operatorId.toString()
 
 const account = await getAccount(mirror, operator)
-const raw = await mirror.get<{
-  tokens?: { token_id: string; balance: number; decimals: number }[]
-}>(`/api/v1/accounts/${operator}/tokens?limit=50`)
+/*
+ * `TokenRelationship` from the package, NOT a local copy of the shape.
+ *
+ * This declared its own inline `{ token_id, balance, decimals: number }`, which
+ * typechecked fine and carried a real bug: Mirror Node returns `decimals` as a
+ * STRING from some endpoints, so a perfectly good 6-decimal token printed
+ * `!! 6 decimals — MicroUsdc assumes 6` and fell into the wrong branch. The
+ * private copy is what let it dodge the fix in the shared type.
+ */
+const raw = await mirror.get<{ tokens?: TokenRelationship[] }>(
+  `/api/v1/accounts/${operator}/tokens?limit=50`,
+)
 const held = raw.tokens ?? []
 
 console.log(`\nOperator ${operator} · Hedera ${tab.network}`)
@@ -32,11 +50,14 @@ if (held.length === 0) {
   console.log('    (none)')
 }
 for (const t of held) {
-  const amount = t.decimals === 6 ? format(micro(BigInt(t.balance))) : String(t.balance / 10 ** t.decimals)
+  // Coerced once. `10 ** "6"` happens to work in JS and `"6" === 6` does not,
+  // so the raw field is right for display and wrong for every comparison.
+  const dp = decimalsOf(t.decimals)
+  const amount = dp === 6 ? format(micro(BigInt(t.balance))) : String(t.balance / 10 ** dp)
   const tags = [
     t.token_id === REAL_USDC ? 'REAL USDC' : null,
     t.token_id === configured ? 'CONFIGURED' : null,
-    t.decimals !== 6 ? `!! ${t.decimals} decimals — MicroUsdc assumes 6` : null,
+    dp !== 6 ? `!! ${dp} decimals — MicroUsdc assumes 6` : null,
   ].filter(Boolean)
   console.log(`    ${t.token_id.padEnd(14)} ${amount.padStart(14)}  ${tags.join(' · ')}`)
 }

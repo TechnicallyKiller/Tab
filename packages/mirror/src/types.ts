@@ -83,7 +83,21 @@ export interface TokenRelationship {
   token_id: EntityId
   /** Integer in the token's own decimals — micro-USDC for USDC. */
   balance: number
-  decimals: number
+  /**
+   * STRING OR NUMBER. Mirror Node is inconsistent about this field.
+   *
+   * `/tokens/{id}` returns it as a string and `/accounts/{id}/tokens` has been
+   * observed returning a number — and `TokenInfo` below has always typed the
+   * union for that reason. This one said `number`, which made a strict
+   * `!== 6` comparison in `getUsdcBalance` fail on a perfectly good 6-decimal
+   * token with the least helpful message imaginable:
+   *
+   *     Token 0.0.429274 has 6 decimals, not 6
+   *
+   * An hour went into that sentence once. Every reader must coerce before
+   * comparing; see `decimalsOf`.
+   */
+  decimals: string | number
   automatic_association: boolean
   freeze_status: 'NOT_APPLICABLE' | 'FROZEN' | 'UNFROZEN'
   kyc_status: 'NOT_APPLICABLE' | 'GRANTED' | 'REVOKED'

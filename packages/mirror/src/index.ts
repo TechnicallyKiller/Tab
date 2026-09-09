@@ -26,6 +26,7 @@ export {
   getToken,
   getTokenRelationship,
   getBalanceSnapshot,
+  decimalsOf,
   getUsdcBalance,
   waitForAccount,
   type ReceiveCheck,

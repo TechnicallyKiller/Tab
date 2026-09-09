@@ -142,12 +142,35 @@ export async function getUsdcBalance(
 ): Promise<MicroUsdc> {
   const rel = await getTokenRelationship(client, accountId, tokenId)
   if (!rel) return micro(0n)
-  if (rel.decimals !== 6) {
+  const decimals = decimalsOf(rel.decimals)
+  if (decimals !== 6) {
     throw new Error(
-      `Token ${tokenId} has ${rel.decimals} decimals, not 6. MicroUsdc would misread it.`,
+      `Token ${tokenId} reports ${JSON.stringify(rel.decimals)} decimals, which is not 6. ` +
+        'MicroUsdc would misread every amount from it.',
     )
   }
   return micro(BigInt(rel.balance))
+}
+
+/**
+ * Mirror Node's `decimals`, coerced.
+ *
+ * The field arrives as a STRING from `/tokens/{id}` and has been observed as a
+ * number from `/accounts/{id}/tokens`, so every comparison must coerce first. A
+ * strict `!== 6` against the raw value fails on a perfectly good 6-decimal
+ * token and reports it as:
+ *
+ *     Token 0.0.429274 has 6 decimals, not 6
+ *
+ * which is a sentence that cost an hour. `NaN` is returned for anything
+ * unparseable rather than a default, so an unreadable token is REFUSED rather
+ * than assumed to be USDC — assuming would misreport every amount by orders of
+ * magnitude, which is the one failure this check exists to prevent.
+ */
+export function decimalsOf(value: string | number): number {
+  if (typeof value === 'number') return value
+  const parsed = Number(value)
+  return Number.isInteger(parsed) ? parsed : Number.NaN
 }
 
 export async function getToken(client: MirrorClient, tokenId: EntityId): Promise<TokenInfo> {
