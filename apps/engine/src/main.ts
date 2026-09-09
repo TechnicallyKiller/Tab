@@ -25,11 +25,12 @@
 import { clientFromEnv } from '@tab/hedera'
 import { MirrorClient, configureGlobalHttp } from '@tab/mirror'
 import { bp, format, formatBpMultiple, formatBpPercent, usdc } from '@tab/money'
-import { MODEL_ID, describeParams, params, windowOf } from '@tab/params'
+import { MODEL_ID, caps, describeParams, params, windowOf } from '@tab/params'
 import {
-  ceilingsFromMessages, checkWindowSettledOnce, factsFromMessages, rampAfter, type Entry,
+  ceilingsFromMessages, checkWindowSettledOnce, factsFromMessages,
+  registrationsFromMessages, starterGrantFor, rampAfter, type Entry,
 } from '@tab/ledger'
-import { WEIGHT_REASON_DETAIL, type AccountFacts, type AccountId } from '@tab/graph'
+import { WEIGHT_REASON_DETAIL, fundingRoot, type AccountFacts, type AccountId } from '@tab/graph'
 import {
   entriesFromMessages, readTopic, reassembleChunks,
 } from './replay.ts'
@@ -39,6 +40,7 @@ import { recompute } from './recompute.ts'
 import { publishCeiling } from './publish/ceiling.ts'
 import { publishWeights } from './publish/weights.ts'
 import { publishFacts, type ObservedFact } from './publish/facts.ts'
+import { publishRegistration } from './publish/registration.ts'
 import { transition, type CeilingState } from './guards/asymmetry.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -281,6 +283,32 @@ async function pass(): Promise<void> {
     )
   }
 
+  /*
+   * ── the Starter Tab claim ────────────────────────────────────────────────
+   *
+   * One Starter Tab per funding root. The root comes from the PUBLISHED facts
+   * the walk just resolved, so the rule keys on something a stranger can check
+   * rather than on whether an operator remembered to register — an attacker
+   * would simply not register, and a rule keyed on registration presence
+   * defends against nothing.
+   */
+  const registrations = registrationsFromMessages(ceilingMessages)
+  const root = fundingRoot(tabAccount, facts, params.fundingAncestryHops)
+  const grant = starterGrantFor(tabAccount, root?.root, registrations)
+
+  console.log(
+    `    root        ${root ? `${root.root} (${root.hops} hop(s))` : 'unresolved'} · ` +
+      `starter grant ${grant.status}` +
+      (grant.status === 'taken' ? ` — held by ${grant.heldBy} (seq ${grant.seq ?? '?'})` : '') +
+      (grant.seq !== undefined && grant.status === 'granted' ? ` (claimed at seq ${grant.seq})` : ''),
+  )
+  if (grant.status === 'taken') {
+    console.log(
+      `    NO STARTER FLOOR — another tab already holds the claim on ${root?.root}. ` +
+        'This tab must earn its ceiling from independent revenue.',
+    )
+  }
+
   const edges = await edgesFor(
     mirror,
     [tabAccount, ...counterparties],
@@ -298,6 +326,7 @@ async function pass(): Promise<void> {
     revenueByCounterparty: revenue.revenueByCounterparty,
     young,
     unverified: ancestry.unverified,
+    starterGrant: grant.status,
     rampBp: rampAfter(entries),
     cleanStreak,
     hasDefaulted,
@@ -390,6 +419,37 @@ async function pass(): Promise<void> {
    * harmless, but republishing every account every window would add N messages
    * per window forever to say nothing.
    */
+  /*
+   * Claim the root FIRST, before anything else this pass writes.
+   *
+   * The claim is a race that only one tab can win, and the winner is decided by
+   * consensus order — so publishing it after the weights and the ceiling would
+   * widen the window in which two concurrently-running engines both see the
+   * root as free. It cannot close that window entirely (see the ceiling
+   * serialisation gap), but it should not be made wider for no reason.
+   *
+   * Only when the root is UNCLAIMED. `granted` with a seq means this tab
+   * already holds it, and re-claiming would add a message per window forever to
+   * say something the topic already says.
+   */
+  if (root && grant.status === 'granted' && grant.seq === undefined) {
+    const claimed = await publishRegistration({
+      hedera,
+      topicId: ceilingTopic,
+      tab: tabAccount,
+      window: currentWindow,
+      root: root.root,
+      starterCeiling: caps.starterCeiling,
+      perCallCap: caps.perCall,
+    })
+    if (claimed) {
+      console.log(
+        `  registration    claimed root ${claimed.root} · seq ${claimed.sequenceNumber} — ` +
+          'one Starter Tab per funding root',
+      )
+    }
+  }
+
   const factSeqs = await publishFacts({
     hedera,
     topicId: ceilingTopic,

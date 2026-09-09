@@ -82,6 +82,18 @@ export interface RecomputeInputs {
   rampBp: number
   cleanStreak: number
   hasDefaulted: boolean
+  /**
+   * Whether this tab holds the Starter Tab claim on its funding root.
+   *
+   * `taken` means another tab already claimed it, so the starter floor is zero
+   * — one Starter Tab per funding root is what makes bulk-minting agents
+   * pointless. `unknown` (no root resolved) GRANTS the floor, because refusing
+   * would let an indexer outage stop every new agent from ever starting, and
+   * `UNVERIFIED_FUNDING` already discounts what such a tab earns.
+   *
+   * Optional so a caller that does not resolve roots behaves exactly as before.
+   */
+  starterGrant?: 'granted' | 'taken' | 'unknown'
   /** Trailing windows to average revenue over. */
   windowCount: number
   hardCap: MicroUsdc
@@ -184,12 +196,25 @@ export function recompute(inputs: RecomputeInputs): Recomputation {
     multipleBp: tierMultipleBpFor(tier.tier),
     rampBp: inputs.rampBp,
     hardCap: inputs.hardCap,
-    // `caps.starterCeiling` is already parsed money. Re-parsing the string
-    // form by stripping the decimal point would work today and break silently
-    // the moment a cap is written with a different number of decimals.
-    // The floor applies to a new tab too. Withholding it from Unrated made a
-    // new agent unable to ever start — see computeCeiling.
-    starterFloor: caps.starterCeiling,
+    /*
+     * The starter floor is granted ONCE PER FUNDING ROOT.
+     *
+     * `caps.starterCeiling` is already parsed money. Re-parsing the string form
+     * by stripping the decimal point would work today and break silently the
+     * moment a cap is written with a different number of decimals.
+     *
+     * The floor applies to a new tab too — withholding it from Unrated made a
+     * new agent unable to ever start, see `computeCeiling`. But it is a GRANT,
+     * and a grant handed out per-account is a grant an attacker mints accounts
+     * to farm. When another tab already holds the claim on this tab's funding
+     * root, the floor is zero and this tab must earn its ceiling from
+     * independent revenue like any other.
+     *
+     * Zero rather than a refusal, deliberately: the tab still works, still
+     * spends what it earns, and still settles. It is denied the free headroom,
+     * not the rail.
+     */
+    starterFloor: inputs.starterGrant === 'taken' ? micro(0n) : caps.starterCeiling,
     hasDefaulted: inputs.hasDefaulted,
   }
 

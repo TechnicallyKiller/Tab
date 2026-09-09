@@ -580,3 +580,113 @@ test('the engine refuses to run on a parameter set with no weight policy', () =>
   assert.equal(WEIGHT_POLICY.sharedRootBp, weightPolicyFor(MODEL_VERSION)?.sharedRootBp)
   assert.equal(weightPolicyFor(2), undefined)
 })
+
+/* ── the Starter Tab grant: one per funding root ─────────────────────────── */
+
+test('a tab denied the starter grant gets NO floor, and must earn its ceiling', () => {
+  /*
+   * The rule that makes bulk-minting pointless. The floor is a GRANT, and a
+   * grant handed out per-account is a grant an attacker mints accounts to farm.
+   *
+   * Zero rather than a refusal, deliberately: the tab still works, still spends
+   * what it earns, and still settles. It is denied the free headroom, not the
+   * rail.
+   */
+  const base = {
+    tab: TAB,
+    edges: [] as TransferEdge[],
+    facts: new Map<AccountId, AccountFacts>(),
+    history: [],
+    attestedCounterparties: new Set<AccountId>(),
+    revenueByCounterparty: new Map<AccountId, MicroUsdc>(),
+    young: new Set<AccountId>(),
+    rampBp: 2500,
+    cleanStreak: 0,
+    hasDefaulted: false,
+    windowCount: 6,
+    hardCap: usdc('100.000000'),
+  }
+
+  const held = recompute({ ...base, starterGrant: 'granted' })
+  const denied = recompute({ ...base, starterGrant: 'taken' })
+
+  assert.equal(held.ceiling.ceiling, caps.starterCeiling)
+  assert.equal(held.ceiling.binding, 'starter_floor')
+  // No revenue and no floor means no credit at all — it has to earn it.
+  assert.equal(denied.ceiling.ceiling, 0n)
+})
+
+test('an UNRESOLVED root still gets the floor — an outage must not stop new agents', () => {
+  /*
+   * Refusing here would mean a Mirror Node outage prevents every new agent from
+   * ever starting, which is a far worse failure than the one being defended
+   * against. `UNVERIFIED_FUNDING` already discounts what such a tab EARNS, so
+   * the grant is the only thing at stake and it is bounded by the starter floor.
+   */
+  const result = recompute({
+    tab: TAB,
+    edges: [],
+    facts: new Map(),
+    history: [],
+    attestedCounterparties: new Set(),
+    revenueByCounterparty: new Map(),
+    young: new Set(),
+    starterGrant: 'unknown',
+    rampBp: 2500,
+    cleanStreak: 0,
+    hasDefaulted: false,
+    windowCount: 6,
+    hardCap: usdc('100.000000'),
+  })
+  assert.equal(result.ceiling.ceiling, caps.starterCeiling)
+})
+
+test('omitting starterGrant behaves exactly as before — the floor applies', () => {
+  // Optional so a caller that does not resolve roots is unchanged. A default of
+  // `taken` would silently zero every existing tab.
+  const result = recompute({
+    tab: TAB,
+    edges: [],
+    facts: new Map(),
+    history: [],
+    attestedCounterparties: new Set(),
+    revenueByCounterparty: new Map(),
+    young: new Set(),
+    rampBp: 2500,
+    cleanStreak: 0,
+    hasDefaulted: false,
+    windowCount: 6,
+    hardCap: usdc('100.000000'),
+  })
+  assert.equal(result.ceiling.ceiling, caps.starterCeiling)
+})
+
+test('a denied tab with real revenue still earns a ceiling — it is not frozen', () => {
+  /*
+   * The point of zeroing the floor rather than refusing. A shill minted from the
+   * same wallet gets no free headroom, but a LEGITIMATE second agent under one
+   * operator can still trade its way up on independent revenue.
+   */
+  const customer = '0.0.7777'
+  const result = recompute({
+    tab: TAB,
+    edges: [],
+    // Independent: no shared ancestry with the tab.
+    facts: new Map([[customer, { id: customer, fundedBy: ['0.0.4242'] }]]),
+    history: [
+      { window: 1, attested: usdc('2.000000'), unattested: usdc('0.000000') },
+      { window: 2, attested: usdc('2.000000'), unattested: usdc('0.000000') },
+    ],
+    attestedCounterparties: new Set([customer]),
+    revenueByCounterparty: new Map([[customer, usdc('4.000000')]]),
+    young: new Set(),
+    starterGrant: 'taken',
+    rampBp: 10_000,
+    cleanStreak: 5,
+    hasDefaulted: false,
+    windowCount: 2,
+    hardCap: usdc('100.000000'),
+  })
+  assert.ok(result.ceiling.ceiling > 0n, 'earned credit must survive a denied grant')
+  assert.notEqual(result.ceiling.binding, 'starter_floor')
+})

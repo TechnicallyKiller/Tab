@@ -20,7 +20,10 @@
  * age them, and never cycle value back. It does not reduce that cost to zero,
  * and any implementation that implies otherwise is overselling.
  */
-export { fundingAncestry, fundedWithin, sharedFundingRoot, type AncestryResult } from './ancestry.ts'
+export {
+  fundingAncestry, fundedWithin, fundingRoot, isSystemAccount, sharedFundingRoot,
+  type AncestryResult,
+} from './ancestry.ts'
 export { detectCluster, reciprocity, type ClusterFinding, type ClusterInputs, type ReciprocityFinding } from './clusters.ts'
 export { concentration, type ConcentrationEntry, type ConcentrationResult } from './concentration.ts'
 export { applyWeight, weightOf, type WeightInputs, type WeightPolicy } from './weights.ts'

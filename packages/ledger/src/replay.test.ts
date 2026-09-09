@@ -7,6 +7,8 @@ import {
   ceilingsFromMessages,
   entriesFromMessages,
   factsFromMessages,
+  registrationsFromMessages,
+  starterGrantFor,
   type TopicMessage,
 } from './replay.ts'
 
@@ -300,5 +302,123 @@ test('facts and ceilings share a topic without confusing either reader', () => {
   assert.equal(factsFromMessages(mixed).read, 1)
   assert.equal(ceilingsFromMessages(mixed).size, 1)
   // And neither is a ledger entry.
+  assert.equal(entriesFromMessages(mixed).replayed, 0)
+})
+
+/* ── registrations: one Starter Tab per funding root ─────────────────────── */
+
+function register(over: { tab: string; root?: string; ceil?: string; w?: number }): TabMessage {
+  return {
+    v: SCHEMA_VERSION,
+    t: 'register',
+    tab: over.tab,
+    w: over.w ?? 10,
+    ...(over.root ? { root: over.root } : {}),
+    ceil: over.ceil ?? '0.250000',
+    perCall: '0.050000',
+    allowlist: [],
+  } as TabMessage
+}
+
+test('FIRST claim on a root wins — the rule that makes bulk-minting pointless', () => {
+  /*
+   * "Latest wins" — the default every other reader here uses — would break the
+   * defence completely: an attacker mints a hundred agents, each registers in
+   * turn, each overwrites the last, and every one ends up holding the grant.
+   * The defence has to be a race only one participant can win, and consensus
+   * order decides it.
+   */
+  const replay = registrationsFromMessages([
+    published(register({ tab: '0.0.1001', root: '0.0.99' }), 1000, 1),
+    published(register({ tab: '0.0.1002', root: '0.0.99' }), 2000, 2),
+    published(register({ tab: '0.0.1003', root: '0.0.99' }), 3000, 3),
+  ])
+  assert.equal(replay.byRoot.size, 1)
+  assert.equal(replay.byRoot.get('0.0.99')?.tab, '0.0.1001')
+  assert.equal(replay.byRoot.get('0.0.99')?.seq, 1)
+  // All three are still on record as tabs — only the ROOT is exclusive.
+  assert.equal(replay.byTab.size, 3)
+  assert.equal(replay.read, 3)
+})
+
+test('a hundred minted agents yield ONE starter grant, not a hundred', () => {
+  // The claim the README makes, asserted rather than asserted-in-prose.
+  const messages = Array.from({ length: 100 }, (_, i) =>
+    published(register({ tab: `0.0.${2000 + i}`, root: '0.0.99' }), 1000 + i, i + 1),
+  )
+  const replay = registrationsFromMessages(messages)
+
+  const granted = Array.from({ length: 100 }, (_, i) =>
+    starterGrantFor(`0.0.${2000 + i}`, '0.0.99', replay),
+  ).filter((g) => g.status === 'granted')
+
+  assert.equal(granted.length, 1)
+  // And the 99 others are told WHO holds it, so the refusal is explainable.
+  const denied = starterGrantFor('0.0.2050', '0.0.99', replay)
+  assert.equal(denied.status, 'taken')
+  assert.equal(denied.heldBy, '0.0.2000')
+})
+
+test('a tab RE-registering updates itself without stealing another root', () => {
+  const replay = registrationsFromMessages([
+    published(register({ tab: '0.0.1001', root: '0.0.99' }), 1000, 1),
+    published(register({ tab: '0.0.1002', root: '0.0.88' }), 2000, 2),
+    // 1002 re-registers, this time naming a root someone else holds.
+    published(register({ tab: '0.0.1002', root: '0.0.99', ceil: '0.500000' }), 3000, 3),
+  ])
+  // Its own record updates...
+  assert.equal(replay.byTab.get('0.0.1002')?.ceiling, usdc('0.500000'))
+  // ...but 0.0.99 still belongs to whoever claimed it first.
+  assert.equal(replay.byRoot.get('0.0.99')?.tab, '0.0.1001')
+  assert.equal(starterGrantFor('0.0.1002', '0.0.99', replay).status, 'taken')
+})
+
+test('a ROOTLESS registration claims nothing, so it cannot lock anyone out', () => {
+  /*
+   * A tab whose ancestry was never observed has not been shown to be
+   * independent — it has simply not been seen. Letting it claim a root would
+   * let an attacker lock out honest tabs by registering during an indexer
+   * outage.
+   */
+  const replay = registrationsFromMessages([
+    published(register({ tab: '0.0.1001' }), 1000, 1),
+  ])
+  assert.equal(replay.byRoot.size, 0)
+  assert.equal(replay.byTab.size, 1)
+})
+
+test('an UNKNOWN root is granted, not refused — an outage must not stop new agents', () => {
+  /*
+   * Refusing here would mean a Mirror Node outage prevents every new agent from
+   * ever starting, which is a far worse failure than the one being defended
+   * against. `UNVERIFIED_FUNDING` already discounts what such a tab EARNS, so
+   * the grant is the only thing at stake and it is bounded by the starter floor.
+   */
+  const replay = registrationsFromMessages([])
+  assert.equal(starterGrantFor('0.0.1001', undefined, replay).status, 'unknown')
+})
+
+test('an unclaimed root is free, and the holder gets it back on a re-read', () => {
+  const empty = registrationsFromMessages([])
+  assert.equal(starterGrantFor('0.0.1001', '0.0.99', empty).status, 'granted')
+
+  const claimed = registrationsFromMessages([
+    published(register({ tab: '0.0.1001', root: '0.0.99' }), 1000, 7),
+  ])
+  const mine = starterGrantFor('0.0.1001', '0.0.99', claimed)
+  assert.equal(mine.status, 'granted')
+  // The seq that established the claim, so it can be cited.
+  assert.equal(mine.seq, 7)
+})
+
+test('registrations share a topic with everything else without confusing a reader', () => {
+  const mixed = [
+    published(register({ tab: '0.0.1001', root: '0.0.99' }), 1000, 1),
+    published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 2000, 2),
+    published(fact({ acct: '0.0.5000', by: '0.0.99' }), 3000, 3),
+  ]
+  assert.equal(registrationsFromMessages(mixed).read, 1)
+  assert.equal(ceilingsFromMessages(mixed).size, 1)
+  assert.equal(factsFromMessages(mixed).read, 1)
   assert.equal(entriesFromMessages(mixed).replayed, 0)
 })

@@ -434,3 +434,116 @@ export function factsFromMessages(messages: readonly TopicMessage[]): FactsRepla
 
   return { byAccount, read, conflicts }
 }
+
+/* ── registrations ───────────────────────────────────────────────────────── */
+
+/** One tab's claim on a funding root — the Starter Tab grant. */
+export interface Registration {
+  tab: string
+  /** The funding root this tab claimed. Absent on a rootless registration. */
+  root?: string
+  ceiling: MicroUsdc
+  perCall: MicroUsdc
+  allowlist: readonly string[]
+  at: string
+  seq?: number
+}
+
+export interface RegistrationReplay {
+  /** By funding root. FIRST claim wins, forever. */
+  byRoot: Map<string, Registration>
+  /** By tab, so a tab can be asked what it holds. */
+  byTab: Map<string, Registration>
+  read: number
+}
+
+/**
+ * Replay registrations. **First claim on a root wins, permanently.**
+ *
+ * This is the rule that makes bulk-minting pointless: one Starter Tab per
+ * funding root, so a hundred agents minted from one wallet yield one starter
+ * grant rather than a hundred. It was the last unenforced claim in the README
+ * and the first thing a sharp reviewer would have found.
+ *
+ * ## Why FIRST, and why that has to be a rule rather than an implementation
+ * detail
+ *
+ * "Latest wins" — the obvious default, and what every other reader here does
+ * for ceilings and weights — would break the rule completely: an attacker mints
+ * a hundred agents, each registers in turn, each overwrites the last, and every
+ * one of them ends up holding the grant. The defence has to be a race that only
+ * one participant can win, and consensus order is what decides it.
+ *
+ * Ties cannot happen: one topic gives a total order, and two messages cannot
+ * share a consensus timestamp.
+ *
+ * A registration with NO root is kept in `byTab` but claims nothing. That is
+ * the honest handling of a tab whose ancestry was never observed — it is not
+ * evidence of independence, so it must not be able to lock out other tabs, and
+ * `UNVERIFIED_FUNDING` already discounts what it earns.
+ */
+export function registrationsFromMessages(
+  messages: readonly TopicMessage[],
+): RegistrationReplay {
+  const byRoot = new Map<string, Registration>()
+  const byTab = new Map<string, Registration>()
+  let read = 0
+
+  for (const message of messages) {
+    const result = decode(utf8.decode(message.payload))
+    if (!result.ok || result.message.t !== 'register') continue
+    const msg = result.message
+    read++
+
+    const registration: Registration = {
+      tab: msg.tab,
+      ...(msg.root ? { root: msg.root } : {}),
+      ceiling: usdc(msg.ceil),
+      perCall: usdc(msg.perCall),
+      allowlist: msg.allowlist,
+      at: message.consensusTimestamp,
+      ...(message.sequenceNumber !== undefined ? { seq: message.sequenceNumber } : {}),
+    }
+
+    // A tab re-registering updates its own record — harmless, and useful when
+    // the allowlist or caps change.
+    byTab.set(msg.tab, registration)
+
+    // But a ROOT is claimed once. See the doc comment: latest-wins here would
+    // let a hundred minted agents each overwrite the last and all hold the grant.
+    if (msg.root && !byRoot.has(msg.root)) byRoot.set(msg.root, registration)
+  }
+
+  return { byRoot, byTab, read }
+}
+
+/**
+ * Does this tab hold the Starter Tab grant for its funding root?
+ *
+ * The three answers are deliberately distinct, because they lead to different
+ * ceilings and a caller must not collapse them:
+ *
+ *  - `granted` — this tab claimed the root, or the root is unclaimed and free.
+ *  - `taken` — another tab already holds it. This tab gets NO starter floor and
+ *    must earn its ceiling from independent revenue.
+ *  - `unknown` — no funding root could be resolved. Granted, because refusing
+ *    would mean an indexer outage stops every new agent from ever starting, and
+ *    `UNVERIFIED_FUNDING` already discounts what such a tab earns.
+ */
+export function starterGrantFor(
+  tab: string,
+  root: string | undefined,
+  registrations: RegistrationReplay,
+): { status: 'granted' | 'taken' | 'unknown'; heldBy?: string; seq?: number } {
+  if (!root) return { status: 'unknown' }
+  const holder = registrations.byRoot.get(root)
+  if (!holder) return { status: 'granted' }
+  if (holder.tab === tab) {
+    return { status: 'granted', ...(holder.seq !== undefined ? { seq: holder.seq } : {}) }
+  }
+  return {
+    status: 'taken',
+    heldBy: holder.tab,
+    ...(holder.seq !== undefined ? { seq: holder.seq } : {}),
+  }
+}

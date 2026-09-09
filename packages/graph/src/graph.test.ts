@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { usdc, type MicroUsdc } from '@tab/money'
-import { fundedWithin, fundingAncestry, sharedFundingRoot } from './ancestry.ts'
+import {
+  fundedWithin, fundingAncestry, fundingRoot, isSystemAccount, sharedFundingRoot,
+} from './ancestry.ts'
 import { detectCluster, reciprocity } from './clusters.ts'
 import { concentration } from './concentration.ts'
 import { applyWeight, weightOf, type WeightPolicy } from './weights.ts'
@@ -396,4 +398,121 @@ test('the published bp reproduces from the reasons and the frozen steps', () => 
   let replayed = 10_000
   for (const reason of weight.reasons) replayed = Math.floor((replayed * steps[reason]!) / 10_000)
   assert.equal(replayed, weight.bp)
+})
+
+/* ── fundingRoot: the key the registration rule turns on ─────────────────── */
+
+test('the funding root is the FURTHEST ancestor, not the nearest', () => {
+  /*
+   * The nearest funder of a minted agent is whatever throwaway account minted
+   * it, and an attacker can make a fresh one per agent for free — so keying the
+   * registration rule on the nearest funder would defend against nothing. The
+   * furthest reachable ancestor is the account an attacker has to spend real
+   * value to replace.
+   */
+  // Ids above the reserved range: `0.0.1`–`0.0.3` are network system accounts
+  // and are excluded from root resolution. See `isSystemAccount`.
+  const facts = new Map([
+    ['0.0.3000', { id: '0.0.3000', fundedBy: ['0.0.2000'] }],
+    ['0.0.2000', { id: '0.0.2000', fundedBy: ['0.0.1000'] }],
+  ])
+  assert.deepEqual(fundingRoot('0.0.3000', facts, 3), { root: '0.0.1000', hops: 2 })
+})
+
+test('the root is bounded by maxHops, so a long chain does not change the answer', () => {
+  const facts = new Map([
+    ['a', { id: 'a', fundedBy: ['b'] }],
+    ['b', { id: 'b', fundedBy: ['c'] }],
+    ['c', { id: 'c', fundedBy: ['d'] }],
+  ])
+  assert.equal(fundingRoot('a', facts, 2)?.root, 'c')
+  assert.equal(fundingRoot('a', facts, 3)?.root, 'd')
+})
+
+test('a TIE is broken lexicographically, because this decides credit', () => {
+  /*
+   * Two ancestors at the same distance must give the same root on every run and
+   * for every reader. Without a tie-break, `Map` iteration order could let the
+   * same tab claim a root in one pass and be denied in the next — and a
+   * published ceiling would stop being reproducible.
+   */
+  // Both above the reserved range, or `isSystemAccount` would exclude them —
+  // which is how this fixture first failed after the treasury fix landed.
+  const facts = new Map([['x', { id: 'x', fundedBy: ['0.0.9000', '0.0.1100'] }]])
+  assert.equal(fundingRoot('x', facts, 1)?.root, '0.0.1100')
+  // Reversed input, same answer.
+  const reversed = new Map([['x', { id: 'x', fundedBy: ['0.0.1100', '0.0.9000'] }]])
+  assert.equal(fundingRoot('x', reversed, 1)?.root, '0.0.1100')
+})
+
+test('NO known ancestry is undefined, not "its own root"', () => {
+  /*
+   * A caller must distinguish these. An account with no observed ancestry has
+   * not been shown to be independent — it has simply not been seen — and
+   * treating it as its own root would hand every unobserved account a fresh
+   * starter grant, which is the bulk-minting hole reopened.
+   */
+  assert.equal(fundingRoot('lonely', new Map(), 3), undefined)
+  assert.equal(fundingRoot('lonely', new Map([['lonely', { id: 'lonely' }]]), 3), undefined)
+})
+
+test('a funding CYCLE still yields a root rather than hanging', () => {
+  const facts = new Map([
+    ['p', { id: 'p', fundedBy: ['q'] }],
+    ['q', { id: 'q', fundedBy: ['p'] }],
+  ])
+  assert.equal(fundingRoot('p', facts, 10)?.root, 'q')
+})
+
+test('THE TREASURY IS NEVER A FUNDING ROOT — caught on the first live run', () => {
+  /*
+   * `0.0.2` is the Hedera treasury and every account on the network is
+   * ultimately funded by it. Without excluding system accounts, the funding
+   * root of every tab on Hedera resolves to `0.0.2` — and the registration
+   * rule, which grants one Starter Tab per root, would have let the FIRST tab
+   * ever registered deny the starter grant to every other agent on the network,
+   * forever.
+   *
+   * The live shape, exactly as the engine resolved it before the fix:
+   * `0.0.10390398 → 0.0.8812188 → 0.0.2`. It claimed `0.0.2`.
+   *
+   * No hand-built fixture has a genesis account, which is why only a live run
+   * could find this.
+   */
+  const facts = new Map([
+    ['0.0.10390398', { id: '0.0.10390398', fundedBy: ['0.0.8812188'] }],
+    ['0.0.8812188', { id: '0.0.8812188', fundedBy: ['0.0.2'] }],
+  ])
+  const root = fundingRoot('0.0.10390398', facts, 3)
+  // The OPERATOR — the account someone would have to fund a hundred times over
+  // to farm a hundred starter grants, which is what the rule defends.
+  assert.equal(root?.root, '0.0.8812188')
+  assert.equal(root?.hops, 1)
+})
+
+test('two accounts minted by one operator share a root, and the treasury does not decide it', () => {
+  // The case the rule exists for, and the reason the exclusion cannot break it.
+  const facts = new Map([
+    ['0.0.1001', { id: '0.0.1001', fundedBy: ['0.0.5000'] }],
+    ['0.0.1002', { id: '0.0.1002', fundedBy: ['0.0.5000'] }],
+    ['0.0.5000', { id: '0.0.5000', fundedBy: ['0.0.2'] }],
+  ])
+  assert.equal(fundingRoot('0.0.1001', facts, 3)?.root, '0.0.5000')
+  assert.equal(fundingRoot('0.0.1002', facts, 3)?.root, '0.0.5000')
+})
+
+test('an account funded ONLY by the network has no root, and keeps its grant', () => {
+  // Nothing above it but the treasury. Returning `0.0.2` would deny every other
+  // agent; returning undefined grants the floor, which is the safe direction.
+  const facts = new Map([['0.0.1001', { id: '0.0.1001', fundedBy: ['0.0.2'] }]])
+  assert.equal(fundingRoot('0.0.1001', facts, 3), undefined)
+})
+
+test('isSystemAccount covers the reserved range and nothing above it', () => {
+  for (const id of ['0.0.0', '0.0.2', '0.0.3', '0.0.98', '0.0.800', '0.0.999']) {
+    assert.equal(isSystemAccount(id), true, id)
+  }
+  for (const id of ['0.0.1000', '0.0.8812188', '0.0.10390398']) {
+    assert.equal(isSystemAccount(id), false, id)
+  }
 })

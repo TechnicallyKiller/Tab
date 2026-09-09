@@ -126,3 +126,78 @@ export function sharedFundingRoot(
 
   return best ? { shared: true, root: best.root, hops: best.hops } : { shared: false }
 }
+
+/**
+ * The FURTHEST funding ancestor within `maxHops` — an account's origin.
+ *
+ * Used by the registration rule: one Starter Tab per funding root is what makes
+ * bulk-minting agents pointless, and that rule needs a single stable answer to
+ * "where did this account ultimately come from".
+ *
+ * Furthest rather than nearest, deliberately. The nearest funder of a minted
+ * agent is whatever throwaway account minted it, and an attacker can make a
+ * fresh one per agent for free — so keying the rule on the nearest funder would
+ * defend against nothing. The furthest reachable ancestor is the account an
+ * attacker actually has to spend real value to replace.
+ *
+ * ## Determinism, because this decides credit
+ *
+ * Ties are broken by lexicographic account id, and that is not cosmetic. Two
+ * ancestors at the same hop distance must yield the same root on every run and
+ * for every reader, or the same tab could claim a root in one pass and be denied
+ * in the next — and a published ceiling would stop being reproducible.
+ *
+ * Returns `undefined` when nothing is known, which callers must distinguish
+ * from "is its own root": an account with no observed ancestry has NOT been
+ * shown to be independent, it has simply not been seen. See
+ * `UNVERIFIED_FUNDING`.
+ */
+export function fundingRoot(
+  account: AccountId,
+  facts: ReadonlyMap<AccountId, AccountFacts>,
+  maxHops: number,
+): { root: AccountId; hops: number } | undefined {
+  const { hops } = fundingAncestry(account, facts, maxHops)
+
+  let best: { root: AccountId; hops: number } | undefined
+  for (const [id, distance] of hops) {
+    // See `isSystemAccount`. Without this the root of every account on the
+    // network is the treasury.
+    if (isSystemAccount(id)) continue
+    if (!best || distance > best.hops || (distance === best.hops && id < best.root)) {
+      best = { root: id, hops: distance }
+    }
+  }
+  return best
+}
+
+/**
+ * Hedera reserves entity numbers below 1000 for the network itself.
+ *
+ * ## Why this exists, and what it prevented
+ *
+ * `0.0.2` is the treasury. **Every account on Hedera is ultimately funded by
+ * it**, so without this exclusion the funding root of every tab on the entire
+ * network resolves to `0.0.2` — and the registration rule, which grants one
+ * Starter Tab per root, would have let the FIRST tab ever registered deny the
+ * starter grant to every other agent on Hedera forever.
+ *
+ * A live run caught it on the first pass: the engine resolved
+ * `0.0.10390398 → 0.0.8812188 → 0.0.2` and claimed `0.0.2`. No unit test would
+ * have, because a hand-built fixture has no genesis.
+ *
+ * Excluding these is not a heuristic. Being funded by the treasury is not
+ * evidence of common control — it is what it means to exist on this network,
+ * and it says exactly as much about two accounts as sharing a planet does. The
+ * furthest NON-system ancestor is the operator: the account someone would have
+ * to fund a hundred times over to farm a hundred starter grants, which is
+ * precisely what the rule is defending.
+ *
+ * Not a versioned parameter. This is a fact about the network, like USDC having
+ * six decimals — not a policy dial, so it does not belong in `@tab/params` and
+ * changing it would not be a model change but a bug fix.
+ */
+export function isSystemAccount(id: AccountId): boolean {
+  const num = Number(id.split('.').at(-1))
+  return Number.isFinite(num) && num < 1000
+}
