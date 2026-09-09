@@ -2,7 +2,8 @@ import { SequenceDiagram } from '@/components/landing/diagrams'
 import { Callout, DocsH2, DocsP } from '@/components/docs/parts'
 import { Card, CardHead, Chip, CodeBlock } from '@/components/ui'
 import { CopyButton } from '@/components/ui/copy-button'
-import { MODEL_VERSION, TOPICS } from '@/lib/mock/tab'
+import { MODEL_ID as MODEL_VERSION } from '@tab/params'
+import { TOPICS } from '@/lib/mock/tab'
 import { CALLOUTS, QUICKSTART, RECEIPT_SCHEMA, REFUSAL_CODES, SPEND_PARAMS } from '@/lib/mock/docs'
 
 export default function DocsPage() {

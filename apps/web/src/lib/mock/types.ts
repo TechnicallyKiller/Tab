@@ -104,9 +104,3 @@ export interface CeilingRow {
   /** The constraint that actually bound. The most useful fact on the screen. */
   binding?: boolean
 }
-
-export interface ConfigRow {
-  key: string
-  value: string
-  overridden?: boolean
-}

@@ -1,25 +1,23 @@
 'use client'
 
+import { params } from '@tab/params'
 import { Card, CardHead, Chip } from '@/components/ui'
 import { CopyButton } from '@/components/ui/copy-button'
-import { CONFIG_GROUPS, MODEL_VERSION } from '@/lib/mock/tab'
+import { MODEL_VERSION, configGroups } from '@/lib/config'
 
 /**
  * Every parameter in force. This view exists so tuning is STATED rather than
- * discovered — an overridden value carries a chip and shows what it replaced.
+ * discovered — a tuned value carries a chip and says what it replaced and why.
  * It appears in the demo for exactly that reason.
+ *
+ * The rows come from `@tab/params`, the same frozen set the engine computed
+ * every published ceiling under. "Copy as JSON" dumps that set verbatim rather
+ * than the formatted strings on screen, so a verifier gets the numbers the
+ * model actually used, not a rendering of them.
  */
 export default function ConfigView() {
-  const asJson = JSON.stringify(
-    {
-      MODEL_VERSION,
-      ...Object.fromEntries(
-        CONFIG_GROUPS.flatMap((g) => g.rows.map((r) => [r.key, r.value])),
-      ),
-    },
-    null,
-    2,
-  )
+  const groups = configGroups()
+  const asJson = JSON.stringify(params, null, 2)
 
   return (
     <div style={{ display: 'grid', gap: 20, maxWidth: 900 }}>
@@ -27,12 +25,19 @@ export default function ConfigView() {
         <span className="t-mono" style={{ fontSize: 14, fontWeight: 600 }}>
           MODEL_VERSION {MODEL_VERSION}
         </span>
+        <Chip tone="pen">frozen</Chip>
         <CopyButton value={asJson} idleLabel="Copy as JSON" className="btn btn-sm" />
       </div>
 
-      {CONFIG_GROUPS.map((g) => (
+      <p style={{ margin: 0, maxWidth: 640, color: 'var(--ink-2)', fontSize: 13 }}>
+        Every published ceiling carries this model id. A parameter set is frozen once a
+        ceiling has been published under it — changing a number means a new version, so
+        that a ceiling from last week stays recomputable this week.
+      </p>
+
+      {groups.map((g) => (
         <Card key={g.name} style={{ overflow: 'hidden' }}>
-          <CardHead title={g.name} />
+          <CardHead title={g.name} right={<span style={{ fontWeight: 400, color: 'var(--ink-2)', textTransform: 'none', letterSpacing: 0 }}>{g.note}</span>} />
           <table className="tbl">
             <tbody>
               {g.rows.map((row) => (
@@ -45,12 +50,25 @@ export default function ConfigView() {
                   </th>
                   <td className="n" style={{ fontWeight: 600 }}>{row.value}</td>
                   <td style={{ width: '1%', whiteSpace: 'nowrap', padding: '8px 14px' }}>
-                    {row.overridden ? <Chip tone="caution">overridden</Chip> : null}
+                    {row.tuned ? <Chip tone="caution">tuned for testnet</Chip> : null}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {g.rows.some((r) => r.tuned) ? (
+            <p
+              style={{
+                margin: 0,
+                padding: '10px 14px',
+                borderTop: '1px solid var(--rule-soft)',
+                color: 'var(--ink-2)',
+                fontSize: 12.5,
+              }}
+            >
+              {g.rows.find((r) => r.tuned)?.tuned}
+            </p>
+          ) : null}
         </Card>
       ))}
     </div>

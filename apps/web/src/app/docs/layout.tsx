@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { SearchPalette } from '@/components/docs/search-palette'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { MODEL_VERSION } from '@/lib/mock/tab'
+import { MODEL_ID as MODEL_VERSION } from '@tab/params'
 import { OUTLINE, SIDEBAR } from '@/lib/mock/docs'
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {

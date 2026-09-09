@@ -6,7 +6,8 @@ import type { ReactNode } from 'react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useConsole } from './provider'
 import { mmss } from '@/lib/format'
-import { AGENT_ID, MODEL_VERSION, WINDOW_LABEL } from '@/lib/mock/tab'
+import { MODEL_ID as MODEL_VERSION } from '@tab/params'
+import { AGENT_ID, WINDOW_LABEL } from '@/lib/mock/tab'
 
 /**
  * Console shell. The rail order is information — most-glanced to least — and the

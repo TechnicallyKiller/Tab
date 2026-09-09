@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { Card, CardHead, Chip, Stamp } from '@/components/ui'
+import { MODEL_ID as MODEL_VERSION } from '@tab/params'
 import {
   BINDING_NOTE,
   CEILING_HISTORY,
   CEILING_ROWS,
   CEILING_SEQ,
   INPUT_HASH,
-  MODEL_VERSION,
   TOPICS,
 } from '@/lib/mock/tab'
 import { seq as fmtSeq } from '@/lib/format'
