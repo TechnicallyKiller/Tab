@@ -30,6 +30,15 @@ export interface WeightPolicy {
   concentratedBp: number
   /** No gateway receipt for the inflow. */
   unattestedBp: number
+  /**
+   * No funding provenance observed or published — the rules could not be asked.
+   *
+   * Optional so a caller on a pre-v3 parameter set can omit it; omitted means
+   * the discount is not applied, which is the pre-v3 behaviour exactly. It is
+   * NOT defaulted to a number here, because a default would silently impose a
+   * policy on a version that never had one.
+   */
+  unverifiedBp?: number
 }
 
 /**
@@ -41,6 +50,17 @@ export interface WeightPolicy {
  * artefact and looks like it caught fraud.
  */
 const ORDER: readonly WeightReason[] = [
+  /*
+   * FIRST, and the position is part of the frozen model.
+   *
+   * "I cannot establish who this counterparty is" is logically prior to any
+   * specific finding about it — the other reasons are things we learned, this
+   * one is that we could not learn them. Order only changes the result by a
+   * micro-unit through truncation, but it does change it, so this sequence is
+   * frozen alongside the numbers in `@tab/params`: moving an entry needs a
+   * version bump exactly as changing a step does.
+   */
+  'UNVERIFIED_FUNDING',
   'RECIPROCAL_FLOW',
   'SHARED_FUNDING_ROOT',
   'YOUNG_ACCOUNT',
@@ -63,6 +83,14 @@ export interface WeightInputs {
   young?: boolean
   /** Set by the caller: does this inflow have a gateway receipt? */
   unattested?: boolean
+  /**
+   * Set by the caller: was funding provenance neither observed NOR published?
+   *
+   * Not "does this account have a funder" — that is a different claim. This is
+   * "the funding rules could not be evaluated", which is why it discounts
+   * rather than blocks.
+   */
+  unverified?: boolean
 }
 
 export function weightOf(inputs: WeightInputs): Weight {
@@ -94,6 +122,21 @@ export function weightOf(inputs: WeightInputs): Weight {
     ['YOUNG_ACCOUNT', { hit: inputs.young === true, bp: policy.youngBp }],
     ['CONCENTRATED', { hit: inputs.concentrated === true, bp: policy.concentratedBp }],
     ['UNATTESTED', { hit: inputs.unattested === true, bp: policy.unattestedBp }],
+    /*
+     * Applies only when the policy CARRIES a step for it.
+     *
+     * A pre-v3 parameter set has no `unverifiedBp`, and inventing one would
+     * impose a policy retroactively on a version that never had it — the same
+     * mistake as back-filling the weight block into v1. Absent step, no
+     * discount, which is precisely the pre-v3 behaviour.
+     */
+    [
+      'UNVERIFIED_FUNDING',
+      {
+        hit: inputs.unverified === true && policy.unverifiedBp !== undefined,
+        bp: policy.unverifiedBp ?? 10_000,
+      },
+    ],
   ])
 
   let bp = 10_000

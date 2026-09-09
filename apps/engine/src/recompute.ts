@@ -20,22 +20,44 @@ import {
 } from '@tab/scoring'
 
 /**
- * Discount steps.
+ * Discount steps, FROM THE FROZEN PARAMETER SET.
  *
- * These live here rather than in `@tab/params` for now, and that is a gap worth
- * naming rather than hiding: they influence a published ceiling, so by the rule
- * this project set itself they belong in the versioned parameter set where
- * `verify-ceiling` can find them. Moving them is a params version bump, which
- * is exactly the ceremony that rule exists to impose.
+ * These were hardcoded here, and the comment that used to sit in this spot said
+ * why that was wrong: *"they influence a published ceiling, so by the rule this
+ * project set itself they belong in the versioned parameter set where
+ * verify-ceiling can find them. Moving them is a params version bump, which is
+ * exactly the ceremony that rule exists to impose."*
+ *
+ * v3 is that bump. The consequence is not cosmetic: a weight message says
+ * `bp 3360 · why [SHARED_FUNDING_ROOT, YOUNG_ACCOUNT, CONCENTRATED]`, and until
+ * the steps were in the frozen set no stranger could check that 3360 follows
+ * from those reasons. Now they can — 0.7 × 0.6 × 0.8 = 0.336.
+ *
+ * Throws on a pre-v3 set rather than falling back to the old constants. A
+ * fallback would let the engine keep running on numbers that are not in the
+ * record, which is the exact condition this move exists to end.
  */
-export const WEIGHT_POLICY: WeightPolicy = {
-  reciprocalBp: 5000,
-  reciprocalThresholdBp: 2500,
-  sharedRootBp: 7000,
-  youngBp: 6000,
-  concentratedBp: 8000,
-  unattestedBp: params.unattestedDiscountBp,
-}
+export const WEIGHT_POLICY: WeightPolicy = (() => {
+  const frozen = params.weights
+  if (!frozen) {
+    throw new Error(
+      `Parameter set v${params.version} carries no weight policy. The engine must not ` +
+        'fall back to hardcoded discount steps: a published weight has to be reproducible ' +
+        'from the frozen set, and numbers that live only in this file are not.',
+    )
+  }
+  return {
+    reciprocalBp: frozen.reciprocalBp,
+    reciprocalThresholdBp: frozen.reciprocalThresholdBp,
+    sharedRootBp: frozen.sharedRootBp,
+    youngBp: frozen.youngBp,
+    concentratedBp: frozen.concentratedBp,
+    unverifiedBp: frozen.unverifiedBp,
+    // Top-level in the set, not inside `weights` — it predates the block and
+    // is referenced by the ceiling formula too, so it stays where it was.
+    unattestedBp: params.unattestedDiscountBp,
+  }
+})()
 
 export interface RecomputeInputs {
   tab: AccountId
@@ -46,6 +68,16 @@ export interface RecomputeInputs {
   revenueByCounterparty: ReadonlyMap<AccountId, MicroUsdc>
   /** Accounts known to be younger than the age threshold. */
   young: ReadonlySet<AccountId>
+  /**
+   * Accounts whose funding provenance was neither observed NOR published.
+   *
+   * The funding rules could not be evaluated against these, so they are
+   * discounted rather than trusted. Optional so a caller that does not track it
+   * behaves exactly as before — but the engine always passes it, because
+   * treating an unverifiable counterparty as independent is the failure that let
+   * the loop attacker through on its first full run.
+   */
+  unverified?: ReadonlySet<AccountId>
   /** Ramp in force, basis points, from the settlement history. */
   rampBp: number
   cleanStreak: number
@@ -95,6 +127,7 @@ export function recompute(inputs: RecomputeInputs): Recomputation {
         concentrated: overCap.has(counterparty),
         sharedRoot: shared.shared,
         young: inputs.young.has(counterparty),
+        unverified: inputs.unverified?.has(counterparty) === true,
         // Attestation is per-RECEIPT, not per-counterparty, and it is already
         // applied by the unattested discount inside effectiveRevenue. Applying
         // it again here would discount the same weakness twice.

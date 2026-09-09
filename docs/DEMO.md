@@ -14,11 +14,24 @@ PER_CALL_CAP_USDC=0.500000    # raised from 0.05 so a few calls move the numbers
 TRAILING_WINDOWS=1            # revenue averages over one closed window
 ```
 
-Parameters come from `@tab/params` **v2** (`MODEL_ID = tab-v2`). The only difference from v1 is the
-starter floor, `1.000000 → 0.250000`, and it is the difference between a demo where the ceiling can
-be seen to rise and one where the floor decides everything. `v1.ts` stays byte-identical beside it,
-and `pnpm verify-ceiling` still passes every ceiling published under `tab-v1` — which is the frozen
--set claim demonstrated rather than asserted.
+Parameters come from `@tab/params` **v3** (`MODEL_ID = tab-v3`). Three generations exist and each
+changed exactly one thing:
+
+- **v1 → v2** — the starter floor, `1.000000 → 0.250000`. The difference between a demo where the
+  ceiling can be seen to *rise* and one where the floor decides everything.
+- **v2 → v3** — the independence discount steps moved INTO the set, and one is new
+  (`UNVERIFIED_FUNDING`, 50%). Before v3 the five steps lived in `apps/engine`, so a published
+  weight of `bp 3360` could not be checked by anyone: the numbers behind it were not in the frozen
+  record. They are now, and `0.7 × 0.6 × 0.8 = 0.336` is arithmetic a stranger can do.
+
+`v1.ts` and `v2.ts` stay byte-identical beside v3, with their hashes pinned as a tripwire, and
+`pnpm verify-ceiling` passes ceilings published under all three by resolving each message's own
+`model` field — which is the frozen-set claim demonstrated rather than asserted. **13 of 14 pass.**
+The one failure is seq 1 and is genuine: its hash matches, so the record is authentic, but the
+`binding` label it recorded is `unrated` where today's formula says `computed`. `computeCeiling`
+changed after publication without a version bump. The ceiling *value* is identical either way, so
+no credit decision was affected — and leaving the failure visible is the point of owning a tool
+whose job is catching exactly that.
 
 Client-side caps are separate and belong to the payers, because a customer decides what it will
 pay: `PAYER_MAX_PER_CALL_USDC` and `ATTACK_MAX_PER_CALL_USDC`. Both were hardcoded once and

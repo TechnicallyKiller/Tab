@@ -258,10 +258,28 @@ async function pass(): Promise<void> {
     }
   }
 
+  /*
+   * The unverifiable counterparties, named on their own line.
+   *
+   * `stats.unknown` counts accounts the WALK could not resolve, which includes
+   * ancestors nobody is being weighted on. This counts the ones that actually
+   * cost something: a counterparty contributing revenue whose provenance we
+   * cannot establish, and which v3 therefore discounts rather than trusts.
+   */
+  const unverifiedCounterparties = counterparties.filter((c) => ancestry.unverified.has(c))
+
   console.log(
     `    ancestry    ${stats.fetched} fetched · ${stats.remembered} from the topic · ` +
-      `${stats.unknown} unknown (fail-open)`,
+      `${stats.unknown} unresolved`,
   )
+  if (unverifiedCounterparties.length > 0) {
+    const step = params.weights?.unverifiedBp
+    console.log(
+      `    UNVERIFIED  ${unverifiedCounterparties.length} counterparty(ies) with no published ` +
+        `provenance — discounted to ${step !== undefined ? `${step / 100}%` : 'full weight (pre-v3 set)'}: ` +
+        unverifiedCounterparties.join(', '),
+    )
+  }
 
   const edges = await edgesFor(
     mirror,
@@ -279,6 +297,7 @@ async function pass(): Promise<void> {
     attestedCounterparties: revenue.attestedCounterparties,
     revenueByCounterparty: revenue.revenueByCounterparty,
     young,
+    unverified: ancestry.unverified,
     rampBp: rampAfter(entries),
     cleanStreak,
     hasDefaulted,

@@ -36,6 +36,27 @@ export const WEIGHT_REASONS = [
   'CONCENTRATED',
   /** No gateway receipt — money arrived, no purchase can be proven. */
   'UNATTESTED',
+  /**
+   * The funding rules could not be EVALUATED against this account.
+   *
+   * Not "it has no funder" — that is a different and much rarer claim. This
+   * means no funder was ever observed for it and none has been published, so
+   * `COMMON_FUNDER` and `SHARED_FUNDING_ROOT` could not be asked.
+   *
+   * Exists because the alternative was silence. An unverifiable counterparty
+   * used to be weighted INDEPENDENT — the unsafe direction — and the loop
+   * attacker went uncaught on its first full run because of exactly that.
+   * Publishing observed facts closed the case where a funder was once seen and
+   * Mirror Node later would not answer; this reason covers the case where it
+   * was never seen at all, where there is nothing to remember.
+   *
+   * A DISCOUNT, deliberately not a block. Mirror Node lag is routine, and
+   * blocking on it would turn an indexer hiccup into a refusal for every
+   * counterparty at once. It is also self-healing: the moment provenance IS
+   * observed it is published, and a published fact is never forgotten, so this
+   * reason cannot apply to the same account twice.
+   */
+  'UNVERIFIED_FUNDING',
 ] as const
 
 export type WeightReason = (typeof WEIGHT_REASONS)[number]
@@ -65,4 +86,7 @@ export const WEIGHT_REASON_DETAIL: Record<WeightReason, string> = {
   YOUNG_ACCOUNT: 'account is newer than the age threshold — not yet independently established',
   CONCENTRATED: 'over the single-counterparty share cap of the agent’s total',
   UNATTESTED: 'no gateway receipt — money arrived, but no purchase can be proven',
+  UNVERIFIED_FUNDING:
+    'no funding provenance has been observed or published for this account, so the funding rules ' +
+    'could not be evaluated against it — discounted rather than trusted',
 }

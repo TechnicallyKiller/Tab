@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { format, micro, usdc, type MicroUsdc } from '@tab/money'
 import { canonicalHash } from '@tab/protocol'
-import { caps } from '@tab/params'
+import { caps, MODEL_VERSION, weightPolicyFor } from '@tab/params'
 import { computeCeiling } from '@tab/scoring'
 import {
   onCleanSettlement, onMissedSettlement, transition, type CeilingState,
 } from './guards/asymmetry.ts'
 import { ceilingInputRecord } from './publish/ceiling.ts'
-import { recompute } from './recompute.ts'
+import { recompute, WEIGHT_POLICY } from './recompute.ts'
 import { isYoungFrom, revenueFromEntries } from './gather.ts'
 import { newFactFields } from './publish/facts.ts'
 import { resolveAncestry, type Observation } from './ancestry.ts'
@@ -532,4 +532,51 @@ test('a funding CYCLE terminates rather than recursing forever', async () => {
     hops: 10,
   })
   assert.equal(result.stats.fetched, 2)
+})
+
+test('the walk reports which accounts have NO established provenance', () => {
+  // Feeds `UNVERIFIED_FUNDING`. Before v3 this set was computed by nobody and
+  // an unverifiable counterparty was weighted independent.
+  return resolveAncestry([TAB, SHILL], {
+    observe: broken(CHAIN, [SHILL]),
+    remembered: new Map(),
+    hops: 3,
+  }).then((result) => {
+    assert.equal(result.unverified.has(SHILL), true)
+    // The tab resolved fine, so it is not unverified.
+    assert.equal(result.unverified.has(TAB), false)
+    // The operator legitimately has no funder in this fixture — a genesis-like
+    // account. Counting it as unverified is harmless and is the safe direction;
+    // only counterparties are ever weighted on it.
+    assert.equal(result.unverified.has(OPERATOR), true)
+  })
+})
+
+test('a REMEMBERED funder removes an account from the unverified set', () => {
+  // The two mechanisms compose: publishing facts closes "seen once, then the
+  // index flaked", and this confirms the v3 discount does not then punish an
+  // account the topic can vouch for.
+  return resolveAncestry([SHILL], {
+    observe: broken(CHAIN, [SHILL]),
+    remembered: new Map([[SHILL, { account: SHILL, funder: OPERATOR, funderSeq: 16 }]]),
+    hops: 3,
+  }).then((result) => {
+    assert.equal(result.unverified.has(SHILL), false)
+  })
+})
+
+test('the engine refuses to run on a parameter set with no weight policy', () => {
+  /*
+   * `WEIGHT_POLICY` throws rather than falling back to the constants that used
+   * to live in `recompute.ts`. A fallback would let the engine keep publishing
+   * weights computed from numbers that are not in the frozen record, which is
+   * the exact condition moving them into `@tab/params` exists to end.
+   *
+   * Asserted through the frozen sets rather than by re-importing under a stub:
+   * v3 has a policy, v1 and v2 do not, and the guard is what stands between
+   * those two facts and a silently wrong weight.
+   */
+  assert.ok(WEIGHT_POLICY.unverifiedBp !== undefined)
+  assert.equal(WEIGHT_POLICY.sharedRootBp, weightPolicyFor(MODEL_VERSION)?.sharedRootBp)
+  assert.equal(weightPolicyFor(2), undefined)
 })

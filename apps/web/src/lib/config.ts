@@ -90,6 +90,46 @@ export function configGroups(set: ParameterSet = params): readonly ConfigGroup[]
       ],
     },
     {
+      name: 'Independence discounts',
+      note: 'Applied to a counterparty\u2019s weight. They MULTIPLY and truncate down.',
+      rows: set.weights
+        ? [
+            { key: 'RECIPROCAL_FLOW', value: pct(set.weights.reciprocalBp) },
+            { key: 'RECIPROCAL_THRESHOLD', value: pct(set.weights.reciprocalThresholdBp) },
+            { key: 'SHARED_FUNDING_ROOT', value: pct(set.weights.sharedRootBp) },
+            { key: 'YOUNG_ACCOUNT', value: pct(set.weights.youngBp) },
+            { key: 'CONCENTRATED', value: pct(set.weights.concentratedBp) },
+            {
+              key: 'UNVERIFIED_FUNDING',
+              value: pct(set.weights.unverifiedBp),
+              tuned:
+                'New in v3. A counterparty whose funding provenance was never observed and never ' +
+                'published used to count in FULL, because absent ancestry read as absent ' +
+                'relationship — the unsafe direction, and how the loop attacker went uncaught on ' +
+                'its first full run. A discount rather than a block, because blocking would turn ' +
+                'routine Mirror Node lag into a refusal for every counterparty at once. It is ' +
+                'self-healing: once provenance is observed it is published, and a published fact ' +
+                'is never forgotten.',
+            },
+          ]
+        : [
+            /*
+             * v1 and v2 genuinely had no frozen weight policy — the steps lived
+             * in the engine. Showing the numbers they happened to use would
+             * claim a weight published under those versions is reproducible
+             * from the frozen record, and it is not.
+             */
+            {
+              key: 'WEIGHT_POLICY',
+              value: 'not in this parameter set',
+              tuned:
+                'Before v3 the discount steps lived in apps/engine, outside the versioned set, so ' +
+                'a weight published under this version is not reproducible from the frozen ' +
+                'record. Absence is the accurate answer, not the numbers that happened to be used.',
+            },
+          ],
+    },
+    {
       name: 'Windows',
       note: 'How often the tab settles, and the most one call may cost.',
       rows: [

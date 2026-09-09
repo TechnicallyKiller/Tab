@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createHash } from 'node:crypto'
 import {
-  MODEL_ID, MODEL_VERSION, aprBpFor, caps, describeParams, params, paramsForVersion, tierMultipleBpFor, v1,
+  MODEL_ID, MODEL_VERSION, aprBpFor, caps, describeParams, params, paramsForVersion,
+  tierMultipleBpFor, weightPolicyFor, v1,
 } from './index.ts'
 import { v2 } from './versions/v2.ts'
+import { v3 } from './versions/v3.ts'
 import { parameterSet } from './schema.ts'
 import { windowConsensusRange, windowEnd, windowOf, windowStart } from './window.ts'
 
@@ -168,4 +170,86 @@ test('MODEL_ID satisfies the protocol’s model field (3-32 chars)', () => {
   assert.ok(MODEL_ID.length >= 3 && MODEL_ID.length <= 32, MODEL_ID)
   assert.match(MODEL_ID, /^tab-v\d+$/)
   assert.ok(MODEL_ID.endsWith(String(MODEL_VERSION)))
+})
+
+/* ── v3: the discount steps join the frozen record ───────────────────────── */
+
+test('v3 is frozen — this hash may never change', () => {
+  const hash = createHash('sha256').update(canonical(v3)).digest('hex')
+  assert.equal(hash, '657871508679a290dd4e59f5139912cc6a1027fbc9a2d85b158649d8ef3dee8c')
+})
+
+test('v3 differs from v2 in EXACTLY one field, plus the version', () => {
+  // One deliberate change per version. `weights` moving in IS the change.
+  const differing = Object.keys({ ...v2, ...v3 }).filter(
+    (k) =>
+      canonical(v2[k as keyof typeof v2]) !== canonical(v3[k as keyof typeof v3]),
+  )
+  assert.deepEqual(differing.sort(), ['version', 'weights'])
+})
+
+test('v1 and v2 carry NO weight policy, and that is the accurate record', () => {
+  /*
+   * They genuinely did not have one — the discount steps lived in
+   * `apps/engine/src/recompute.ts`. Back-filling them would claim a weight
+   * published under `tab-v1` is reproducible from the frozen set when it is
+   * not, which is rewriting history rather than recording it.
+   */
+  assert.equal(v1.weights, undefined)
+  assert.equal(v2.weights, undefined)
+  assert.equal(weightPolicyFor(1), undefined)
+  assert.equal(weightPolicyFor(2), undefined)
+})
+
+test('weightPolicyFor returns the steps from v3 onward', () => {
+  const policy = weightPolicyFor(3)
+  assert.ok(policy)
+  // The first five are exactly what the engine used, so no weight changed by
+  // moving them into the set.
+  assert.equal(policy.reciprocalBp, 5000)
+  assert.equal(policy.reciprocalThresholdBp, 2500)
+  assert.equal(policy.sharedRootBp, 7000)
+  assert.equal(policy.youngBp, 6000)
+  assert.equal(policy.concentratedBp, 8000)
+  // The new one.
+  assert.equal(policy.unverifiedBp, 5000)
+})
+
+test('an unknown version still THROWS, where a pre-v3 version returns undefined', () => {
+  // Two different situations that must not present identically: an unknown
+  // version is a lookup bug, a known version without this field is a fact
+  // about history.
+  assert.throws(() => weightPolicyFor(99), /No parameter set for model version 99/)
+  assert.equal(weightPolicyFor(1), undefined)
+})
+
+test('the unverified discount is no gentler than the unattested one', () => {
+  /*
+   * "I cannot tell you who this counterparty is" is a weaker position than
+   * "money arrived without a receipt", so it must not count for MORE. A future
+   * version that loosened this would quietly make unverifiable revenue the
+   * cheapest kind to manufacture.
+   */
+  const policy = weightPolicyFor(3)!
+  assert.ok(policy.unverifiedBp <= v3.unattestedDiscountBp)
+})
+
+test('the unverified discount is NOT zero — an indexer hiccup is not a refusal', () => {
+  /*
+   * Blocking would turn routine Mirror Node lag into a simultaneous refusal for
+   * every counterparty, which is an outage caused by an index. The original
+   * fail-open existed partly for that reason and the reason was sound; only its
+   * magnitude was wrong.
+   */
+  assert.ok(weightPolicyFor(3)!.unverifiedBp > 0)
+})
+
+test('the config dump reports a missing weight policy rather than inventing one', () => {
+  const v3Dump = describeParams(v3).join('\n')
+  assert.match(v3Dump, /weight discounts.*unverified 50\.00%/)
+
+  const v1Dump = describeParams(v1).join('\n')
+  assert.match(v1Dump, /not in this parameter set/)
+  // And it says what that means for a reader, not just that it is absent.
+  assert.match(v1Dump, /not reproducible from the frozen record/)
 })

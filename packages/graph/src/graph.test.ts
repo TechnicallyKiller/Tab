@@ -29,7 +29,12 @@ const POLICY: WeightPolicy = {
   youngBp: 6000,
   concentratedBp: 8000,
   unattestedBp: 6000,
+  unverifiedBp: 5000,
 }
+
+/** A pre-v3 policy: no `unverifiedBp`, because v1 and v2 had none. */
+const POLICY_PRE_V3: WeightPolicy = { ...POLICY }
+delete POLICY_PRE_V3.unverifiedBp
 
 /* ── ancestry terminates ─────────────────────────────────────────────────── */
 
@@ -298,4 +303,97 @@ test('an unknown funder on either side cannot trigger the block', () => {
       .clustered,
     false,
   )
+})
+
+
+/* ── UNVERIFIED_FUNDING: the residual fail-open, closed ──────────────────── */
+
+test('a counterparty with no established provenance is DISCOUNTED, not trusted', () => {
+  /*
+   * The residual the published-facts work could not close: an account never
+   * successfully observed has nothing to remember, so before v3 it was weighted
+   * INDEPENDENT — full credit — because absent ancestry read as absent
+   * relationship. That is the unsafe direction, and it is how the loop attacker
+   * went uncaught on its first full run.
+   */
+  const weight = weightOf({
+    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
+    maxHops: 3, policy: POLICY, unverified: true,
+  })
+  assert.equal(weight.bp, 5000)
+  assert.deepEqual(weight.reasons, ['UNVERIFIED_FUNDING'])
+  // A DISCOUNT, not a block. Mirror Node lag is routine, and blocking on it
+  // would turn an indexer hiccup into a refusal for every counterparty at once.
+  assert.equal(weight.blocking, false)
+})
+
+test('a PRE-V3 policy applies no unverified discount at all', () => {
+  /*
+   * v1 and v2 carry no `unverifiedBp`, and inventing one would impose a policy
+   * retroactively on versions that never had it — the same mistake as
+   * back-filling the weight block into `v1.ts`. Absent step, no discount, which
+   * is exactly the pre-v3 behaviour.
+   */
+  const weight = weightOf({
+    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
+    maxHops: 3, policy: POLICY_PRE_V3, unverified: true,
+  })
+  assert.equal(weight.bp, 10_000)
+  assert.deepEqual(weight.reasons, ['INDEPENDENT'])
+})
+
+test('UNVERIFIED_FUNDING is applied FIRST, and the order is part of the model', () => {
+  /*
+   * Multiplication commutes; integer truncation does not. Applying 5000 then
+   * 6000 can differ by a micro-unit from 6000 then 5000, so the sequence is
+   * frozen alongside the numbers. This pins it: unverified (0.5) then young
+   * (0.6) then concentrated (0.8).
+   */
+  const weight = weightOf({
+    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
+    maxHops: 3, policy: POLICY, unverified: true, young: true, concentrated: true,
+  })
+  assert.deepEqual(weight.reasons, ['UNVERIFIED_FUNDING', 'YOUNG_ACCOUNT', 'CONCENTRATED'])
+  // 10000 → 5000 → 3000 → 2400
+  assert.equal(weight.bp, 2400)
+})
+
+test('a BLOCKING reason still short-circuits past the unverified discount', () => {
+  // A known common funder is a hard block. Stacking an "unverified" discount on
+  // top of zero would put a second reason next to the one that decided it, and
+  // the console would show noise around the line that explains the refusal.
+  const graph = new Map([
+    [AGENT, { id: AGENT, fundedBy: [EXCHANGE] }],
+    [SELLER, { id: SELLER, fundedBy: [EXCHANGE] }],
+  ])
+  const weight = weightOf({
+    agent: AGENT, counterparty: SELLER, edges: [], facts: graph,
+    maxHops: 3, policy: POLICY, unverified: true,
+  })
+  assert.equal(weight.bp, 0)
+  assert.deepEqual(weight.reasons, ['COMMON_FUNDER'])
+})
+
+test('the published bp reproduces from the reasons and the frozen steps', () => {
+  /*
+   * The point of moving the steps into `@tab/params`. A weight message says
+   * `bp 3360 · why [SHARED_FUNDING_ROOT, YOUNG_ACCOUNT, CONCENTRATED]`, and a
+   * stranger can now check it: 0.7 × 0.6 × 0.8 = 0.336. Before v3 the steps
+   * were in an app file and that arithmetic was unavailable to anyone outside.
+   */
+  const weight = weightOf({
+    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
+    maxHops: 3, policy: POLICY, sharedRoot: true, young: true, concentrated: true,
+  })
+  assert.deepEqual(weight.reasons, ['SHARED_FUNDING_ROOT', 'YOUNG_ACCOUNT', 'CONCENTRATED'])
+  assert.equal(weight.bp, 3360)
+
+  const steps: Record<string, number> = {
+    SHARED_FUNDING_ROOT: POLICY.sharedRootBp,
+    YOUNG_ACCOUNT: POLICY.youngBp,
+    CONCENTRATED: POLICY.concentratedBp,
+  }
+  let replayed = 10_000
+  for (const reason of weight.reasons) replayed = Math.floor((replayed * steps[reason]!) / 10_000)
+  assert.equal(replayed, weight.bp)
 })

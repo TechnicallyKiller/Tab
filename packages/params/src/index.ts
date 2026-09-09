@@ -13,9 +13,10 @@ import { usdc, type MicroUsdc } from '@tab/money'
 import type { ParameterSet, Tier } from './schema.ts'
 import { v1 } from './versions/v1.ts'
 import { v2 } from './versions/v2.ts'
+import { v3 } from './versions/v3.ts'
 
 /** The set in force. Bumped on ANY parameter change. */
-export const MODEL_VERSION = 2
+export const MODEL_VERSION = 3
 
 /**
  * The version as a published identifier.
@@ -38,9 +39,9 @@ export const MODEL_ID = `tab-v${MODEL_VERSION}`
  * against v2 numbers would report a mismatch that looks exactly like fraud and
  * is only a lookup bug.
  */
-const SETS: Record<number, ParameterSet> = { 1: v1, 2: v2 }
+const SETS: Record<number, ParameterSet> = { 1: v1, 2: v2, 3: v3 }
 
-export const params: ParameterSet = v2
+export const params: ParameterSet = v3
 
 /**
  * The parameter set a historical ceiling was computed under.
@@ -70,6 +71,25 @@ export function aprBpFor(t: Tier, set: ParameterSet = params): number {
 /** Ceiling multiple for a tier, basis points. 10000 = 1x attested earnings. */
 export function tierMultipleBpFor(t: Tier, set: ParameterSet = params): number {
   return set.tierMultipleBp[t] ?? set.tierMultipleBp['Unrated']!
+}
+
+/**
+ * The independence discount steps for a version, or `undefined` before v3.
+ *
+ * `undefined` is a real answer and callers must handle it: v1 and v2 genuinely
+ * had no frozen weight policy — it lived in `apps/engine` — so a weight
+ * published under `tab-v1` is NOT reproducible from the frozen record. The
+ * honest report for one is "not verifiable", never a check against numbers that
+ * were not parameters at the time.
+ *
+ * Deliberately not throwing, unlike `paramsForVersion`. An unknown VERSION is a
+ * lookup bug; a known version that predates this field is a fact about history,
+ * and the two should not present identically.
+ */
+export function weightPolicyFor(
+  version: number,
+): NonNullable<ParameterSet['weights']> | undefined {
+  return paramsForVersion(version).weights
 }
 
 /** Caps as money, parsed once. The set stores them as strings so it can be hashed. */
@@ -105,12 +125,27 @@ export function describeParams(set: ParameterSet = params): string[] {
     `funding ancestry     ${set.fundingAncestryHops} hops`,
     `window               ${set.window.seconds}s · hold TTL ${set.window.holdTtlSeconds}s`,
     `rounding             interest ${set.interestRounding} · ramp ${set.ramp.rounding}  (both compound; never in the agent's favour)`,
+    /*
+     * The discount steps, printed only when the set actually has them.
+     *
+     * A dash for v1 and v2 rather than the numbers the engine happened to use:
+     * those sets did not carry a weight policy, and printing one would claim a
+     * historical weight is reproducible from the frozen record when it is not.
+     */
+    set.weights
+      ? `weight discounts     reciprocal ${pct(set.weights.reciprocalBp)} (above ${pct(set.weights.reciprocalThresholdBp)} reciprocity) · ` +
+        `shared root ${pct(set.weights.sharedRootBp)} · young ${pct(set.weights.youngBp)} · ` +
+        `concentrated ${pct(set.weights.concentratedBp)} · unverified ${pct(set.weights.unverifiedBp)}`
+      : 'weight discounts     not in this parameter set — they lived in the engine before v3, so a ' +
+        'weight published under it is not reproducible from the frozen record',
+    'weight order         discounts MULTIPLY and truncate DOWN, in @tab/graph\'s fixed ORDER',
   ]
 }
 
 export { parameterSet, tier, type ParameterSet, type Tier } from './schema.ts'
 export { v1 } from './versions/v1.ts'
 export { v2 } from './versions/v2.ts'
+export { v3 } from './versions/v3.ts'
 export {
   windowConsensusRange,
   windowEnd,

@@ -39,6 +39,19 @@ export interface AncestryDeps {
 export interface AncestryResult {
   /** Ready for `@tab/graph`. One `fundedBy` per account; chains resolve by lookup. */
   facts: Map<AccountId, AccountFacts>
+  /**
+   * Accounts with NO funder — neither observed this pass nor remembered.
+   *
+   * The funding rules could not be evaluated against these, and before v3 that
+   * read as "no relationship" and weighted them independent. `UNVERIFIED_FUNDING`
+   * now discounts them instead.
+   *
+   * Note what this is NOT: an account that genuinely has no creating payer.
+   * Those exist — `0.0.2` is a genesis account — but a counterparty of an
+   * agent's tab is never one, and treating a genesis account as unverifiable is
+   * the safe direction anyway.
+   */
+  unverified: Set<AccountId>
   /** Creation times, so the age rule needs no second fetch. */
   birthdays: Map<AccountId, string>
   /** Everything this pass actually saw, for the publisher to diff. */
@@ -60,6 +73,7 @@ export async function resolveAncestry(
   const note = deps.note ?? (() => {})
   const facts = new Map<AccountId, AccountFacts>()
   const birthdays = new Map<AccountId, string>()
+  const unverified = new Set<AccountId>()
   const observed: ObservedFact[] = []
   const stats = { fetched: 0, remembered: 0, unknown: 0 }
 
@@ -135,11 +149,12 @@ export async function resolveAncestry(
 
     facts.set(account, { id: account, ...(funder ? { fundedBy: [funder] } : {}) })
     if (createdAt) birthdays.set(account, createdAt)
+    if (!funder) unverified.add(account)
 
     if (funder) await walk(funder, hopsLeft - 1)
   }
 
   for (const root of roots) await walk(root, deps.hops)
 
-  return { facts, birthdays, observed, stats }
+  return { facts, birthdays, observed, unverified, stats }
 }
