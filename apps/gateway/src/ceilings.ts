@@ -16,8 +16,9 @@
 import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
 import {
-  ceilingHistoryFromMessages, factsFromMessages, weightsFromMessages,
-  type PublishedCeiling, type PublishedWeight, type RememberedFacts,
+  ceilingHistoryFromMessages, factsFromMessages, registrationsFromMessages,
+  weightsFromMessages,
+  type PublishedCeiling, type PublishedWeight, type Registration, type RememberedFacts,
 } from '@tab/ledger'
 
 /*
@@ -62,6 +63,25 @@ export interface CeilingReplay {
    * These are the two values the rule actually compared, not a re-derivation.
    */
   facts: Map<string, RememberedFacts>
+  /**
+   * Starter Tab claims, by tab.
+   *
+   * The gateway reports these; it does not decide them. Resolving a funding
+   * root needs `@tab/graph`, which `boundaries.json` bars this app from — and
+   * rightly: the engine resolves the root, publishes the claim, and the fast
+   * path reads the consequence as a ceiling like everything else.
+   */
+  registrations: Map<string, Registration>
+  /**
+   * How many funding ROOTS are claimed — not how many tabs registered.
+   *
+   * They differ, and the difference is not academic: one tab can hold claims on
+   * several roots over its life (an early claim can be left inert when the root
+   * resolution itself changes, as happened when `0.0.2` stopped being a valid
+   * root). Serving `registrations.size` as a root count reported 1 on live data
+   * where 2 roots were claimed.
+   */
+  rootsClaimed: number
   read: number
 }
 
@@ -91,6 +111,7 @@ export async function replayCeilings(
    * force" and "the last row of the chart" the same fact by construction.
    */
   const facts = factsFromMessages(assembled).byAccount
+  const allRegistrations = registrationsFromMessages(assembled)
   const history = ceilingHistoryFromMessages(assembled)
   const byTab = new Map<string, CeilingSnapshot>()
   for (const [tab, list] of history) {
@@ -98,7 +119,15 @@ export async function replayCeilings(
     if (latest) byTab.set(tab, latest)
   }
 
-  return { byTab, weights, history, facts, read: assembled.length }
+  return {
+    byTab,
+    weights,
+    history,
+    facts,
+    registrations: allRegistrations.byTab,
+    rootsClaimed: allRegistrations.byRoot.size,
+    read: assembled.length,
+  }
 }
 
 /**

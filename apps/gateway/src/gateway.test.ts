@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { format, micro, toWire, usdc, type MicroUsdc } from '@tab/money'
-import type { TabMessage } from '@tab/protocol'
+import { SCHEMA_VERSION, type TabMessage } from '@tab/protocol'
+import { registrationsFromMessages, type TopicMessage } from '@tab/ledger'
+import { encode } from '@tab/protocol'
 import { LedgerState } from './state.ts'
 import { loadEnv, type GatewayEnv } from './env.ts'
 import { nowConsensus } from './receipts.ts'
@@ -780,13 +782,17 @@ test('an unknown provenance stays ABSENT rather than being defaulted', async () 
   await app.close()
 })
 
-test('the tab list says registration is NOT enforced, on the response itself', async () => {
+test('the tab list states the registration RULE, on the response itself', async () => {
   /*
-   * Nothing writes a `register` message, so one Starter Tab per funding root is
-   * unenforced. Putting the flag on the response rather than leaving it to a
-   * caller's assumption is what stops a consumer rendering this under a
-   * "Registry" heading — which the console did, for a feature that does not
-   * exist.
+   * This asserted `registrationEnforced: false` and a note saying no
+   * registration flow existed — and it failed the moment the flow landed, which
+   * is the test doing its job rather than a test to delete.
+   *
+   * The flag describes the RULE, applied on every engine pass. `rootsClaimed`
+   * is the data, and a caller asking "has this actually run" reads that.
+   * Keeping both on the response is what stops a consumer rendering this list
+   * under a "Registry" heading — which the console did, for a feature that did
+   * not then exist.
    */
   const { deps, state } = depsFor({})
   state.push(TAB, {
@@ -796,12 +802,46 @@ test('the tab list says registration is NOT enforced, on the response itself', a
   const app = buildServer(deps)
   const body = (await app.inject({ method: 'GET', url: '/v1/tabs' })).json()
 
-  assert.equal(body.registrationEnforced, false)
-  assert.match(body.note, /No registration flow exists yet/)
+  assert.equal(body.registrationEnforced, true)
+  assert.match(body.note, /One Starter Tab per funding root/)
+  // No claim has been published in this fixture, and that is reported as data
+  // rather than folded into the flag.
+  assert.equal(body.rootsClaimed, 0)
   assert.equal(body.tabs.length, 1)
   // No tier, because nothing has been published for this tab — NOT `Unrated`.
   assert.equal(body.tabs[0].tier, undefined)
   assert.match(body.tabs[0].ceiling, /^\d+\.\d{6}$/)
+  // And no claim recorded, which is NOT the same as denied — the gateway
+  // cannot resolve a funding root and must not imply that it can.
+  assert.equal(body.tabs[0].registeredRoot, undefined)
+  await app.close()
+})
+
+test('a tab that HOLDS a claim reports the root and the seq that established it', async () => {
+  const { deps, state } = depsFor({})
+  state.push(TAB, {
+    kind: 'debit', at: nowConsensus(), window: 5_963_000, holdId: 'h1',
+    counterparty: SELLER, amount: micro(-40_000n), transactionId: 'tx1',
+  })
+  const app = buildServer({
+    ...deps,
+    rootsClaimed: () => 1,
+    registrations: () =>
+      new Map([
+        [
+          TAB,
+          {
+            tab: TAB, root: '0.0.8812188', ceiling: usdc('0.250000'),
+            perCall: usdc('0.050000'), allowlist: [], at: '1.0', seq: 41,
+          },
+        ],
+      ]),
+  } as unknown as SpendDeps)
+
+  const body = (await app.inject({ method: 'GET', url: '/v1/tabs' })).json()
+  assert.equal(body.rootsClaimed, 1)
+  assert.equal(body.tabs[0].registeredRoot, '0.0.8812188')
+  assert.equal(body.tabs[0].registrationSeq, 41)
   await app.close()
 })
 
@@ -852,3 +892,45 @@ test('GATEWAY_PORT still wins, so a local override is unchanged', () => {
 test('with neither set it falls back to 8080', () => {
   assert.equal(loadEnv(FULL_ENV).port, 8080)
 })
+
+test('rootsClaimed counts ROOTS, not tabs — they are not the same number', () => {
+  /*
+   * Served as `registrations.size` at first, which counts TABS. On live data
+   * that reported 1 where 2 roots were claimed: one tab held claims on two
+   * roots, because an early claim on `0.0.2` was left inert when system
+   * accounts stopped resolving as roots.
+   *
+   * Asserted against the ledger reader rather than the route, because that is
+   * where the two maps are built and where the distinction lives.
+   */
+  const claims = [
+    published(
+      {
+        v: SCHEMA_VERSION, t: 'register', tab: TAB, w: 1,
+        root: '0.0.2', ceil: '0.250000', perCall: '0.050000', allowlist: [],
+      } as TabMessage,
+      1000,
+      1,
+    ),
+    published(
+      {
+        v: SCHEMA_VERSION, t: 'register', tab: TAB, w: 2,
+        root: '0.0.8812188', ceil: '0.250000', perCall: '0.050000', allowlist: [],
+      } as TabMessage,
+      2000,
+      2,
+    ),
+  ]
+  const replay = registrationsFromMessages(claims)
+  assert.equal(replay.byTab.size, 1)
+  assert.equal(replay.byRoot.size, 2)
+})
+
+/** Encode a message the way a topic carries it. */
+function published(message: TabMessage, seconds: number, seq: number): TopicMessage {
+  return {
+    payload: encode(message),
+    consensusTimestamp: `${seconds}.000000000`,
+    sequenceNumber: seq,
+  }
+}

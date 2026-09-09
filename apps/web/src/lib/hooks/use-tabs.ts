@@ -23,6 +23,7 @@ const EMPTY: TabList = {
   // False before the first poll resolves, so a momentary render cannot claim
   // enforcement the gateway never confirmed.
   registrationEnforced: false,
+  rootsClaimed: 0,
   note: '',
   tabs: [],
 }

@@ -230,19 +230,30 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
   app.get('/v1/tabs', async () => {
     const at = nowConsensus()
     const ceilings = deps.ceilings?.()
+    const registrations = deps.registrations?.()
     return {
       window: deps.window(),
       /*
        * Stated on the response, not left for a reader to assume.
        *
-       * A console that renders this list under the heading "Registry" is making
-       * a claim the system does not support, and the fix belongs here rather
-       * than in the view — every consumer of this endpoint needs to know.
+       * This was `false` with a note saying no registration flow existed. It
+       * does now: the engine resolves each tab's funding root from the
+       * published `graphFact` messages and claims it, first claim winning
+       * permanently, so a hundred agents minted from one wallet yield ONE
+       * starter grant. The flag stays on the response rather than in the view
+       * because every consumer needs to know which rule is in force.
+       *
+       * `true` describes the RULE, not the data: it is enforced on every engine
+       * pass whether or not any root has been claimed yet. `rootsClaimed` is
+       * the data, and a reader wanting "has this actually run" should look
+       * there rather than at the flag.
        */
-      registrationEnforced: false,
+      registrationEnforced: true,
+      rootsClaimed: deps.rootsClaimed?.() ?? 0,
       note:
-        'Tabs seen on the receipt topic during replay. No registration flow exists yet, so ' +
-        'there is no registration time and one Starter Tab per funding root is UNENFORCED.',
+        'One Starter Tab per funding root, enforced by the engine: a tab whose root is already ' +
+        'claimed by another tab gets NO starter floor and must earn its ceiling from independent ' +
+        'revenue. Tabs themselves appear here the first time they spend or earn.',
       tabs: deps.state.tabs().map((tab) => {
         const p = deps.state.position(tab, at)
         const published = ceilings?.get(tab)?.at(-1)
@@ -255,6 +266,21 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
           /** What the fast path enforces for this tab, right now. */
           ceiling: toWire(p.ceiling),
           entries: deps.state.entriesFor(tab).length,
+          /*
+           * The Starter Tab claim this tab holds, when it holds one.
+           *
+           * Absent means the engine has not registered it yet — NOT that it was
+           * denied. The gateway cannot tell those apart: resolving a funding
+           * root needs `@tab/graph`, which it may not import, and guessing
+           * would put a verdict on screen that no topic carries.
+           */
+          ...(registrations?.get(tab)
+            ? {
+                registeredRoot: registrations.get(tab)!.root,
+                registeredAt: registrations.get(tab)!.at,
+                registrationSeq: registrations.get(tab)!.seq,
+              }
+            : {}),
           // Present only when the engine has published for this tab. A tier is
           // never guessed from the balance — an unpublished tab has no tier,
           // which is a different fact from being Unrated.

@@ -94,6 +94,10 @@ let latestCeilings = new Map<string, Awaited<ReturnType<typeof replayCeilings>>[
  */
 let latestFacts = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['facts'] extends Map<string, infer F> ? F : never>()
 
+/** Starter Tab claims, kept for the console. Never consulted by the spend path. */
+let latestRegistrations = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['registrations'] extends Map<string, infer R> ? R : never>()
+let latestRootsClaimed = 0
+
 export function weightsSnapshot() {
   return latestWeights
 }
@@ -106,11 +110,21 @@ export function factsSnapshot() {
   return latestFacts
 }
 
+export function registrationsSnapshot() {
+  return latestRegistrations
+}
+
+export function rootsClaimedSnapshot(): number {
+  return latestRootsClaimed
+}
+
 async function syncCeilings(label: string): Promise<void> {
   const replay = await replayCeilings(mirror, env.ceilingTopic)
   latestWeights = replay.weights
   latestCeilings = replay.history
   latestFacts = replay.facts
+  latestRegistrations = replay.registrations
+  latestRootsClaimed = replay.rootsClaimed
   for (const [t, snapshot] of replay.byTab) {
     const before = state.ceilingFor(t)
     if (before === snapshot.ceiling) continue
@@ -133,7 +147,8 @@ async function syncCeilings(label: string): Promise<void> {
      */
     console.log(
       `${replay.byTab.size} tab(s) · ${replay.read} message(s) · ` +
-        `${replay.facts.size} account(s) of published provenance`,
+        `${replay.facts.size} account(s) of published provenance · ` +
+        `${replay.rootsClaimed} funding root(s) claimed by ${replay.registrations.size} tab(s)`,
     )
   }
 }
@@ -259,6 +274,8 @@ const app = buildServer(
     ceilings: ceilingsSnapshot,
     settlements: settlementsSnapshot,
     facts: factsSnapshot,
+    registrations: registrationsSnapshot,
+    rootsClaimed: rootsClaimedSnapshot,
   },
   agentUpstream
     ? {

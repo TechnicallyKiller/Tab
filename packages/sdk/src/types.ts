@@ -292,21 +292,36 @@ export interface TabSummary {
   cause?: string
   model?: string
   seq?: number
+  /**
+   * The funding root this tab holds the Starter Tab claim on.
+   *
+   * Absent means the engine has not registered it yet — NOT that it was denied.
+   * The gateway cannot tell those apart: resolving a funding root needs
+   * `@tab/graph`, which it may not import.
+   */
+  registeredRoot?: string
+  registeredAt?: string
+  registrationSeq?: number
 }
 
 /**
  * The tabs this gateway has seen — NOT a registry.
  *
- * `registrationEnforced` is `false` and will stay false until a registration
- * flow exists: nothing writes a `register` message, so there is no registration
- * time and one Starter Tab per funding root is unenforced. It is on the
- * response rather than left to a caller's assumption, because a consumer
- * rendering this list under the heading "Registry" would be making a claim the
- * system does not support.
+ * `registrationEnforced` describes the RULE, not the data: one Starter Tab per
+ * funding root is applied on every engine pass whether or not any root has been
+ * claimed yet. A caller asking "has this actually run" should read
+ * `rootsClaimed`.
+ *
+ * It stays on the response rather than being left to a caller's assumption,
+ * because a consumer needs to know which rule is in force — and because it was
+ * `false` for most of this project's life, when nothing wrote a `register`
+ * message at all.
  */
 export interface TabList {
   window: number
   registrationEnforced: boolean
+  /** How many funding roots have actually been claimed. */
+  rootsClaimed: number
   note: string
   tabs: readonly TabSummary[]
 }

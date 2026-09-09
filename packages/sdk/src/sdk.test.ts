@@ -514,12 +514,13 @@ test('the read verbs refuse an empty tab id before touching the network', async 
   assert.equal(calls.length, 0)
 })
 
-test('the tab list is not a registry, and says so', async () => {
+test('the tab list reports the registration rule and how far it has run', async () => {
   const { doFetch } = fakeGateway(() => ({
     body: {
       window: 5963112,
-      registrationEnforced: false,
-      note: 'Tabs seen on the receipt topic during replay.',
+      registrationEnforced: true,
+      rootsClaimed: 1,
+      note: 'One Starter Tab per funding root, enforced by the engine.',
       tabs: [
         {
           tab: '0.0.10390398',
@@ -550,7 +551,8 @@ test('the tab list is not a registry, and says so', async () => {
   }))
   const list = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).tabs()
 
-  assert.equal(list.registrationEnforced, false)
+  assert.equal(list.registrationEnforced, true)
+  assert.equal(list.rootsClaimed, 1)
   assert.equal(list.tabs.length, 2)
   assert.equal(list.tabs[0]?.tier, 'C')
   assert.equal(list.tabs[0]?.publishedCeiling, usdc('0.250000'))
@@ -565,10 +567,15 @@ test('the tab list is not a registry, and says so', async () => {
 })
 
 test('a gateway that omits `registrationEnforced` is read as NOT enforcing', async () => {
-  // An older gateway that does not send the field has no registration flow
-  // either. Defaulting the permissive way round would let a stale server
-  // silently license a "Registry" heading the system cannot support.
+  /*
+   * An older gateway that does not send the field predates the registration
+   * flow, so nothing was enforced when it was written. Defaulting the
+   * permissive way round would let a stale server claim a defence it does not
+   * have — the same reasoning as absent provenance, absent gross legs and an
+   * absent tier.
+   */
   const { doFetch } = fakeGateway(() => ({ body: { window: 1, tabs: [] } }))
   const list = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).tabs()
   assert.equal(list.registrationEnforced, false)
+  assert.equal(list.rootsClaimed, 0)
 })

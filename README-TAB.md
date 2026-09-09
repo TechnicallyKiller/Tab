@@ -399,7 +399,7 @@ A prompt-injected agent is stopped at the hook. A compromised or bypassed hook i
 
 ```mermaid
 flowchart TD
-    S1["1 · Register agent<br/>NOT BUILT — nothing writes a register message"]:::open --> S2["2 · Starter Tab<br/>$0.25 floor · one per funding root NOT ENFORCED"]:::open
+    S1["1 · Engine claims the funding root<br/>first claim wins, permanently"] --> S2["2 · Starter Tab<br/>$0.25 floor · ONE per funding root"]
     S2 --> S3["3 · Agent spends<br/>gateway pays sellers, tab goes negative"]
     S3 --> S4["4 · Agent serves paid requests<br/>gateway collects, tab goes positive"]
     S4 --> S5["5 · Window closes<br/>net settles in one transfer"]
@@ -412,15 +412,23 @@ flowchart TD
     S10 --> S3
     S11 --> S3
     S8 --> S3
-    classDef open fill:#fff3cd,stroke:#b8860b,stroke-width:2px;
 ```
 
-**Steps 1 and 2 are OPEN, and marked so above.** Nothing writes a `register` message, so there is
-no registration time and one Starter Tab per funding root is unenforced — minting many agents from
-one wallet to farm Starter Tabs is not prevented today. `@tab/graph` already resolves funding
-roots, so the check itself is cheap once a registration flow exists. Steps 3 through 11 all run on
-live testnet. The console's `agents` view states this on screen rather than implying a registry it
-does not have.
+**Every step runs on live testnet, including 1 and 2 — which were OPEN until 2026-09-09.**
+
+Registration is not an operator action, deliberately. A `pnpm tab:register` command would defend
+against nothing: an attacker simply does not run it, and a rule keyed on registration *presence*
+then blocks nobody. Instead the **engine** resolves each tab's funding root from the `graphFact`
+messages already on the topic and claims it automatically. First claim wins, decided by consensus
+order, and nobody has to be trusted to opt in.
+
+The funding root is the furthest **non-system** ancestor — the operator, not the throwaway wallet
+that minted the agent. System accounts are excluded because `0.0.2` funds every account on Hedera,
+so without that exclusion the first tab ever registered would have denied the starter grant to
+every other agent on the network. That is not a hypothetical: the first live run claimed `0.0.2`.
+
+A denied tab is **not frozen**. It gets no starter floor and must earn its ceiling from independent
+revenue, which is the point — it is denied the free headroom, not the rail.
 
 The `$0.25` is v2's starter floor. v1's was `$1.00`, and it was too high: earned credit for one
 young customer computes to `0.2352`, so the floor decided a new agent's ceiling for its entire
@@ -690,7 +698,7 @@ Published including the gaps, because a catalogue that only lists solved attacks
 | Fake revenue via plain transfers | **Caught** | Stronger than the 0.6 discount this once claimed: revenue is read from credit RECEIPTS, so a plain transfer with no served request contributes **nothing**. The 0.6 discount applies to an inflow the gateway saw but could not attest |
 | Concentrating **revenue** from one payer | **Caught** | 40% share cap discounts the counterparty's weight — `@tab/graph`, verified live at 33% |
 | Concentrating **spend** at one seller | **OPEN** | Not implemented. The cap that exists measures REVENUE concentration on the earn leg, which is a different rule. A spend-side cap needs a minimum-volume floor first, or a new tab's first spend is 100% concentrated by definition and every agent is refused its opening call |
-| Bulk-minting agents to farm Starter Tabs | **OPEN** | Not implemented. `registration` exists as a message schema and nothing writes one, so one-Starter-Tab-per-funding-root is unenforced. `@tab/graph` already resolves funding roots, so the check is cheap once a registration flow exists |
+| Bulk-minting agents to farm Starter Tabs | **Caught** | The engine resolves each tab's funding root — the furthest NON-system ancestor, so `0.0.2` never counts — and claims it on the ceiling topic. First claim wins permanently, so a hundred agents minted from one wallet yield ONE starter floor. The other ninety-nine still trade; they earn their ceiling instead of being handed one. Verified live: four sibling accounts under `0.0.8812188` all report `TAKEN` |
 | Racing many spends before the ceiling updates | **Caught** | Pending holds decrement available at reserve time, not at commit |
 | Sophisticated non-reciprocal collusion ring | **OPEN** | Not caught. A ring where value never flows back and funding roots are properly separated defeats the graph. Cost of mounting it is high; it is not zero. |
 | Gateway operator misbehaviour | **OPEN by design** | Custodial. Detectable via published receipts, not preventable in v1. |

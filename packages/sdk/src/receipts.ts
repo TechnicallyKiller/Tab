@@ -293,6 +293,7 @@ export async function tabs(client: TabClient): Promise<TabList> {
      * let a stale server silently license the "Registry" heading.
      */
     registrationEnforced: body['registrationEnforced'] === true,
+    rootsClaimed: Number(body['rootsClaimed'] ?? 0),
     note: String(body['note'] ?? ''),
     tabs: rows.map((raw) => {
       const r = raw as Record<string, unknown>
@@ -314,6 +315,12 @@ export async function tabs(client: TabClient): Promise<TabList> {
         ...(r['cause'] ? { cause: String(r['cause']) } : {}),
         ...(r['model'] ? { model: String(r['model']) } : {}),
         ...(r['seq'] !== undefined && r['seq'] !== null ? { seq: Number(r['seq']) } : {}),
+        // Absent stays absent: no claim recorded is not the same as denied.
+        ...(r['registeredRoot'] ? { registeredRoot: String(r['registeredRoot']) } : {}),
+        ...(r['registeredAt'] ? { registeredAt: String(r['registeredAt']) } : {}),
+        ...(r['registrationSeq'] !== undefined && r['registrationSeq'] !== null
+          ? { registrationSeq: Number(r['registrationSeq']) }
+          : {}),
       }
       return summary
     }),

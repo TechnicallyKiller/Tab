@@ -12,7 +12,9 @@ import { createHash, randomUUID } from 'node:crypto'
  */
 import { format, micro, toWire, usdc, type MicroUsdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
-import type { Entry, PublishedCeiling, PublishedWeight, RememberedFacts } from '@tab/ledger'
+import type {
+  Entry, PublishedCeiling, PublishedWeight, Registration, RememberedFacts,
+} from '@tab/ledger'
 import type { SettlementEntry } from './settlements.ts'
 import type { SpendClient } from '@tab/x402'
 import type { GatewayEnv } from './env.ts'
@@ -114,6 +116,10 @@ export interface SpendDeps {
    * engine and the fast path enforces only the published ceiling.
    */
   facts?: () => ReadonlyMap<string, RememberedFacts>
+  /** Published Starter Tab claims, by tab. For the console; never consulted by spend. */
+  registrations?: () => ReadonlyMap<string, Registration>
+  /** How many funding ROOTS are claimed. Not the same as the number of tabs. */
+  rootsClaimed?: () => number
 }
 
 /** Hash the request, never store the request. Receipts carry the hash. */

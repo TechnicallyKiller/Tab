@@ -46,24 +46,50 @@ export default function AgentsView() {
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       {/*
-        * The unenforced rule, stated first.
+        * The rule, stated first — and it is now ENFORCED.
         *
-        * This is the one screen where a missing feature could be mistaken for a
-        * present one, because a list of agents LOOKS like a registry. Saying so
-        * at the top costs a paragraph; a judge discovering it costs the demo.
+        * This card used to say NO REGISTRATION FLOW, because nothing wrote a
+        * `register` message and one Starter Tab per funding root was a README
+        * claim rather than a rule. The engine now resolves each tab's funding
+        * root from the published facts and claims it, first claim winning
+        * permanently. The card stays because a list of agents still LOOKS like
+        * a registry, and what the rule actually does is worth saying plainly.
         */}
-      <Card style={{ borderColor: 'var(--caution)', padding: '16px 18px', display: 'grid', gap: 8 }}>
+      <Card
+        style={{
+          borderColor: value.registrationEnforced ? 'var(--credit)' : 'var(--caution)',
+          padding: '16px 18px',
+          display: 'grid',
+          gap: 8,
+        }}
+      >
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Chip tone="caution">NO REGISTRATION FLOW</Chip>
-          <span className="t-label">one Starter Tab per funding root is UNENFORCED</span>
+          <Chip tone={value.registrationEnforced ? 'clean' : 'caution'}>
+            {value.registrationEnforced ? 'ONE STARTER TAB PER FUNDING ROOT' : 'NO REGISTRATION FLOW'}
+          </Chip>
+          <span className="t-label">
+            {value.registrationEnforced
+              ? `${value.rootsClaimed} funding root(s) claimed`
+              : 'the rule is not enforced by this gateway'}
+          </span>
         </div>
         <p style={{ margin: 0, maxWidth: 680, fontSize: 13, lineHeight: 1.7, color: 'var(--ink-2)' }}>
-          Nothing writes a <code>register</code> message yet, so a tab appears below the first time
-          it spends or earns — there is no registration time, and nothing is &ldquo;issued&rdquo;.
-          Minting many agents from one wallet is therefore not prevented today.{' '}
-          <code>@tab/graph</code> already resolves funding roots, so the check is cheap once a
-          registration flow exists; until then this is an open gap and is named as one in the
-          README.
+          {value.registrationEnforced ? (
+            <>
+              A tab&rsquo;s <strong>funding root</strong> is the furthest non-system account that
+              funded it — the operator, not the throwaway wallet that minted it, and not{' '}
+              <code>0.0.2</code>, which funds every account on Hedera. The first tab to claim a root
+              keeps it permanently, so minting a hundred agents from one wallet yields{' '}
+              <strong>one</strong> starter floor rather than a hundred. The other ninety-nine still
+              work — they are denied the free headroom, not the rail, and must earn their ceiling
+              from independent revenue.
+            </>
+          ) : (
+            <>
+              This gateway reports that one Starter Tab per funding root is not enforced, so minting
+              many agents from one wallet is not prevented. Run <code>pnpm engine --publish</code>.
+            </>
+          )}
         </p>
       </Card>
 
@@ -95,6 +121,7 @@ export default function AgentsView() {
                 <th scope="col">Tier</th>
                 <th scope="col" className="n">Ceiling enforced</th>
                 <th scope="col">Bound by</th>
+                <th scope="col">Starter claim</th>
                 <th scope="col" className="n">Entries</th>
               </tr>
             </thead>
@@ -151,6 +178,23 @@ export default function AgentsView() {
                       </span>
                     ) : null}
                   </td>
+                  <td style={{ color: 'var(--ink-2)' }}>
+                    {t.registeredRoot ? (
+                      <>
+                        root {t.registeredRoot}
+                        {t.registrationSeq !== undefined ? (
+                          <span style={{ color: 'var(--ink-3)' }}> · seq {fmtSeq(t.registrationSeq)}</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      /*
+                       * Absent is NOT "denied". The gateway cannot tell those
+                       * apart — resolving a funding root needs `@tab/graph`,
+                       * which it may not import — so it says what it knows.
+                       */
+                      <span style={{ color: 'var(--ink-3)' }}>none recorded</span>
+                    )}
+                  </td>
                   <td className="n" style={{ color: 'var(--ink-3)' }}>{t.entries}</td>
                 </tr>
               ))}
@@ -167,7 +211,10 @@ export default function AgentsView() {
               fontSize: 12.5,
             }}
           >
-            <strong>not published</strong> is not the same as <strong>Unrated</strong>. A tab the
+            <strong>none recorded</strong> under Starter claim means the engine has not registered
+            that tab yet — <em>not</em> that it was denied. The gateway cannot tell those apart:
+            resolving a funding root needs the graph, which it may not import.{' '}
+            <strong>not published</strong> is likewise not the same as <strong>Unrated</strong>. A tab the
             engine has never run for has no tier; <code>Unrated</code> is the tier that carries a ×0
             multiple and therefore no credit. Guessing one from the balance would put a rating on
             screen that no topic carries.
