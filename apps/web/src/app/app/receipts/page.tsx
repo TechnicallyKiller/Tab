@@ -31,8 +31,23 @@ export default function ReceiptsView() {
             </button>
           ))}
         </div>
-        <label className="t-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', letterSpacing: 0, textTransform: 'none' }}>
-          <input type="checkbox" checked={attestedOnly} onChange={() => setAttestedOnly((v) => !v)} />
+        <label
+          className="t-mono"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 12.5,
+            cursor: 'pointer',
+            letterSpacing: 0,
+            textTransform: 'none',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={attestedOnly}
+            onChange={() => setAttestedOnly((v) => !v)}
+          />
           attested only
         </label>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -46,7 +61,9 @@ export default function ReceiptsView() {
       </CardHead>
       {visible.length === 0 ? (
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)' }}>
-          <div className="t-label" style={{ marginBottom: 8 }}>No receipts match</div>
+          <div className="t-label" style={{ marginBottom: 8 }}>
+            No receipts match
+          </div>
           <p style={{ fontSize: 14, margin: 0 }}>
             Clear the filter, or wait for the next arrival on this leg.
           </p>

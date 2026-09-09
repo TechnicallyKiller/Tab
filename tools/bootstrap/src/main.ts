@@ -8,7 +8,14 @@
  *   pnpm bootstrap
  */
 import { clientFromEnv, createTopic, submitMessage } from '@tab/hedera'
-import { MirrorClient, getAccount, canReceiveToken, readTopic, decodeUtf8, reassembleChunks } from '@tab/mirror'
+import {
+  canReceiveToken,
+  decodeUtf8,
+  getAccount,
+  MirrorClient,
+  readTopic,
+  reassembleChunks,
+} from '@tab/mirror'
 import { format } from '@tab/money'
 
 const USDC = '0.0.429274'
@@ -85,7 +92,9 @@ const probe = JSON.stringify({
   at: new Date().toISOString(),
 })
 const submitted = await submitMessage(tab.client, receipts.topicId, probe, tab.operatorKey)
-console.log(`    submitted           seq ${submitted.sequenceNumber} · ${submitted.chunks} chunk(s)`)
+console.log(
+  `    submitted           seq ${submitted.sequenceNumber} · ${submitted.chunks} chunk(s)`,
+)
 
 // Mirror Node lags consensus by a few seconds. That is expected, not an error.
 process.stdout.write('    waiting for mirror  ')

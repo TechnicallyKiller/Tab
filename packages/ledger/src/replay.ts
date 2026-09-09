@@ -1,6 +1,6 @@
-import { usdc, type MicroUsdc } from '@tab/money'
-import { decode, type CeilingUpdate, type WeightReason } from '@tab/protocol'
-import { inConsensusOrder, type Entry } from './entries.ts'
+import { type MicroUsdc, usdc } from '@tab/money'
+import { type CeilingUpdate, decode, type WeightReason } from '@tab/protocol'
+import { type Entry, inConsensusOrder } from './entries.ts'
 
 /**
  * HCS messages → ledger entries.
@@ -73,44 +73,80 @@ export function entriesFromMessages(messages: readonly TopicMessage[]): Replay {
     switch (msg.t) {
       case 'hold':
         entry = {
-          kind: 'hold', at: message.consensusTimestamp, window: msg.w, ...audit, holdId: msg.hold,
-          counterparty: msg.cp, amount: usdc(msg.amt), expiresAt: msg.exp,
+          kind: 'hold',
+          at: message.consensusTimestamp,
+          window: msg.w,
+          ...audit,
+          holdId: msg.hold,
+          counterparty: msg.cp,
+          amount: usdc(msg.amt),
+          expiresAt: msg.exp,
         }
         break
       case 'debit':
         entry = {
-          kind: 'debit', at: message.consensusTimestamp, window: msg.w, ...audit, holdId: msg.hold,
-          counterparty: msg.cp, amount: usdc(msg.amt), transactionId: msg.tx,
+          kind: 'debit',
+          at: message.consensusTimestamp,
+          window: msg.w,
+          ...audit,
+          holdId: msg.hold,
+          counterparty: msg.cp,
+          amount: usdc(msg.amt),
+          transactionId: msg.tx,
         }
         break
       case 'credit':
         entry = {
-          kind: 'credit', at: message.consensusTimestamp, window: msg.w, ...audit,
-          counterparty: msg.cp, amount: usdc(msg.amt), attested: msg.att, transactionId: msg.tx,
+          kind: 'credit',
+          at: message.consensusTimestamp,
+          window: msg.w,
+          ...audit,
+          counterparty: msg.cp,
+          amount: usdc(msg.amt),
+          attested: msg.att,
+          transactionId: msg.tx,
         }
         break
       case 'refused':
         entry = {
-          kind: 'refusal', at: message.consensusTimestamp, window: msg.w, ...audit,
-          counterparty: msg.cp, requested: usdc(msg.amt), rule: msg.rule,
+          kind: 'refusal',
+          at: message.consensusTimestamp,
+          window: msg.w,
+          ...audit,
+          counterparty: msg.cp,
+          requested: usdc(msg.amt),
+          rule: msg.rule,
         }
         break
       case 'repair':
         entry = {
-          kind: 'repair', at: message.consensusTimestamp, window: msg.w, ...audit,
-          counterparty: msg.cp, amount: usdc(msg.amt), transactionId: msg.tx, reason: msg.why,
+          kind: 'repair',
+          at: message.consensusTimestamp,
+          window: msg.w,
+          ...audit,
+          counterparty: msg.cp,
+          amount: usdc(msg.amt),
+          transactionId: msg.tx,
+          reason: msg.why,
         }
         break
       case 'settlement':
         entry = {
-          kind: 'settlement', at: message.consensusTimestamp, window: msg.w, ...audit,
-          net: usdc(msg.net), outcome: msg.outcome,
-          rampFromBp: msg.rampFrom, rampToBp: msg.rampTo,
+          kind: 'settlement',
+          at: message.consensusTimestamp,
+          window: msg.w,
+          ...audit,
+          net: usdc(msg.net),
+          outcome: msg.outcome,
+          rampFromBp: msg.rampFrom,
+          rampToBp: msg.rampTo,
           // The gross legs, so a reader can see the netting rather than only
           // its result. Required by the schema, so always present here — the
           // entry types them optional for messages written before they were.
-          credits: usdc(msg.credits), debits: usdc(msg.debits),
-          interest: usdc(msg.interest), receiptCount: msg.n,
+          credits: usdc(msg.credits),
+          debits: usdc(msg.debits),
+          interest: usdc(msg.interest),
+          receiptCount: msg.n,
           outstanding: usdc(msg.outstanding),
           ...(msg.tx ? { transactionId: msg.tx } : {}),
         }
@@ -271,7 +307,10 @@ export function ceilingHistoryFromMessages(
   // left to right. Sorted on the consensus timestamp string, which is
   // lexicographically ordered because the nanos field is zero-padded.
   for (const [tab, list] of byTab) {
-    byTab.set(tab, [...list].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)))
+    byTab.set(
+      tab,
+      [...list].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)),
+    )
   }
   return byTab
 }
@@ -405,7 +444,9 @@ export function factsFromMessages(messages: readonly TopicMessage[]): FactsRepla
           ? {
               funder: msg.by,
               funderSeenAt: message.consensusTimestamp,
-              ...(message.sequenceNumber !== undefined ? { funderSeq: message.sequenceNumber } : {}),
+              ...(message.sequenceNumber !== undefined
+                ? { funderSeq: message.sequenceNumber }
+                : {}),
             }
           : {}),
       })
@@ -482,9 +523,7 @@ export interface RegistrationReplay {
  * evidence of independence, so it must not be able to lock out other tabs, and
  * `UNVERIFIED_FUNDING` already discounts what it earns.
  */
-export function registrationsFromMessages(
-  messages: readonly TopicMessage[],
-): RegistrationReplay {
+export function registrationsFromMessages(messages: readonly TopicMessage[]): RegistrationReplay {
   const byRoot = new Map<string, Registration>()
   const byTab = new Map<string, Registration>()
   let read = 0

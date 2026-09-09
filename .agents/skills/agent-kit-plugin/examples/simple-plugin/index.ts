@@ -8,8 +8,8 @@
  *   npm install @hashgraph/hedera-agent-kit @hiero-ledger/sdk zod
  */
 
-import { Context, Plugin } from '@hashgraph/hedera-agent-kit';
-import greetingTool, { GREETING_TOOL } from './tools/greeting';
+import type { Context, Plugin } from '@hashgraph/hedera-agent-kit'
+import greetingTool, { GREETING_TOOL } from './tools/greeting'
 
 /**
  * Simple plugin definition
@@ -19,17 +19,15 @@ export const simplePlugin: Plugin = {
   version: '1.0.0',
   description: 'A simple example plugin demonstrating basic structure',
   tools: (context: Context) => {
-    return [
-      greetingTool(context),
-    ];
+    return [greetingTool(context)]
   },
-};
+}
 
 /**
  * Export tool name constants for programmatic access
  */
 export const simplePluginToolNames = {
   GREETING_TOOL,
-} as const;
+} as const
 
-export default { simplePlugin, simplePluginToolNames };
+export default { simplePlugin, simplePluginToolNames }

@@ -1,8 +1,8 @@
-import { PrivateKey } from '@hiero-ledger/sdk'
-import { x402Client, wrapFetchWithPayment, x402HTTPClient } from '@x402/fetch'
+import type { PrivateKey } from '@hiero-ledger/sdk'
+import { wrapFetchWithPayment, x402Client, x402HTTPClient } from '@x402/fetch'
 import { createClientHederaSigner } from '@x402/hedera'
 import { ExactHederaScheme } from '@x402/hedera/exact/client'
-import { formatAtomic, type Asset } from './assets.ts'
+import { type Asset, formatAtomic } from './assets.ts'
 
 /**
  * The SPEND leg: Tab pays an unmodified x402 seller from the hot float.
@@ -87,10 +87,7 @@ export function createSpendClient(config: SpendClientConfig): SpendClient {
       accepted = chosen
       return chosen
     }) as never,
-  ).register(
-    config.network as Parameters<x402Client['register']>[0],
-    new ExactHederaScheme(signer),
-  )
+  ).register(config.network as Parameters<x402Client['register']>[0], new ExactHederaScheme(signer))
 
   client.setSpendControls({
     allowedAssets: [
@@ -115,7 +112,10 @@ export function createSpendClient(config: SpendClientConfig): SpendClient {
       const response = await payingFetch(url, init ?? { method: 'GET' })
       // Clone before processResponse, which consumes the stream. The agent
       // needs the seller's body; we need the settlement receipt.
-      const body = await response.clone().json().catch(() => null)
+      const body = await response
+        .clone()
+        .json()
+        .catch(() => null)
       /*
        * The settlement id lives in `header`, not `settlement`.
        *

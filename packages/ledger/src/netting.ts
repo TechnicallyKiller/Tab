@@ -1,5 +1,5 @@
-import { add, micro, sub, sum, type MicroUsdc } from '@tab/money'
-import { inConsensusOrder, type Entry } from './entries.ts'
+import { add, type MicroUsdc, micro, sub, sum } from '@tab/money'
+import { type Entry, inConsensusOrder } from './entries.ts'
 
 /**
  * Window netting.
@@ -132,7 +132,8 @@ export function planSettlement(params: {
 
   // Shrink is instant, growth is earned. A missed settlement collapses the ramp
   // immediately; a clean one steps it up by one increment, never more.
-  const step = outcome === 'clean' ? RAMP_CLEAN_STEP_BP : outcome === 'missed' ? RAMP_MISSED_STEP_BP : 0
+  const step =
+    outcome === 'clean' ? RAMP_CLEAN_STEP_BP : outcome === 'missed' ? RAMP_MISSED_STEP_BP : 0
   const rampToBp = Math.max(RAMP_MIN_BP, Math.min(RAMP_MAX_BP, rampBp + step))
 
   return { net, outcome, transfer, outstandingAfter, rampFromBp: rampBp, rampToBp }

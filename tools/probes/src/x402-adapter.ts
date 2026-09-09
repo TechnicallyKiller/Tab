@@ -9,20 +9,20 @@
  *   pnpm probe:adapter          native HBAR
  *   pnpm probe:adapter --hts    the dollar token
  */
-import express from 'express'
-import { paymentMiddleware } from '@x402/express'
+
 import { PrivateKey } from '@hiero-ledger/sdk'
+import { configureGlobalHttp, getTransactionAt, hbarNetFor, MirrorClient } from '@tab/mirror'
 import {
-  NETWORKS,
   createEarnServer,
   createFacilitator,
   createSpendClient,
   formatAtomic,
   hbarAsset,
+  NETWORKS,
   tokenAsset,
 } from '@tab/x402'
-import { MirrorClient, getTransactionAt, hbarNetFor } from '@tab/mirror'
-import { configureGlobalHttp } from '@tab/mirror'
+import { paymentMiddleware } from '@x402/express'
+import express from 'express'
 
 // Node's fetch dies after a 10s CONNECT timeout that no AbortController can
 // extend, and Mirror Node needs 5-15s from a high-latency link. Must run before
@@ -92,7 +92,9 @@ console.log(`  spend client           ${spend.describe()}\n`)
 
 try {
   const unpaid = await fetch(`http://localhost:${PORT}/invoke`)
-  console.log(`  unpaid                 HTTP ${unpaid.status} ${unpaid.status === 402 ? '(challenge)' : 'UNEXPECTED'}`)
+  console.log(
+    `  unpaid                 HTTP ${unpaid.status} ${unpaid.status === 402 ? '(challenge)' : 'UNEXPECTED'}`,
+  )
   // The challenge must carry extra.feePayer. Without it the client builds a
   // transaction with the wrong fee payer and verify rejects the signature.
   const challengeHeader = unpaid.headers.get('payment-required')
@@ -113,8 +115,12 @@ try {
       if (v) {
         console.log(`  ${h.padEnd(22)} ${v.slice(0, 200)}`)
         try {
-          console.log(`    decoded              ${Buffer.from(v, 'base64').toString('utf8').slice(0, 300)}`)
-        } catch { /* not base64 */ }
+          console.log(
+            `    decoded              ${Buffer.from(v, 'base64').toString('utf8').slice(0, 300)}`,
+          )
+        } catch {
+          /* not base64 */
+        }
       }
     }
     server.close()
@@ -122,9 +128,13 @@ try {
   }
 
   const result = await spend.call(`http://localhost:${PORT}/invoke`)
-  console.log(`  paid                   HTTP ${result.status} in ${(result.elapsedMs / 1000).toFixed(2)}s`)
+  console.log(
+    `  paid                   HTTP ${result.status} in ${(result.elapsedMs / 1000).toFixed(2)}s`,
+  )
   console.log(`  seller body            ${JSON.stringify(result.body).slice(0, 80)}`)
-  console.log(`  settlement tx          ${result.settlementTransaction ?? '(not reported in header)'}`)
+  console.log(
+    `  settlement tx          ${result.settlementTransaction ?? '(not reported in header)'}`,
+  )
 
   // Assert on the transaction, never by diffing Mirror Node balances — those
   // are snapshots and can still show the pre-transfer figure.

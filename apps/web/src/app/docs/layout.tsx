@@ -1,19 +1,25 @@
+import { MODEL_ID as MODEL_VERSION } from '@tab/params'
 import Link from 'next/link'
 import { SearchPalette } from '@/components/docs/search-palette'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { MODEL_ID as MODEL_VERSION } from '@tab/params'
 import { OUTLINE, SIDEBAR } from '@/lib/mock/docs'
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="docs-head">
-        <span className="t-display" style={{ fontSize: 24 }}>Tab</span>
+        <span className="t-display" style={{ fontSize: 24 }}>
+          Tab
+        </span>
         <span className="t-label">docs.tab.xyz</span>
         <SearchPalette />
         <nav className="docs-toplinks">
-          <Link href="/" style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>Landing</Link>
-          <Link href="/app/tab" style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>App</Link>
+          <Link href="/" style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>
+            Landing
+          </Link>
+          <Link href="/app/tab" style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>
+            App
+          </Link>
         </nav>
         <ThemeToggle />
       </header>
@@ -22,7 +28,9 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         <aside className="docs-rail">
           {SIDEBAR.map((group) => (
             <div key={group.group} style={{ marginBottom: 24 }}>
-              <div className="t-label" style={{ marginBottom: 8 }}>{group.group}</div>
+              <div className="t-label" style={{ marginBottom: 8 }}>
+                {group.group}
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {group.items.map((item) => (
                   <a
@@ -42,7 +50,9 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         <main className="docs-main">{children}</main>
 
         <aside className="docs-outline">
-          <div className="t-label" style={{ marginBottom: 10 }}>On this page</div>
+          <div className="t-label" style={{ marginBottom: 10 }}>
+            On this page
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {OUTLINE.map((o) => (
               <a
@@ -60,8 +70,12 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
               </a>
             ))}
           </div>
-          <div className="t-label" style={{ marginTop: 24 }}>Documents</div>
-          <div className="t-mono" style={{ fontSize: 12.5, marginTop: 6 }}>{MODEL_VERSION}</div>
+          <div className="t-label" style={{ marginTop: 24 }}>
+            Documents
+          </div>
+          <div className="t-mono" style={{ fontSize: 12.5, marginTop: 6 }}>
+            {MODEL_VERSION}
+          </div>
         </aside>
       </div>
     </>

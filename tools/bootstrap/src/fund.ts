@@ -16,7 +16,7 @@
  * than an obvious balance problem.
  */
 import { clientFromEnv, transferToken } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp, getToken, getUsdcBalance } from '@tab/mirror'
+import { configureGlobalHttp, getToken, getUsdcBalance, MirrorClient } from '@tab/mirror'
 import { format, usdc } from '@tab/money'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -88,7 +88,9 @@ for (let i = 0; i < 12; i++) {
   if (balance > 0n) break
 }
 console.log(`\n  ${target}  now holds ${format(balance)}`)
-console.log(`  float remaining ${format(await getUsdcBalance(mirror, client.operatorId.toString(), tokenId))}\n`)
+console.log(
+  `  float remaining ${format(await getUsdcBalance(mirror, client.operatorId.toString(), tokenId))}\n`,
+)
 
 client.close()
 process.exit(0)

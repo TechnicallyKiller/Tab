@@ -48,7 +48,7 @@ table{border-collapse:collapse}
 [data-tape]:hover{animation-play-state:paused}
 [data-draw]{stroke-dasharray:var(--dash,400);animation:draw-path 700ms cubic-bezier(.3,0,.2,1) both}
 @media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{animation-duration:1ms !important;animation-iteration-count:1 !important;transition-duration:1ms !important}
+  *,*::before,*::after{animation-duration:1ms;animation-iteration-count:1;transition-duration:1ms}
   [data-draw]{stroke-dasharray:none}
 }
 </style>

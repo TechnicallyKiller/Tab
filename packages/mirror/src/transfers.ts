@@ -1,5 +1,5 @@
-import { micro, type MicroUsdc } from '@tab/money'
-import { compareConsensus, timestampRange, type MirrorClient, type PageWalk } from './client.ts'
+import { type MicroUsdc, micro } from '@tab/money'
+import { compareConsensus, type MirrorClient, type PageWalk, timestampRange } from './client.ts'
 import type { ConsensusTimestamp, EntityId, MirrorTransaction, TransactionsPage } from './types.ts'
 
 /** One directed movement of a token between two accounts. The graph's edge. */
@@ -64,8 +64,12 @@ export function toTransferEdges(
     const entries = (tx.token_transfers ?? []).filter((t) => t.token_id === tokenId)
     if (entries.length === 0) continue
 
-    const senders = entries.filter((e) => e.amount < 0).map((e) => ({ id: e.account, amount: -BigInt(e.amount) }))
-    const receivers = entries.filter((e) => e.amount > 0).map((e) => ({ id: e.account, amount: BigInt(e.amount) }))
+    const senders = entries
+      .filter((e) => e.amount < 0)
+      .map((e) => ({ id: e.account, amount: -BigInt(e.amount) }))
+    const receivers = entries
+      .filter((e) => e.amount > 0)
+      .map((e) => ({ id: e.account, amount: BigInt(e.amount) }))
     const totalSent = senders.reduce((sum, s) => sum + s.amount, 0n)
     if (totalSent === 0n) continue
 

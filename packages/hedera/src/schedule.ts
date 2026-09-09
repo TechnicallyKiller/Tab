@@ -1,17 +1,17 @@
 import {
   AccountId,
+  type Client,
   Hbar,
+  type PrivateKey,
   ScheduleCreateTransaction,
   ScheduleId,
   ScheduleInfoQuery,
   Status,
   Timestamp,
-  TransferTransaction,
-  type Client,
-  type PrivateKey,
   type Transaction,
+  TransferTransaction,
 } from '@hiero-ledger/sdk'
-import { type MicroUsdc } from '@tab/money'
+import type { MicroUsdc } from '@tab/money'
 
 /**
  * HIP-423 long-term scheduled transactions — the settlement tick.
@@ -98,7 +98,9 @@ export function buildSettlementTransfer(params: {
       .addTokenTransfer(params.tokenId, from, -units)
       .addTokenTransfer(params.tokenId, to, units)
   }
-  return tx.addHbarTransfer(from, Hbar.fromTinybars(-units)).addHbarTransfer(to, Hbar.fromTinybars(units))
+  return tx
+    .addHbarTransfer(from, Hbar.fromTinybars(-units))
+    .addHbarTransfer(to, Hbar.fromTinybars(units))
 }
 
 export interface ScheduleState {
@@ -112,10 +114,7 @@ export interface ScheduleState {
 }
 
 /** Has the tick fired yet? The settlement worker polls this. */
-export async function getScheduleState(
-  client: Client,
-  scheduleId: string,
-): Promise<ScheduleState> {
+export async function getScheduleState(client: Client, scheduleId: string): Promise<ScheduleState> {
   const info = await new ScheduleInfoQuery()
     .setScheduleId(ScheduleId.fromString(scheduleId))
     .execute(client)

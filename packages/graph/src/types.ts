@@ -68,11 +68,12 @@ export interface AccountFacts {
  */
 export {
   BLOCKING_REASONS,
-  WEIGHT_REASONS,
-  WEIGHT_REASON_DETAIL,
   isBlocking,
+  WEIGHT_REASON_DETAIL,
+  WEIGHT_REASONS,
   type WeightReason,
 } from '@tab/protocol'
+
 import type { WeightReason } from '@tab/protocol'
 
 export interface Weight {
@@ -91,4 +92,3 @@ export interface Weight {
   /** True when a reason is fatal — the spend is refused, not merely discounted. */
   blocking: boolean
 }
-

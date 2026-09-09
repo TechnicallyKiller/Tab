@@ -25,8 +25,8 @@
  * duplicate is harmless but not free.
  */
 import { submitMessage, type TabClient } from '@tab/hedera'
-import { encode, graphFact } from '@tab/protocol'
 import type { RememberedFacts } from '@tab/ledger'
+import { encode, graphFact } from '@tab/protocol'
 
 export interface ObservedFact {
   account: string

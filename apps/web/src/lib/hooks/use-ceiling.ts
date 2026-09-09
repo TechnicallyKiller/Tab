@@ -1,7 +1,7 @@
 'use client'
 
 import type { CeilingView } from '@tab/sdk'
-import { usePolled, type Polled } from './use-polled'
+import { type Polled, usePolled } from './use-polled'
 
 /**
  * The published ceiling, its arithmetic, and the series behind it.

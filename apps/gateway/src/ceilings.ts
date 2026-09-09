@@ -13,13 +13,19 @@
  * snapshot the real engine wrote. If the gateway needed a private nudge to
  * refuse, the demo would prove nothing.
  */
-import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
-import { format } from '@tab/money'
+
 import {
-  ceilingHistoryFromMessages, factsFromMessages, registrationsFromMessages,
+  ceilingHistoryFromMessages,
+  factsFromMessages,
+  type PublishedCeiling,
+  type PublishedWeight,
+  type Registration,
+  type RememberedFacts,
+  registrationsFromMessages,
   weightsFromMessages,
-  type PublishedCeiling, type PublishedWeight, type Registration, type RememberedFacts,
 } from '@tab/ledger'
+import { type MirrorClient, readTopic, reassembleChunks } from '@tab/mirror'
+import { format } from '@tab/money'
 
 /*
  * The decode lives in `@tab/ledger`, not here.

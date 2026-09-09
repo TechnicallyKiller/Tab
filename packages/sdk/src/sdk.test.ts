@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { format, toWire, usdc } from '@tab/money'
-import { createTab, TabProtocolError, TabUnavailableError, type SpendResult } from './index.ts'
+import { createTab, type SpendResult, TabProtocolError, TabUnavailableError } from './index.ts'
 
 /**
  * A fake gateway.
@@ -11,7 +11,10 @@ import { createTab, TabProtocolError, TabUnavailableError, type SpendResult } fr
  * than a live network. The live path is covered by the demos.
  */
 function fakeGateway(
-  handler: (url: string, init: RequestInit) => { status?: number; body: unknown } | Promise<{ status?: number; body: unknown }>,
+  handler: (
+    url: string,
+    init: RequestInit,
+  ) => { status?: number; body: unknown } | Promise<{ status?: number; body: unknown }>,
 ) {
   const calls: { url: string; body: unknown; method: string }[] = []
   const doFetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -92,7 +95,9 @@ test('a DISPLAY amount on the wire is rejected with a diagnosable message', asyn
   const lossy = format(usdc('1.234567'))
   assert.equal(lossy, '1.2345', 'format truncates — this is why it must not be a wire value')
 
-  const { doFetch } = fakeGateway(() => ({ body: { ...STATE, balance: format(usdc('-0.020000')) } }))
+  const { doFetch } = fakeGateway(() => ({
+    body: { ...STATE, balance: format(usdc('-0.020000')) },
+  }))
   const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
 
   await assert.rejects(
@@ -118,7 +123,15 @@ test('wire amounts round-trip exactly, to the micro-USDC', async () => {
 
 test('spend generates an idempotency key and sends it', async () => {
   const { doFetch, calls } = fakeGateway(() => ({
-    body: { paid: { amount: '0.040000', seller: '0.0.2000', holdId: 'h_x', receiptSeq: 7, elapsedMs: 100 } },
+    body: {
+      paid: {
+        amount: '0.040000',
+        seller: '0.0.2000',
+        holdId: 'h_x',
+        receiptSeq: 7,
+        elapsedMs: 100,
+      },
+    },
   }))
   const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
   await tab.spend({ tab: '0.0.1000', url: 'http://s', max: usdc('0.040000') })
@@ -131,10 +144,17 @@ test('a caller-supplied idempotency key is used verbatim', async () => {
   // What makes retrying an unknown outcome safe. If the SDK replaced it, a
   // retry would take a second hold.
   const { doFetch, calls } = fakeGateway(() => ({
-    body: { paid: { amount: '0.040000', seller: '0.0.2000', holdId: 'mine', receiptSeq: 1, elapsedMs: 1 } },
+    body: {
+      paid: { amount: '0.040000', seller: '0.0.2000', holdId: 'mine', receiptSeq: 1, elapsedMs: 1 },
+    },
   }))
   const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
-  await tab.spend({ tab: '0.0.1000', url: 'http://s', max: usdc('0.040000'), idempotencyKey: 'mine' })
+  await tab.spend({
+    tab: '0.0.1000',
+    url: 'http://s',
+    max: usdc('0.040000'),
+    idempotencyKey: 'mine',
+  })
   assert.equal((calls[0]!.body as Record<string, unknown>)['idempotencyKey'], 'mine')
 })
 
@@ -219,8 +239,22 @@ test('an unrecognised rule on a receipt is dropped rather than cast', async () =
   // would then answer confidently about a rule that does not exist.
   const { doFetch } = fakeGateway(() => ({
     body: [
-      { kind: 'refusal', at: '1788.0', window: 1, counterparty: '0.0.2', requested: '0.040000', rule: 'NOT_A_RULE' },
-      { kind: 'refusal', at: '1789.0', window: 1, counterparty: '0.0.2', requested: '0.040000', rule: 'PER_CALL_CAP' },
+      {
+        kind: 'refusal',
+        at: '1788.0',
+        window: 1,
+        counterparty: '0.0.2',
+        requested: '0.040000',
+        rule: 'NOT_A_RULE',
+      },
+      {
+        kind: 'refusal',
+        at: '1789.0',
+        window: 1,
+        counterparty: '0.0.2',
+        requested: '0.040000',
+        rule: 'PER_CALL_CAP',
+      },
     ],
   }))
   const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
@@ -247,8 +281,16 @@ test('every verb is present exactly once', () => {
   // The same surface appears in the Agent Kit plugin, MCP and CLI. Defined
   // once, here, is what stops those three drifting.
   assert.deepEqual(Object.keys(tab).sort(), [
-    'ceiling', 'counterparties', 'health', 'holds', 'quote',
-    'receipts', 'settlements', 'spend', 'state', 'tabs',
+    'ceiling',
+    'counterparties',
+    'health',
+    'holds',
+    'quote',
+    'receipts',
+    'settlements',
+    'spend',
+    'state',
+    'tabs',
   ])
   // Exactly TWO of the nine act. The other seven read what was published, and
   // this package cannot import `@tab/scoring` or `@tab/graph`, so it is
@@ -264,9 +306,14 @@ test('an unknown weight reason is dropped, not typed as a real one', async () =>
   const { doFetch } = fakeGateway(() => ({
     body: [
       {
-        counterparty: '0.0.2000', bp: 3360, blocking: false,
+        counterparty: '0.0.2000',
+        bp: 3360,
+        blocking: false,
         reasons: ['SHARED_FUNDING_ROOT', 'NOT_A_REASON', 'YOUNG_ACCOUNT'],
-        revenue: '1.000000', shareBp: 10000, window: 5962354, at: '1788.0',
+        revenue: '1.000000',
+        shareBp: 10000,
+        window: 5962354,
+        at: '1788.0',
       },
     ],
   }))
@@ -280,9 +327,14 @@ test('a blocked counterparty round-trips its reasons and zero weight', async () 
   const { doFetch } = fakeGateway(() => ({
     body: [
       {
-        counterparty: '0.0.2000', bp: 0, blocking: true,
+        counterparty: '0.0.2000',
+        bp: 0,
+        blocking: true,
         reasons: ['COMMON_FUNDER'],
-        revenue: '4.000000', shareBp: 10000, window: 5962354, at: '1788.0',
+        revenue: '4.000000',
+        shareBp: 10000,
+        window: 5962354,
+        at: '1788.0',
       },
     ],
   }))
@@ -301,7 +353,9 @@ test('an infrastructure failure returns `failed` and keeps the hold id', async (
   }))
   const tab = createTab({ baseUrl: 'http://gw', fetch: doFetch })
   const result: SpendResult = await tab.spend({
-    tab: '0.0.1000', url: 'http://s', max: usdc('0.040000'),
+    tab: '0.0.1000',
+    url: 'http://s',
+    max: usdc('0.040000'),
   })
   assert.equal(result.outcome, 'failed')
   if (result.outcome !== 'failed') return
@@ -336,7 +390,13 @@ const CEILING_ROW = {
 
 test('a ceiling comes back with the arithmetic that produced it', async () => {
   const { doFetch } = fakeGateway(() => ({
-    body: { tab: '0.0.1000', published: true, enforced: '0.250000', ...CEILING_ROW, history: [CEILING_ROW] },
+    body: {
+      tab: '0.0.1000',
+      published: true,
+      enforced: '0.250000',
+      ...CEILING_ROW,
+      history: [CEILING_ROW],
+    },
   }))
   const view = await createTab({ baseUrl: 'http://gw', fetch: doFetch }).ceiling('0.0.1000')
 
@@ -484,7 +544,14 @@ test('an unknown outcome or tier degrades safely rather than typing a fiction', 
     url.includes('/settlements')
       ? {
           body: [
-            { window: 1, at: '1.0', net: '0.000000', outcome: 'reticulated', rampFromBp: 0, rampToBp: 0 },
+            {
+              window: 1,
+              at: '1.0',
+              net: '0.000000',
+              outcome: 'reticulated',
+              rampFromBp: 0,
+              rampToBp: 0,
+            },
           ],
         }
       : {

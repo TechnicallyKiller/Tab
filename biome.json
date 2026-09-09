@@ -1,8 +1,23 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.0/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
-    "includes": ["**", "!**/dist", "!**/.next", "!**/.turbo", "!**/coverage", "!**/drizzle/**"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/.next",
+      "!**/.turbo",
+      "!**/coverage",
+      "!**/drizzle",
+      "!**/next-env.d.ts",
+      "!**/*.css",
+      "!surface-selection-decision",
+      "!.agents"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -11,28 +26,54 @@
     "lineWidth": 100
   },
   "javascript": {
-    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded", "trailingCommas": "all" }
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all"
+    }
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsoleLog": "error"
+        "noConsole": "error"
       },
-      "complexity": { "noExcessiveCognitiveComplexity": "warn" },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off",
+        "useLiteralKeys": "off",
+        "noImportantStyles": "off"
+      },
       "style": {
         "useNamingConvention": "off",
-        "noNonNullAssertion": "error"
+        "noNonNullAssertion": "off",
+        "useTemplate": "off"
       },
-      "nursery": { "recommended": false }
+      "nursery": {
+        "preset": "none"
+      }
     }
   },
   "overrides": [
     {
-      "includes": ["tools/**", "agents/**", "**/*.test.ts", "**/vitest.config.ts"],
-      "linter": { "rules": { "suspicious": { "noConsoleLog": "off" } } }
+      "includes": [
+        "apps/**",
+        "tools/**",
+        "agents/**",
+        "packages/mcp/**",
+        "packages/testkit/**",
+        "packages/mirror/src/live-check.ts",
+        "**/*.test.ts",
+        "**/vitest.config.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

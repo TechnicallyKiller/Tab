@@ -20,7 +20,13 @@ const CALLS = Number(process.env['DEMO_CALLS'] ?? 3)
 const PRICE = '0.040000'
 
 interface SpendResponse {
-  paid?: { amount: string; seller: string; holdId: string; receiptSeq: number | null; elapsedMs: number }
+  paid?: {
+    amount: string
+    seller: string
+    holdId: string
+    receiptSeq: number | null
+    elapsedMs: number
+  }
   refused?: { rule: string; reason: string; guidance: string; retryable: boolean }
   body?: unknown
   error?: string
@@ -72,7 +78,9 @@ for (let i = 0; i < CALLS; i++) {
     console.log(`      ${result.refused.reason}`)
     console.log(`      next: ${result.refused.guidance}`)
   } else {
-    console.log(`  ${String(i + 1).padStart(2)}. ${path.padEnd(12)} FAILED  ${result.error ?? 'unknown'}`)
+    console.log(
+      `  ${String(i + 1).padStart(2)}. ${path.padEnd(12)} FAILED  ${result.error ?? 'unknown'}`,
+    )
   }
 }
 

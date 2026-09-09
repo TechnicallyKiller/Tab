@@ -22,26 +22,28 @@
  * the transparency claim holds today and the persistence layer is a performance
  * story, which is the right order to build them in.
  */
+
+import { type AccountFacts, type AccountId, fundingRoot, WEIGHT_REASON_DETAIL } from '@tab/graph'
 import { clientFromEnv } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp } from '@tab/mirror'
-import { bp, format, formatBpMultiple, formatBpPercent, usdc } from '@tab/money'
-import { MODEL_ID, caps, describeParams, params, windowOf } from '@tab/params'
 import {
-  ceilingsFromMessages, checkWindowSettledOnce, factsFromMessages,
-  registrationsFromMessages, starterGrantFor, rampAfter, type Entry,
+  ceilingsFromMessages,
+  factsFromMessages,
+  rampAfter,
+  registrationsFromMessages,
+  starterGrantFor,
 } from '@tab/ledger'
-import { WEIGHT_REASON_DETAIL, fundingRoot, type AccountFacts, type AccountId } from '@tab/graph'
-import {
-  entriesFromMessages, readTopic, reassembleChunks,
-} from './replay.ts'
-import { edgesFor, isYoungFrom, observeAccount, revenueFromEntries } from './gather.ts'
+import { configureGlobalHttp, MirrorClient } from '@tab/mirror'
+import { bp, format, formatBpMultiple, formatBpPercent, usdc } from '@tab/money'
+import { caps, describeParams, MODEL_ID, params, windowOf } from '@tab/params'
 import { resolveAncestry } from './ancestry.ts'
-import { recompute } from './recompute.ts'
+import { edgesFor, isYoungFrom, observeAccount, revenueFromEntries } from './gather.ts'
+import { type CeilingState, transition } from './guards/asymmetry.ts'
 import { publishCeiling } from './publish/ceiling.ts'
-import { publishWeights } from './publish/weights.ts'
-import { publishFacts, type ObservedFact } from './publish/facts.ts'
+import { type ObservedFact, publishFacts } from './publish/facts.ts'
 import { publishRegistration } from './publish/registration.ts'
-import { transition, type CeilingState } from './guards/asymmetry.ts'
+import { publishWeights } from './publish/weights.ts'
+import { recompute } from './recompute.ts'
+import { entriesFromMessages, readTopic, reassembleChunks } from './replay.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
 
@@ -71,7 +73,12 @@ const windowSeconds = demoMode
 const TRAILING_WINDOWS = Number(process.env['TRAILING_WINDOWS'] ?? 6)
 
 const hedera = clientFromEnv()
-const mirror = new MirrorClient({ network: hedera.network, timeoutMs: 45_000, maxRetries: 4, maxPages: 12 })
+const mirror = new MirrorClient({
+  network: hedera.network,
+  timeoutMs: 45_000,
+  maxRetries: 4,
+  maxPages: 12,
+})
 
 /*
  * The ceiling state lives in this process for now.
@@ -126,7 +133,9 @@ async function pass(): Promise<void> {
   const revenue = revenueFromEntries(entries, TRAILING_WINDOWS, currentWindow)
 
   const settlementEntries = entries.filter((e) => e.kind === 'settlement')
-  const hasDefaulted = settlementEntries.some((e) => e.kind === 'settlement' && e.outcome === 'missed')
+  const hasDefaulted = settlementEntries.some(
+    (e) => e.kind === 'settlement' && e.outcome === 'missed',
+  )
 
   // Consecutive clean settlements, counted from the most recent backwards. A
   // total count would let an old good history outweigh a recent miss.
@@ -139,8 +148,10 @@ async function pass(): Promise<void> {
 
   const counterparties = [...revenue.revenueByCounterparty.keys()]
 
-  console.log(`\n  window ${currentWindow} · ${revenue.history.length} closed window(s) of revenue · ` +
-    `${counterparties.length} counterparty(ies)`)
+  console.log(
+    `\n  window ${currentWindow} · ${revenue.history.length} closed window(s) of revenue · ` +
+      `${counterparties.length} counterparty(ies)`,
+  )
 
   /*
    * Funding ancestry, one hop per counterparty.
@@ -300,7 +311,9 @@ async function pass(): Promise<void> {
     `    root        ${root ? `${root.root} (${root.hops} hop(s))` : 'unresolved'} · ` +
       `starter grant ${grant.status}` +
       (grant.status === 'taken' ? ` — held by ${grant.heldBy} (seq ${grant.seq ?? '?'})` : '') +
-      (grant.seq !== undefined && grant.status === 'granted' ? ` (claimed at seq ${grant.seq})` : ''),
+      (grant.seq !== undefined && grant.status === 'granted'
+        ? ` (claimed at seq ${grant.seq})`
+        : ''),
   )
   if (grant.status === 'taken') {
     console.log(
@@ -464,7 +477,9 @@ async function pass(): Promise<void> {
         factSeqs.map((f) => `${f.account} (${f.added}) seq ${f.sequenceNumber}`).join(', '),
     )
   } else {
-    console.log(`  facts           none new — the topic already knows ${remembered.byAccount.size} account(s)`)
+    console.log(
+      `  facts           none new — the topic already knows ${remembered.byAccount.size} account(s)`,
+    )
   }
 
   if (result.weights.length > 0) {
@@ -512,9 +527,13 @@ console.log(`  tab             ${tabAccount}`)
 console.log(`  token           ${tokenId}`)
 console.log(`  ceiling topic   ${ceilingTopic}`)
 console.log(`  trailing        ${TRAILING_WINDOWS} window(s)`)
-console.log(`  mode            ${once ? 'single pass' : 'loop'}${publish ? ' · PUBLISHING' : ' · dry'}`)
+console.log(
+  `  mode            ${once ? 'single pass' : 'loop'}${publish ? ' · PUBLISHING' : ' · dry'}`,
+)
 if (demoMode && windowSeconds !== params.window.seconds) {
-  console.log(`  window          ${windowSeconds}s  (DEMO_MODE override of params' ${params.window.seconds}s)`)
+  console.log(
+    `  window          ${windowSeconds}s  (DEMO_MODE override of params' ${params.window.seconds}s)`,
+  )
 }
 console.log()
 for (const line of describeParams()) console.log(`  ${line}`)

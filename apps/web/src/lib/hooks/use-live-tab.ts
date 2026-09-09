@@ -1,12 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { micro, type MicroUsdc } from '../money'
 import { windowOf } from '@tab/params'
 import type { ReceiptRow } from '@tab/sdk'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LIVE, TAB_ID, tabClient } from '../live/client'
 import { WINDOW_SECONDS } from '../mock/tab'
 import type { Leg, Receipt } from '../mock/types'
+import { type MicroUsdc, micro } from '../money'
 
 /**
  * The console's live data, polled from the gateway through `@tab/sdk`.
@@ -192,6 +192,21 @@ export function useLiveTab() {
       toggleStream,
       toggleStale,
     }),
-    [rows, balance, outstanding, holds, ceiling, perCallCap, flashKey, refusalStamp, streaming, stale, seconds, error, toggleStream, toggleStale],
+    [
+      rows,
+      balance,
+      outstanding,
+      holds,
+      ceiling,
+      perCallCap,
+      flashKey,
+      refusalStamp,
+      streaming,
+      stale,
+      seconds,
+      error,
+      toggleStream,
+      toggleStale,
+    ],
   )
 }

@@ -1,5 +1,5 @@
-import { entriesFromMessages, type Entry, type Replay } from '@tab/ledger'
-import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
+import { type Entry, entriesFromMessages, type Replay } from '@tab/ledger'
+import { type MirrorClient, readTopic, reassembleChunks } from '@tab/mirror'
 
 /**
  * Rebuild ledger entries from the receipt topic.
@@ -22,7 +22,10 @@ export function unsettledWindows(entries: readonly Entry[], currentWindow: numbe
   const settled = new Set(entries.filter((e) => e.kind === 'settlement').map((e) => e.window))
   const seen = new Set(
     entries
-      .filter((e) => e.kind === 'debit' || e.kind === 'credit' || e.kind === 'interest' || e.kind === 'repair')
+      .filter(
+        (e) =>
+          e.kind === 'debit' || e.kind === 'credit' || e.kind === 'interest' || e.kind === 'repair',
+      )
       .map((e) => e.window),
   )
   // Never settle the window still in progress — receipts are still arriving.

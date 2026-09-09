@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { usdc, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, usdc } from '@tab/money'
 import {
-  fundedWithin, fundingAncestry, fundingRoot, isSystemAccount, sharedFundingRoot,
+  fundedWithin,
+  fundingAncestry,
+  fundingRoot,
+  isSystemAccount,
+  sharedFundingRoot,
 } from './ancestry.ts'
 import { detectCluster, reciprocity } from './clusters.ts'
 import { concentration } from './concentration.ts'
-import { applyWeight, weightOf, type WeightPolicy } from './weights.ts'
 import type { AccountFacts, AccountId, TransferEdge } from './types.ts'
+import { applyWeight, type WeightPolicy, weightOf } from './weights.ts'
 
 const AGENT = '0.0.1000'
 const SELLER = '0.0.2000'
@@ -70,7 +74,10 @@ test('hops record the SHORTEST path, not the path taken', () => {
 
 test('the hop limit bounds the walk and reports truncation honestly', () => {
   const chain = facts({
-    [AGENT]: ['0.0.10'], '0.0.10': ['0.0.11'], '0.0.11': ['0.0.12'], '0.0.12': ['0.0.13'],
+    [AGENT]: ['0.0.10'],
+    '0.0.10': ['0.0.11'],
+    '0.0.11': ['0.0.12'],
+    '0.0.12': ['0.0.13'],
   })
   const short = fundingAncestry(AGENT, chain, 2)
   assert.deepEqual([...short.ancestors].sort(), ['0.0.10', '0.0.11'])
@@ -93,11 +100,24 @@ test('THE LOOP ATTACK: the agent funds a seller, then buys from it', () => {
   const graph = facts({ [SELLER]: [AGENT] })
   const edges = [edge(AGENT, SELLER, '5.000000'), edge(AGENT, SELLER, '0.040000')]
 
-  const finding = detectCluster({ agent: AGENT, counterparty: SELLER, edges, facts: graph, maxHops: 3 })
+  const finding = detectCluster({
+    agent: AGENT,
+    counterparty: SELLER,
+    edges,
+    facts: graph,
+    maxHops: 3,
+  })
   assert.equal(finding.clustered, true)
   assert.ok(finding.reasons.includes('FUNDED_BY_AGENT'))
 
-  const weight = weightOf({ agent: AGENT, counterparty: SELLER, edges, facts: graph, maxHops: 3, policy: POLICY })
+  const weight = weightOf({
+    agent: AGENT,
+    counterparty: SELLER,
+    edges,
+    facts: graph,
+    maxHops: 3,
+    policy: POLICY,
+  })
   assert.equal(weight.bp, 0, 'a controlled seller contributes nothing')
   assert.equal(weight.blocking, true, 'and the spend is refused, not merely discounted')
   assert.equal(applyWeight(usdc('100.000000'), weight), 0n)
@@ -112,7 +132,13 @@ test('funding beyond the hop limit is not a block — the limit is the rule', ()
 test('a seller whose only counterparty is the agent is clustered', () => {
   // No funding link at all — caught by the second rule instead.
   const edges = [edge(AGENT, SELLER, '0.040000'), edge(SELLER, AGENT, '0.010000')]
-  const finding = detectCluster({ agent: AGENT, counterparty: SELLER, edges, facts: new Map(), maxHops: 3 })
+  const finding = detectCluster({
+    agent: AGENT,
+    counterparty: SELLER,
+    edges,
+    facts: new Map(),
+    maxHops: 3,
+  })
   assert.equal(finding.clustered, true)
   assert.ok(finding.reasons.includes('SOLE_COUNTERPARTY'))
 })
@@ -123,14 +149,31 @@ test('an independent seller with other customers is counted in full', () => {
     edge('0.0.4000', HONEST, '1.000000'),
     edge('0.0.5000', HONEST, '2.000000'),
   ]
-  const weight = weightOf({ agent: AGENT, counterparty: HONEST, edges, facts: new Map(), maxHops: 3, policy: POLICY })
+  const weight = weightOf({
+    agent: AGENT,
+    counterparty: HONEST,
+    edges,
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY,
+  })
   assert.equal(weight.bp, 10_000)
   assert.equal(weight.blocking, false)
-  assert.deepEqual(weight.reasons, ['INDEPENDENT'], 'counting in full is a decision with a reason too')
+  assert.deepEqual(
+    weight.reasons,
+    ['INDEPENDENT'],
+    'counting in full is a decision with a reason too',
+  )
 })
 
 test('the agent is never its own independent counterparty', () => {
-  const finding = detectCluster({ agent: AGENT, counterparty: AGENT, edges: [], facts: new Map(), maxHops: 3 })
+  const finding = detectCluster({
+    agent: AGENT,
+    counterparty: AGENT,
+    edges: [],
+    facts: new Map(),
+    maxHops: 3,
+  })
   assert.equal(finding.clustered, true)
 })
 
@@ -191,7 +234,10 @@ test('EXACTLY at the cap is not over it — the boundary a float would flip', ()
   const result = concentration(revenue, 4000)
   assert.equal(result.entries.find((e) => e.counterparty === HONEST)?.shareBp, 4000)
   assert.equal(result.entries.find((e) => e.counterparty === HONEST)?.over, false)
-  assert.deepEqual(result.overCap.map((e) => e.counterparty), ['0.0.4000'])
+  assert.deepEqual(
+    result.overCap.map((e) => e.counterparty),
+    ['0.0.4000'],
+  )
 })
 
 test('no revenue is not concentrated revenue', () => {
@@ -223,8 +269,14 @@ test('discounts MULTIPLY, so stacked weaknesses cost more than the worst one', (
   // under the largest, and pay for none of them.
   const edges = [edge(AGENT, HONEST, '1.000000'), edge('0.0.4000', HONEST, '1.000000')]
   const weight = weightOf({
-    agent: AGENT, counterparty: HONEST, edges, facts: new Map(), maxHops: 3,
-    policy: POLICY, young: true, concentrated: true,
+    agent: AGENT,
+    counterparty: HONEST,
+    edges,
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY,
+    young: true,
+    concentrated: true,
   })
   // 10000 × 0.6 × 0.8
   assert.equal(weight.bp, 4800)
@@ -235,8 +287,15 @@ test('discounts MULTIPLY, so stacked weaknesses cost more than the worst one', (
 test('a blocked counterparty reports only the blocking reason', () => {
   const graph = facts({ [SELLER]: [AGENT] })
   const weight = weightOf({
-    agent: AGENT, counterparty: SELLER, edges: [edge(AGENT, SELLER, '1.000000')],
-    facts: graph, maxHops: 3, policy: POLICY, young: true, concentrated: true, unattested: true,
+    agent: AGENT,
+    counterparty: SELLER,
+    edges: [edge(AGENT, SELLER, '1.000000')],
+    facts: graph,
+    maxHops: 3,
+    policy: POLICY,
+    young: true,
+    concentrated: true,
+    unattested: true,
   })
   assert.equal(weight.bp, 0)
   // The BLOCKING reasons only — both genuinely fire here, since the agent both
@@ -249,14 +308,26 @@ test('a blocked counterparty reports only the blocking reason', () => {
 })
 
 test('applying a weight rounds DOWN, never in the agent’s favour', () => {
-  const weight = { counterparty: HONEST, bp: 3333, reasons: ['YOUNG_ACCOUNT' as const], blocking: false }
+  const weight = {
+    counterparty: HONEST,
+    bp: 3333,
+    reasons: ['YOUNG_ACCOUNT' as const],
+    blocking: false,
+  }
   // 1000001 × 3333 / 10000 = 333300.3333 → 333300, truncated toward zero.
   assert.equal(applyWeight(usdc('1.000001'), weight), 333_300n)
 })
 
 test('weighting is deterministic under reordering of the same discounts', () => {
   const edges = [edge(AGENT, HONEST, '1.000000'), edge('0.0.4000', HONEST, '1.000000')]
-  const base = { agent: AGENT, counterparty: HONEST, edges, facts: new Map(), maxHops: 3, policy: POLICY }
+  const base = {
+    agent: AGENT,
+    counterparty: HONEST,
+    edges,
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY,
+  }
   const a = weightOf({ ...base, young: true, unattested: true, concentrated: true })
   const b = weightOf({ ...base, concentrated: true, unattested: true, young: true })
   assert.equal(a.bp, b.bp, 'same inputs, same ceiling, byte for byte')
@@ -272,7 +343,11 @@ test('COMMON_FUNDER: one operator funded both the tab and the "customer"', () =>
   const OPERATOR = '0.0.8000'
   const graph = facts({ [AGENT]: [OPERATOR], [SELLER]: [OPERATOR] })
   const finding = detectCluster({
-    agent: AGENT, counterparty: SELLER, edges: [], facts: graph, maxHops: 3,
+    agent: AGENT,
+    counterparty: SELLER,
+    edges: [],
+    facts: graph,
+    maxHops: 3,
   })
   assert.equal(finding.clustered, true)
   assert.ok(finding.reasons.includes('COMMON_FUNDER'))
@@ -290,7 +365,11 @@ test('a tab that cannot sign can never be a funder — FUNDED_BY_AGENT stays sil
 test('different funders are not a common funder', () => {
   const graph = facts({ [AGENT]: ['0.0.8000'], [SELLER]: ['0.0.9001'] })
   const finding = detectCluster({
-    agent: AGENT, counterparty: SELLER, edges: [], facts: graph, maxHops: 3,
+    agent: AGENT,
+    counterparty: SELLER,
+    edges: [],
+    facts: graph,
+    maxHops: 3,
   })
   assert.equal(finding.clustered, false)
 })
@@ -307,7 +386,6 @@ test('an unknown funder on either side cannot trigger the block', () => {
   )
 })
 
-
 /* ── UNVERIFIED_FUNDING: the residual fail-open, closed ──────────────────── */
 
 test('a counterparty with no established provenance is DISCOUNTED, not trusted', () => {
@@ -319,8 +397,13 @@ test('a counterparty with no established provenance is DISCOUNTED, not trusted',
    * went uncaught on its first full run.
    */
   const weight = weightOf({
-    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
-    maxHops: 3, policy: POLICY, unverified: true,
+    agent: AGENT,
+    counterparty: HONEST,
+    edges: [],
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY,
+    unverified: true,
   })
   assert.equal(weight.bp, 5000)
   assert.deepEqual(weight.reasons, ['UNVERIFIED_FUNDING'])
@@ -337,8 +420,13 @@ test('a PRE-V3 policy applies no unverified discount at all', () => {
    * is exactly the pre-v3 behaviour.
    */
   const weight = weightOf({
-    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
-    maxHops: 3, policy: POLICY_PRE_V3, unverified: true,
+    agent: AGENT,
+    counterparty: HONEST,
+    edges: [],
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY_PRE_V3,
+    unverified: true,
   })
   assert.equal(weight.bp, 10_000)
   assert.deepEqual(weight.reasons, ['INDEPENDENT'])
@@ -352,8 +440,15 @@ test('UNVERIFIED_FUNDING is applied FIRST, and the order is part of the model', 
    * (0.6) then concentrated (0.8).
    */
   const weight = weightOf({
-    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
-    maxHops: 3, policy: POLICY, unverified: true, young: true, concentrated: true,
+    agent: AGENT,
+    counterparty: HONEST,
+    edges: [],
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY,
+    unverified: true,
+    young: true,
+    concentrated: true,
   })
   assert.deepEqual(weight.reasons, ['UNVERIFIED_FUNDING', 'YOUNG_ACCOUNT', 'CONCENTRATED'])
   // 10000 → 5000 → 3000 → 2400
@@ -369,8 +464,13 @@ test('a BLOCKING reason still short-circuits past the unverified discount', () =
     [SELLER, { id: SELLER, fundedBy: [EXCHANGE] }],
   ])
   const weight = weightOf({
-    agent: AGENT, counterparty: SELLER, edges: [], facts: graph,
-    maxHops: 3, policy: POLICY, unverified: true,
+    agent: AGENT,
+    counterparty: SELLER,
+    edges: [],
+    facts: graph,
+    maxHops: 3,
+    policy: POLICY,
+    unverified: true,
   })
   assert.equal(weight.bp, 0)
   assert.deepEqual(weight.reasons, ['COMMON_FUNDER'])
@@ -384,8 +484,15 @@ test('the published bp reproduces from the reasons and the frozen steps', () => 
    * were in an app file and that arithmetic was unavailable to anyone outside.
    */
   const weight = weightOf({
-    agent: AGENT, counterparty: HONEST, edges: [], facts: new Map(),
-    maxHops: 3, policy: POLICY, sharedRoot: true, young: true, concentrated: true,
+    agent: AGENT,
+    counterparty: HONEST,
+    edges: [],
+    facts: new Map(),
+    maxHops: 3,
+    policy: POLICY,
+    sharedRoot: true,
+    young: true,
+    concentrated: true,
   })
   assert.deepEqual(weight.reasons, ['SHARED_FUNDING_ROOT', 'YOUNG_ACCOUNT', 'CONCENTRATED'])
   assert.equal(weight.bp, 3360)

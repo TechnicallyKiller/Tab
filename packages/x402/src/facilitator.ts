@@ -1,3 +1,4 @@
+import type { PrivateKey } from '@hiero-ledger/sdk'
 import { x402Facilitator } from '@x402/core/facilitator'
 import {
   createHederaClient,
@@ -7,7 +8,6 @@ import {
   toFacilitatorHederaSigner,
 } from '@x402/hedera'
 import { ExactHederaScheme } from '@x402/hedera/exact/facilitator'
-import type { PrivateKey } from '@hiero-ledger/sdk'
 
 /**
  * Tab's self-hosted facilitator, for the EARN leg.

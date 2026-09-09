@@ -1,4 +1,4 @@
-import { micro, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, micro } from '@tab/money'
 
 /**
  * Effective revenue: attested and unattested, averaged over trailing windows.

@@ -15,7 +15,10 @@ import { MirrorClient, waitForAccount } from '@tab/mirror'
 const tab = clientFromEnv()
 const mirror = new MirrorClient({ network: tab.network, timeoutMs: 30_000, maxRetries: 4 })
 
-const seller = await createAccount(tab.client, { initialHbar: 1, maxAutomaticTokenAssociations: -1 })
+const seller = await createAccount(tab.client, {
+  initialHbar: 1,
+  maxAutomaticTokenAssociations: -1,
+})
 process.stdout.write('\n  waiting for index   ')
 await waitForAccount(mirror, seller.accountId)
 console.log('indexed')

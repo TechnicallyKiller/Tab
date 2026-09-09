@@ -2,15 +2,23 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { usdc } from '@tab/money'
 import {
-  MirrorClient, MirrorError, compareConsensus, timestampRange,
-} from './client.ts'
-import { readTopic, reassembleChunks, decodeUtf8 } from './topics.ts'
-import {
-  getTransactionAt, getTransactions, hbarNetFor, normalizeTransactionId,
-  outboundFrom, sameTransaction, toTransferEdges,
-} from './transfers.ts'
-import { accountAgeDays, consensusToMillis, getBalanceSnapshot, getUsdcBalance } from './accounts.ts'
+  accountAgeDays,
+  consensusToMillis,
+  getBalanceSnapshot,
+  getUsdcBalance,
+} from './accounts.ts'
+import { compareConsensus, MirrorClient, MirrorError, timestampRange } from './client.ts'
 import { getSchedule } from './schedules.ts'
+import { decodeUtf8, readTopic, reassembleChunks } from './topics.ts'
+import {
+  getTransactionAt,
+  getTransactions,
+  hbarNetFor,
+  normalizeTransactionId,
+  outboundFrom,
+  sameTransaction,
+  toTransferEdges,
+} from './transfers.ts'
 import type { MirrorAccount, MirrorTransaction, TopicMessage } from './types.ts'
 
 /**
@@ -157,7 +165,10 @@ test('maxPages REPORTS truncation and where to resume — never silently stops',
     () => ({ body: { items: [{ n: 1 }], links: { next: '/next-page' } } }),
     { maxPages: 2 },
   )
-  const walk = await mirror.walk<{ n: number }>('/p1', (b) => (b as unknown as { items: { n: number }[] }).items)
+  const walk = await mirror.walk<{ n: number }>(
+    '/p1',
+    (b) => (b as unknown as { items: { n: number }[] }).items,
+  )
   assert.equal(walk.truncated, true)
   assert.equal(walk.pagesFetched, 2)
   assert.equal(walk.resumeFrom, '/next-page')
@@ -167,33 +178,38 @@ test('maxPages REPORTS truncation and where to resume — never silently stops',
 
 test('a 4xx throws IMMEDIATELY — it will not fix itself', async () => {
   const { mirror, calls } = client([{ status: 404, body: {} }], { maxRetries: 3 })
-  await assert.rejects(() => mirror.get('/api/v1/accounts/0.0.1'), (err: unknown) => {
-    assert.ok(err instanceof MirrorError)
-    assert.equal(err.status, 404)
-    // The path is on the error, so a failure says WHICH request failed.
-    assert.equal(err.path, '/api/v1/accounts/0.0.1')
-    return true
-  })
+  await assert.rejects(
+    () => mirror.get('/api/v1/accounts/0.0.1'),
+    (err: unknown) => {
+      assert.ok(err instanceof MirrorError)
+      assert.equal(err.status, 404)
+      // The path is on the error, so a failure says WHICH request failed.
+      assert.equal(err.path, '/api/v1/accounts/0.0.1')
+      return true
+    },
+  )
   // Retrying a 404 four times just delays the same answer by seconds.
   assert.equal(calls.length, 1)
 })
 
 test('a 429 IS retried — throttling is exactly what backoff is for', async () => {
-  const { mirror, calls } = client(
-    [{ status: 429 }, { status: 429 }, { body: { ok: true } }],
-    { maxRetries: 3 },
-  )
+  const { mirror, calls } = client([{ status: 429 }, { status: 429 }, { body: { ok: true } }], {
+    maxRetries: 3,
+  })
   assert.deepEqual(await mirror.get('/p'), { ok: true })
   assert.equal(calls.length, 3)
 })
 
 test('a 5xx is retried, and the last error survives when retries run out', async () => {
   const { mirror, calls } = client([{ status: 503 }, { status: 503 }], { maxRetries: 1 })
-  await assert.rejects(() => mirror.get('/p'), (err: unknown) => {
-    assert.ok(err instanceof MirrorError)
-    assert.equal(err.status, 503)
-    return true
-  })
+  await assert.rejects(
+    () => mirror.get('/p'),
+    (err: unknown) => {
+      assert.ok(err instanceof MirrorError)
+      assert.equal(err.status, 503)
+      return true
+    },
+  )
   assert.equal(calls.length, 2)
 })
 
@@ -205,11 +221,14 @@ test('a timeout says WHICH request timed out and for how long', async () => {
    * class of confusion once presented as a signature-verification failure.
    */
   const { mirror } = client([{ hang: true }], { maxRetries: 0, timeoutMs: 20 })
-  await assert.rejects(() => mirror.get('/api/v1/topics/0.0.5/messages'), (err: unknown) => {
-    assert.ok(err instanceof MirrorError)
-    assert.match(err.message, /timed out after 20ms for \/api\/v1\/topics\/0\.0\.5\/messages/)
-    return true
-  })
+  await assert.rejects(
+    () => mirror.get('/api/v1/topics/0.0.5/messages'),
+    (err: unknown) => {
+      assert.ok(err instanceof MirrorError)
+      assert.match(err.message, /timed out after 20ms for \/api\/v1\/topics\/0\.0\.5\/messages/)
+      return true
+    },
+  )
 })
 
 test('an absolute next-page URL is used as given, not re-prefixed', async () => {
@@ -366,7 +385,10 @@ test('assembled messages come back in consensus order regardless of input order'
     msg({ message: b64('first'), consensus_timestamp: '100.000000000', sequence_number: 1 }),
     msg({ message: b64('second'), consensus_timestamp: '200.000000000', sequence_number: 2 }),
   ])
-  assert.deepEqual(assembled.map((a) => decodeUtf8(a.payload)), ['first', 'second', 'third'])
+  assert.deepEqual(
+    assembled.map((a) => decodeUtf8(a.payload)),
+    ['first', 'second', 'third'],
+  )
 })
 
 test('a chunk_info with total 1 is treated as unchunked', () => {
@@ -412,7 +434,10 @@ test('a FAILED transaction is filtered out — it would be a phantom graph edge'
     },
   ])
   const walk = await getTransactions(mirror, { accountId: '0.0.1' })
-  assert.deepEqual(walk.items.map((t) => t.transaction_id), ['good'])
+  assert.deepEqual(
+    walk.items.map((t) => t.transaction_id),
+    ['good'],
+  )
 })
 
 test('getTransactions asks only for CRYPTOTRANSFER, ascending, capped at 100', async () => {
@@ -431,10 +456,14 @@ const TOKEN = '0.0.429274'
 
 test('the common 1:1 transfer is exact', () => {
   const edges = toTransferEdges(
-    [tx({ token_transfers: [
-      { token_id: TOKEN, account: '0.0.1', amount: -40_000, is_approval: false },
-      { token_id: TOKEN, account: '0.0.2', amount: 40_000, is_approval: false },
-    ] })],
+    [
+      tx({
+        token_transfers: [
+          { token_id: TOKEN, account: '0.0.1', amount: -40_000, is_approval: false },
+          { token_id: TOKEN, account: '0.0.2', amount: 40_000, is_approval: false },
+        ],
+      }),
+    ],
     TOKEN,
   )
   assert.equal(edges.length, 1)
@@ -452,12 +481,16 @@ test('a multi-party transfer splits proportionally and the edges SUM BACK', () =
    * would attribute more or less revenue than actually changed hands.
    */
   const edges = toTransferEdges(
-    [tx({ token_transfers: [
-      { token_id: TOKEN, account: '0.0.1', amount: -300_000, is_approval: false },
-      { token_id: TOKEN, account: '0.0.2', amount: -100_000, is_approval: false },
-      { token_id: TOKEN, account: '0.0.3', amount: 200_000, is_approval: false },
-      { token_id: TOKEN, account: '0.0.4', amount: 200_000, is_approval: false },
-    ] })],
+    [
+      tx({
+        token_transfers: [
+          { token_id: TOKEN, account: '0.0.1', amount: -300_000, is_approval: false },
+          { token_id: TOKEN, account: '0.0.2', amount: -100_000, is_approval: false },
+          { token_id: TOKEN, account: '0.0.3', amount: 200_000, is_approval: false },
+          { token_id: TOKEN, account: '0.0.4', amount: 200_000, is_approval: false },
+        ],
+      }),
+    ],
     TOKEN,
   )
   assert.equal(edges.length, 4)
@@ -472,10 +505,14 @@ test('a multi-party transfer splits proportionally and the edges SUM BACK', () =
 
 test('a different token is ignored entirely', () => {
   const edges = toTransferEdges(
-    [tx({ token_transfers: [
-      { token_id: '0.0.999', account: '0.0.1', amount: -1, is_approval: false },
-      { token_id: '0.0.999', account: '0.0.2', amount: 1, is_approval: false },
-    ] })],
+    [
+      tx({
+        token_transfers: [
+          { token_id: '0.0.999', account: '0.0.1', amount: -1, is_approval: false },
+          { token_id: '0.0.999', account: '0.0.2', amount: 1, is_approval: false },
+        ],
+      }),
+    ],
     TOKEN,
   )
   assert.deepEqual(edges, [])
@@ -486,23 +523,32 @@ test('a zero-amount edge from truncation is DROPPED, not recorded as a transfer'
   // not a transfer and would show as a counterparty relationship that moved
   // nothing — which is exactly the kind of phantom the graph must not see.
   const edges = toTransferEdges(
-    [tx({ token_transfers: [
-      { token_id: TOKEN, account: '0.0.1', amount: -1_000_000, is_approval: false },
-      { token_id: TOKEN, account: '0.0.2', amount: -1, is_approval: false },
-      { token_id: TOKEN, account: '0.0.3', amount: 1_000_001, is_approval: false },
-    ] })],
+    [
+      tx({
+        token_transfers: [
+          { token_id: TOKEN, account: '0.0.1', amount: -1_000_000, is_approval: false },
+          { token_id: TOKEN, account: '0.0.2', amount: -1, is_approval: false },
+          { token_id: TOKEN, account: '0.0.3', amount: 1_000_001, is_approval: false },
+        ],
+      }),
+    ],
     TOKEN,
   )
   // 1 × 1000001 / 1000001 = 1 for the dust sender; both edges survive here.
   assert.equal(edges.length, 2)
-  assert.equal(edges.every((e) => e.amount > 0n), true)
+  assert.equal(
+    edges.every((e) => e.amount > 0n),
+    true,
+  )
 })
 
 test('a transaction with no senders is skipped rather than dividing by zero', () => {
   const edges = toTransferEdges(
-    [tx({ token_transfers: [
-      { token_id: TOKEN, account: '0.0.2', amount: 100, is_approval: false },
-    ] })],
+    [
+      tx({
+        token_transfers: [{ token_id: TOKEN, account: '0.0.2', amount: 100, is_approval: false }],
+      }),
+    ],
     TOKEN,
   )
   assert.deepEqual(edges, [])
@@ -524,15 +570,22 @@ test('edges come back in consensus order', () => {
     ],
   })
   const edges = toTransferEdges([later, earlier], TOKEN)
-  assert.deepEqual(edges.map((e) => e.from), ['0.0.3', '0.0.1'])
+  assert.deepEqual(
+    edges.map((e) => e.from),
+    ['0.0.3', '0.0.1'],
+  )
 })
 
 test('outboundFrom keeps only what the account actually sent', () => {
   const edges = toTransferEdges(
-    [tx({ token_transfers: [
-      { token_id: TOKEN, account: '0.0.1', amount: -10, is_approval: false },
-      { token_id: TOKEN, account: '0.0.2', amount: 10, is_approval: false },
-    ] })],
+    [
+      tx({
+        token_transfers: [
+          { token_id: TOKEN, account: '0.0.1', amount: -10, is_approval: false },
+          { token_id: TOKEN, account: '0.0.2', amount: 10, is_approval: false },
+        ],
+      }),
+    ],
     TOKEN,
   )
   assert.equal(outboundFrom(edges, '0.0.1').length, 1)
@@ -570,10 +623,7 @@ test('normalising leaves the account id’s own dots alone', () => {
 })
 
 test('two genuinely different transactions do not compare equal', () => {
-  assert.equal(
-    sameTransaction('0.0.1@100.000000001', '0.0.1@100.000000002'),
-    false,
-  )
+  assert.equal(sameTransaction('0.0.1@100.000000001', '0.0.1@100.000000002'), false)
 })
 
 /* ── hbarNetFor: net, not first match ────────────────────────────────────── */
@@ -582,12 +632,14 @@ test('hbarNetFor sums every entry for the account, fees included', () => {
   // An account can appear several times in one transfer list — a payment out
   // and a fee. Taking the first entry would report the fee as the movement.
   const net = hbarNetFor(
-    tx({ transfers: [
-      { account: '0.0.1', amount: -100, is_approval: false },
-      { account: '0.0.1', amount: -7, is_approval: false },
-      { account: '0.0.98', amount: 7, is_approval: false },
-      { account: '0.0.2', amount: 100, is_approval: false },
-    ] }),
+    tx({
+      transfers: [
+        { account: '0.0.1', amount: -100, is_approval: false },
+        { account: '0.0.1', amount: -7, is_approval: false },
+        { account: '0.0.98', amount: 7, is_approval: false },
+        { account: '0.0.2', amount: 100, is_approval: false },
+      ],
+    }),
     '0.0.1',
   )
   assert.equal(net, -107n)
@@ -672,7 +724,21 @@ test('an unassociated account reads as a zero USDC balance, not a failure', asyn
 test('a non-6-decimal token REFUSES to be read as MicroUsdc', async () => {
   // Reading an 8-decimal token as micro-USDC misreports every amount by 100x.
   const { mirror } = client([
-    { body: { tokens: [{ token_id: TOKEN, balance: 1, decimals: 8, automatic_association: true, freeze_status: 'UNFROZEN', kyc_status: 'NOT_APPLICABLE' }], links: { next: null } } },
+    {
+      body: {
+        tokens: [
+          {
+            token_id: TOKEN,
+            balance: 1,
+            decimals: 8,
+            automatic_association: true,
+            freeze_status: 'UNFROZEN',
+            kyc_status: 'NOT_APPLICABLE',
+          },
+        ],
+        links: { next: null },
+      },
+    },
   ])
   await assert.rejects(() => getUsdcBalance(mirror, '0.0.1', TOKEN), /is not 6/)
 })

@@ -10,26 +10,26 @@
  *
  *   pnpm probe:x402
  */
-import express from 'express'
+
+import { PrivateKey } from '@hiero-ledger/sdk'
+import { configureGlobalHttp, MirrorClient } from '@tab/mirror'
 import { x402Facilitator } from '@x402/core/facilitator'
 import { paymentMiddleware, x402ResourceServer } from '@x402/express'
-import { x402Client, wrapFetchWithPayment, x402HTTPClient } from '@x402/fetch'
+import { wrapFetchWithPayment, x402Client, x402HTTPClient } from '@x402/fetch'
 import {
-  HBAR_ASSET_ID,
-  HEDERA_TESTNET_CAIP2,
   createClientHederaSigner,
   createHederaClient,
   createHederaPreflightTransfer,
   createHederaSignAndSubmitTransaction,
   createHederaVerifyPayerSignature,
+  HBAR_ASSET_ID,
+  HEDERA_TESTNET_CAIP2,
   toFacilitatorHederaSigner,
 } from '@x402/hedera'
 import { ExactHederaScheme as ClientScheme } from '@x402/hedera/exact/client'
 import { ExactHederaScheme as FacilitatorScheme } from '@x402/hedera/exact/facilitator'
 import { ExactHederaScheme as ServerScheme } from '@x402/hedera/exact/server'
-import { PrivateKey } from '@hiero-ledger/sdk'
-import { MirrorClient } from '@tab/mirror'
-import { configureGlobalHttp } from '@tab/mirror'
+import express from 'express'
 
 // Node's fetch dies after a 10s CONNECT timeout that no AbortController can
 // extend, and Mirror Node needs 5-15s from a high-latency link. Must run before
@@ -216,7 +216,9 @@ const url = `http://localhost:${PORT}/rank`
 try {
   // Unpaid request must be refused with a 402 challenge.
   const unpaid = await fetch(url)
-  console.log(`  unpaid request      HTTP ${unpaid.status}  ${unpaid.status === 402 ? '(402 challenge)' : 'UNEXPECTED'}`)
+  console.log(
+    `  unpaid request      HTTP ${unpaid.status}  ${unpaid.status === 402 ? '(402 challenge)' : 'UNEXPECTED'}`,
+  )
   const ch = unpaid.headers.get('payment-required')
   if (ch) {
     const decoded = JSON.parse(Buffer.from(ch, 'base64').toString('utf8'))
@@ -238,7 +240,10 @@ try {
   const paid = await payingFetch(url, { method: 'GET' })
   mark('http complete')
   // Clone before processResponse, which consumes the stream.
-  const body = await paid.clone().json().catch(() => null)
+  const body = await paid
+    .clone()
+    .json()
+    .catch(() => null)
   const result = await httpClient.processResponse(paid)
   const elapsed = ((performance.now() - t0) / 1000).toFixed(2)
 

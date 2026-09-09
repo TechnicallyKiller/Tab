@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { micro, usdc, type MicroUsdc } from '@tab/money'
 import type { Entry } from '@tab/ledger'
-import { reconcile } from './matching.ts'
+import { micro, usdc } from '@tab/money'
 import { unsettledWindows } from './entries.ts'
-import { tick, describeTick, type TickConfig } from './tick.ts'
+import { reconcile } from './matching.ts'
+import { describeTick, type TickConfig, tick } from './tick.ts'
 
 /**
  * `apps/settlement` — the worker that moves the money.
@@ -138,8 +138,13 @@ test('a violation ALREADY REPAIRED is not reported again', () => {
   const entries: Entry[] = [
     debit('0.0.1-100-0', '0.040000'),
     {
-      kind: 'repair', at: '1.0', window: W, counterparty: SELLER,
-      amount: usdc('0.040000'), transactionId: '0.0.1-100-0', reason: 'missing_transfer',
+      kind: 'repair',
+      at: '1.0',
+      window: W,
+      counterparty: SELLER,
+      amount: usdc('0.040000'),
+      transactionId: '0.0.1-100-0',
+      reason: 'missing_transfer',
     },
   ]
   const result = reconcile(entries, [], FLOAT)
@@ -152,8 +157,12 @@ test('a repair is matched to its debit across BOTH id spellings', () => {
   const entries: Entry[] = [
     debit('0.0.1@100.000000000', '0.040000'),
     {
-      kind: 'repair', at: '1.0', window: W, counterparty: SELLER,
-      amount: usdc('0.040000'), transactionId: '0.0.1-100-000000000',
+      kind: 'repair',
+      at: '1.0',
+      window: W,
+      counterparty: SELLER,
+      amount: usdc('0.040000'),
+      transactionId: '0.0.1-100-000000000',
       reason: 'missing_transfer',
     },
   ]
@@ -235,8 +244,13 @@ test('a window with a settlement message is not settled again', () => {
   const entries: Entry[] = [
     debit('tx1', '0.040000', 100),
     {
-      kind: 'settlement', at: '1.0', window: 100, net: usdc('0.110000'),
-      outcome: 'clean', rampFromBp: 2500, rampToBp: 4000,
+      kind: 'settlement',
+      at: '1.0',
+      window: 100,
+      net: usdc('0.110000'),
+      outcome: 'clean',
+      rampFromBp: 2500,
+      rampToBp: 4000,
     },
   ]
   assert.deepEqual(unsettledWindows(entries, 200), [])
@@ -255,8 +269,13 @@ test('a window with only a HOLD is not settleable — nothing moved', () => {
   // commits a moment later.
   const entries: Entry[] = [
     {
-      kind: 'hold', at: '1.0', window: 100, holdId: 'h1', counterparty: SELLER,
-      amount: usdc('0.040000'), expiresAt: '2.0',
+      kind: 'hold',
+      at: '1.0',
+      window: 100,
+      holdId: 'h1',
+      counterparty: SELLER,
+      amount: usdc('0.040000'),
+      expiresAt: '2.0',
     },
   ]
   assert.deepEqual(unsettledWindows(entries, 200), [])
@@ -265,8 +284,12 @@ test('a window with only a HOLD is not settleable — nothing moved', () => {
 test('a REFUSAL alone does not make a window settleable', () => {
   const entries: Entry[] = [
     {
-      kind: 'refusal', at: '1.0', window: 100, counterparty: SELLER,
-      requested: usdc('0.500000'), rule: 'PER_CALL_CAP',
+      kind: 'refusal',
+      at: '1.0',
+      window: 100,
+      counterparty: SELLER,
+      requested: usdc('0.500000'),
+      rule: 'PER_CALL_CAP',
     },
   ]
   assert.deepEqual(unsettledWindows(entries, 200), [])
@@ -372,11 +395,10 @@ test('a POSITIVE net the float cannot cover is MISSED, not clean', async () => {
    * wrong: the ramp would rise, the ceiling would grow, and the agent would be
    * extended more credit on the strength of a payout that never happened.
    */
-  const result = await tick(
-    noChain,
-    [credit('0.150000')],
-    { ...CONFIG, floatBalance: usdc('0.000000') },
-  )
+  const result = await tick(noChain, [credit('0.150000')], {
+    ...CONFIG,
+    floatBalance: usdc('0.000000'),
+  })
   assert.equal(result.plan.outcome, 'missed')
   assert.equal(result.scheduleId, undefined)
   // A missed settlement cuts the ramp — trust is slower to earn than to lose.
@@ -425,11 +447,10 @@ test('describeTick shows receipts collapsing into ONE transfer', async () => {
 })
 
 test('a missed window reports 0 transfers, so the summary cannot mislead', async () => {
-  const result = await tick(
-    noChain,
-    [credit('0.150000')],
-    { ...CONFIG, floatBalance: usdc('0.000000') },
-  )
+  const result = await tick(noChain, [credit('0.150000')], {
+    ...CONFIG,
+    floatBalance: usdc('0.000000'),
+  })
   const lines = describeTick(result, CONFIG).join('\n')
   assert.match(lines, /→ 0 transfers/)
   assert.match(lines, /outcome {8}MISSED/)

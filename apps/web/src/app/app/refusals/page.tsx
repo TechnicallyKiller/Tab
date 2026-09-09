@@ -49,7 +49,12 @@ export default function RefusalsView() {
               }}
             >
               <span>{label}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: active ? 'var(--caution)' : 'var(--ink-3)' }}>
+              <span
+                style={{
+                  fontVariantNumeric: 'tabular-nums',
+                  color: active ? 'var(--caution)' : 'var(--ink-3)',
+                }}
+              >
                 {count}
               </span>
             </button>
@@ -59,9 +64,12 @@ export default function RefusalsView() {
 
       {visible.length === 0 ? (
         <Card style={{ padding: 40, textAlign: 'center' }}>
-          <div className="t-label" style={{ marginBottom: 8 }}>No refusals under this rule</div>
+          <div className="t-label" style={{ marginBottom: 8 }}>
+            No refusals under this rule
+          </div>
           <p style={{ fontSize: 14, color: 'var(--ink-2)', margin: 0 }}>
-            Nothing has fired this rule in the current window. That is the engine working, not a gap in the data.
+            Nothing has fired this rule in the current window. That is the engine working, not a gap
+            in the data.
           </p>
         </Card>
       ) : (
@@ -71,19 +79,39 @@ export default function RefusalsView() {
             <div style={{ padding: '18px 22px 20px' }}>
               <span
                 className="chip chip-caution"
-                style={{ fontSize: 12.5, padding: '5px 12px', borderWidth: 'var(--bw)', marginBottom: 14 }}
+                style={{
+                  fontSize: 12.5,
+                  padding: '5px 12px',
+                  borderWidth: 'var(--bw)',
+                  marginBottom: 14,
+                }}
               >
                 {r.rule} · {r.ruleDetail}
               </span>
               <p style={{ fontSize: 16, lineHeight: 1.65, margin: '0 0 16px', maxWidth: '64ch' }}>
                 {r.sentence}
               </p>
-              <div style={{ background: 'var(--sunk)', border: 'var(--bw) solid var(--ink)', borderRadius: 2, padding: 14 }}>
+              <div
+                style={{
+                  background: 'var(--sunk)',
+                  border: 'var(--bw) solid var(--ink)',
+                  borderRadius: 2,
+                  padding: 14,
+                }}
+              >
                 <Hops hops={r.evidence} />
               </div>
               <div
                 className="t-mono"
-                style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--ink-3)', marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 16 }}
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.06em',
+                  color: 'var(--ink-3)',
+                  marginTop: 14,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 16,
+                }}
               >
                 <span>{r.consensus}</span>
                 <span>seq {r.seq}</span>

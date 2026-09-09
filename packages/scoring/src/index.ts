@@ -15,7 +15,8 @@
  * The contract is `CeilingInputs`: if a number is not in that type, it may not
  * affect the output.
  */
-export { effectiveRevenue, type EffectiveRevenue, type WindowRevenue } from './effective-revenue.ts'
-export { tierOf, type TierInputs, type TierResult } from './tier.ts'
+
 export { computeCeiling, mayApplyMidWindow } from './ceiling.ts'
-export { type Binding, type CeilingInputs, type CeilingResult } from './inputs.ts'
+export { type EffectiveRevenue, effectiveRevenue, type WindowRevenue } from './effective-revenue.ts'
+export type { Binding, CeilingInputs, CeilingResult } from './inputs.ts'
+export { type TierInputs, type TierResult, tierOf } from './tier.ts'

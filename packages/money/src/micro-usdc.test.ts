@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { add, atLeastZero, micro, sub, sum, usdc } from './micro-usdc.ts'
 import { bp, bpFromRatio, formatBpDecimal, formatBpPercent, mulBp } from './basis-points.ts'
 import { format, toWire } from './format.ts'
+import { add, atLeastZero, micro, sub, sum, usdc } from './micro-usdc.ts'
 
 test('parse and format round-trip', () => {
   for (const v of ['0.0000', '1.0000', '0.4821', '2.0000', '0.0180']) {

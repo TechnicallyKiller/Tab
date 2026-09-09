@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { format, micro, type MicroUsdc } from '@tab/money'
 import type { Entry } from '@tab/ledger'
+import { format, type MicroUsdc, micro } from '@tab/money'
 import type { GatewayEnv } from './env.ts'
 import { nowConsensus, type ReceiptWriter } from './receipts.ts'
 import type { LedgerState } from './state.ts'
@@ -92,7 +92,10 @@ export async function serveAndCredit(
   const served = status >= 200 && status < 300
 
   const credit: Entry = {
-    kind: 'credit', at, window, counterparty: params.payer,
+    kind: 'credit',
+    at,
+    window,
+    counterparty: params.payer,
     amount: endpoint.atomicPrice,
     // Attested only when we actually served the request. A payment we took but
     // could not serve is real money that must not claim to be earned revenue.
@@ -105,8 +108,14 @@ export async function serveAndCredit(
   let creditWritten = false
   try {
     const written = await receipts.write({
-      v: 1, t: 'credit', tab: endpoint.tab, w: window, tok: env.tokenId,
-      cp: params.payer, amt: toWire(endpoint.atomicPrice), att: served,
+      v: 1,
+      t: 'credit',
+      tab: endpoint.tab,
+      w: window,
+      tok: env.tokenId,
+      cp: params.payer,
+      amt: toWire(endpoint.atomicPrice),
+      att: served,
       req: requestHash(target, at),
       tx: credit.transactionId,
     })

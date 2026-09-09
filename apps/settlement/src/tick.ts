@@ -1,11 +1,15 @@
-import {
-  accrue, netWindow, planSettlement, position,
-  type Entry, type SettlementPlan,
-} from '@tab/ledger'
-import { aprBpFor, type Tier } from '@tab/params'
-import { bp, format, micro, usdc, type MicroUsdc } from '@tab/money'
 import { buildSettlementTransfer, scheduleSettlement, type TabClient } from '@tab/hedera'
-import { getSchedule, waitForScheduleExecution, type MirrorClient } from '@tab/mirror'
+import {
+  accrue,
+  type Entry,
+  netWindow,
+  planSettlement,
+  position,
+  type SettlementPlan,
+} from '@tab/ledger'
+import { type MirrorClient, waitForScheduleExecution } from '@tab/mirror'
+import { bp, format, type MicroUsdc, micro, usdc } from '@tab/money'
+import { aprBpFor, type Tier } from '@tab/params'
 
 /**
  * The window tick.
@@ -82,8 +86,11 @@ export async function tick(
       ? [
           ...entries,
           {
-            kind: 'interest', at: now, window: config.window,
-            amount: micro(-interest), rateBp: aprBp,
+            kind: 'interest',
+            at: now,
+            window: config.window,
+            amount: micro(-interest),
+            rateBp: aprBp,
           },
         ]
       : [...entries]
@@ -121,7 +128,7 @@ export async function tick(
     throw new Error(
       `Refusing to settle: the tab (${config.tab}) and the hot float are the same account, ` +
         'so the transfer would be a self-transfer that moves nothing while reporting CLEAN. ' +
-        'Set TAB_ACCOUNT_ID to the agent\'s own account — it must differ from the float.',
+        "Set TAB_ACCOUNT_ID to the agent's own account — it must differ from the float.",
     )
   }
 

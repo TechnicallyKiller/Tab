@@ -16,7 +16,11 @@
  */
 import { clientFromEnv, submitMessage } from '@tab/hedera'
 import {
-  MirrorClient, configureGlobalHttp, getTransactions, normalizeTransactionId, toTransferEdges,
+  configureGlobalHttp,
+  getTransactions,
+  MirrorClient,
+  normalizeTransactionId,
+  toTransferEdges,
 } from '@tab/mirror'
 import { format, toWire } from '@tab/money'
 import { encode, repairReceipt } from '@tab/protocol'
@@ -44,13 +48,18 @@ if (!tokenId || !receiptTopic) throw new Error('USDC_TOKEN_ID and TOPIC_RECEIPTS
 const tabAccount = process.env['TAB_ACCOUNT_ID']
 if (!tabAccount) {
   throw new Error(
-    'TAB_ACCOUNT_ID is required. Receipts are keyed by the agent\'s tab, which must ' +
+    "TAB_ACCOUNT_ID is required. Receipts are keyed by the agent's tab, which must " +
       'differ from the hot float — run `pnpm tab:create` if it is not set.',
   )
 }
 
 const hedera = clientFromEnv()
-const mirror = new MirrorClient({ network: hedera.network, timeoutMs: 45_000, maxRetries: 4, maxPages: 12 })
+const mirror = new MirrorClient({
+  network: hedera.network,
+  timeoutMs: 45_000,
+  maxRetries: 4,
+  maxPages: 12,
+})
 const floatAccount = hedera.operatorId.toString()
 
 console.log(`\nReconciliation · Mirror Node vs receipt topic\n`)
@@ -58,7 +67,9 @@ console.log(`  float account   ${floatAccount}   (outbound transfers checked)`)
 console.log(`  tab             ${tabAccount}   (whose receipts these are)`)
 console.log(`  token           ${tokenId}`)
 console.log(`  receipt topic   ${receiptTopic}`)
-console.log(`  settlements     ${settlementTopic ?? 'not set — settlement payouts will read as questions'}\n`)
+console.log(
+  `  settlements     ${settlementTopic ?? 'not set — settlement payouts will read as questions'}\n`,
+)
 
 const replay = await replayEntries(mirror, receiptTopic)
 const entries = replay.byTab.get(tabAccount) ?? []
@@ -161,7 +172,9 @@ if (verified === 0 && result.violations.length === 0) {
     result.alreadyRepaired > 0 ? `, ${result.alreadyRepaired} corrected by an earlier repair` : ''
   }.`)
 } else {
-  console.log(`\n  ${result.violations.length} VIOLATION(S) — the ledger disagrees with the chain:\n`)
+  console.log(
+    `\n  ${result.violations.length} VIOLATION(S) — the ledger disagrees with the chain:\n`,
+  )
   for (const d of result.violations) console.log(`    [${d.kind}] ${d.detail}`)
   console.log(`
   Each is repairable — a repair receipt on the topic makes the ledger reflect
@@ -183,7 +196,9 @@ if (result.unreconcilable > 0) {
 }
 
 if (result.questions.length > 0) {
-  console.log(`\n  ${result.questions.length} unreceipted outflow(s) — for an operator to confirm, not violations:\n`)
+  console.log(
+    `\n  ${result.questions.length} unreceipted outflow(s) — for an operator to confirm, not violations:\n`,
+  )
   for (const d of result.questions) console.log(`    ${d.detail}`)
   console.log(`
   Not every float outflow is an agent spend. Funding a payer or topping up an

@@ -1,19 +1,19 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { type CounterpartyWeight, isBlocking, type WeightReason } from '@tab/sdk'
+import { type ReactNode, useState } from 'react'
 import { Card, CardHead, Chip, Hops } from '@/components/ui'
-import { BP_ONE, format, formatBpDecimal, formatBpPercent } from '@/lib/money'
+import { seq as fmtSeq } from '@/lib/format'
+import { useCounterparties } from '@/lib/hooks/use-counterparties'
 import {
   AGE_FULL_DAYS,
   CONCENTRATION_CAP_BP,
   COUNTERPARTIES,
   MAX_FUNDING_HOPS,
 } from '@/lib/mock/counterparties'
-import { useCounterparties } from '@/lib/hooks/use-counterparties'
-import { isBlocking, type CounterpartyWeight, type WeightReason } from '@tab/sdk'
-import { seq as fmtSeq } from '@/lib/format'
-import type { BasisPoints } from '@/lib/money'
 import type { Counterparty } from '@/lib/mock/types'
+import type { BasisPoints } from '@/lib/money'
+import { BP_ONE, format, formatBpDecimal, formatBpPercent } from '@/lib/money'
 
 /**
  * Reason class decides the chip. A weight without a reason is useless.
@@ -115,20 +115,28 @@ export default function CounterpartiesView() {
       <CardHead>
         <span>Weights and reasons</span>
         {/* Stated inline, not hidden. A judge who spots an unexplained knob assumes worse. */}
-        <span style={{ marginLeft: 'auto', color: 'var(--ink-3)', textTransform: 'none', letterSpacing: 0 }}>
+        <span
+          style={{
+            marginLeft: 'auto',
+            color: 'var(--ink-3)',
+            textTransform: 'none',
+            letterSpacing: 0,
+          }}
+        >
           {live ? (
-            <>
-              {loading
-                ? 'reading published weights…'
-                : error
-                  ? `gateway unreachable — showing the last ${parties.length} known`
-                  : `${parties.length} published weight(s) from the ceiling topic`}
-            </>
+            loading ? (
+              'reading published weights…'
+            ) : error ? (
+              `gateway unreachable — showing the last ${parties.length} known`
+            ) : (
+              `${parties.length} published weight(s) from the ceiling topic`
+            )
           ) : (
             <strong>MOCK DATA — set NEXT_PUBLIC_TAB_ACCOUNT_ID for published weights</strong>
           )}
           {' · '}
-          AGE_FULL_DAYS = {AGE_FULL_DAYS} · tuned down from 30 for testnet, where every account is young
+          AGE_FULL_DAYS = {AGE_FULL_DAYS} · tuned down from 30 for testnet, where every account is
+          young
         </span>
       </CardHead>
       <div className="tbl-scroll">
@@ -137,10 +145,16 @@ export default function CounterpartiesView() {
             <tr>
               <th scope="col">Account</th>
               <th scope="col">First seen</th>
-              <th scope="col" className="n">Age d</th>
+              <th scope="col" className="n">
+                Age d
+              </th>
               <th scope="col">Direction</th>
-              <th scope="col" className="n">Volume</th>
-              <th scope="col" className="n">Share</th>
+              <th scope="col" className="n">
+                Volume
+              </th>
+              <th scope="col" className="n">
+                Share
+              </th>
               <th scope="col">Weight</th>
               <th scope="col">Reason</th>
             </tr>
@@ -150,18 +164,30 @@ export default function CounterpartiesView() {
               <tr
                 key={p.id}
                 onClick={() => setOpen(open === p.id ? null : p.id)}
-                style={{ cursor: 'pointer', background: open === p.id ? 'var(--pen-soft)' : undefined }}
+                style={{
+                  cursor: 'pointer',
+                  background: open === p.id ? 'var(--pen-soft)' : undefined,
+                }}
               >
                 <td style={{ fontWeight: 500 }}>{p.id}</td>
                 <td style={{ color: 'var(--ink-3)' }}>{p.firstSeen}</td>
-                <td className="n" style={{ color: 'var(--ink-2)' }}>{p.ageDays}</td>
+                <td className="n" style={{ color: 'var(--ink-2)' }}>
+                  {p.ageDays}
+                </td>
                 <td style={{ color: 'var(--ink-2)' }}>{p.direction}</td>
                 <td className="n">{format(p.volume)}</td>
                 {/* Integer comparison: a float share can flip at exactly 40%. */}
-                <td className="n" style={{ color: p.shareBp > CONCENTRATION_CAP_BP ? 'var(--debit)' : 'var(--ink)' }}>
+                <td
+                  className="n"
+                  style={{
+                    color: p.shareBp > CONCENTRATION_CAP_BP ? 'var(--debit)' : 'var(--ink)',
+                  }}
+                >
                   {formatBpPercent(p.shareBp)}
                 </td>
-                <td><WeightBar weightBp={p.weightBp} /></td>
+                <td>
+                  <WeightBar weightBp={p.weightBp} />
+                </td>
                 {/*
                   EVERY reason, not just the first. Three fired at once on live
                   data — SHARED_FUNDING_ROOT, YOUNG_ACCOUNT, CONCENTRATED — and
@@ -174,7 +200,9 @@ export default function CounterpartiesView() {
                       <Chip tone="dim">—</Chip>
                     ) : (
                       p.reasons.map((r) => (
-                        <Chip key={r} tone={chipTone(r)}>{r}</Chip>
+                        <Chip key={r} tone={chipTone(r)}>
+                          {r}
+                        </Chip>
                       ))
                     )}
                   </span>
@@ -206,7 +234,14 @@ function WeightBar({ weightBp }: { weightBp: BasisPoints }) {
           overflow: 'hidden',
         }}
       >
-        <span style={{ position: 'absolute', inset: '0 auto 0 0', width: `${pct}%`, background: 'var(--pen)' }} />
+        <span
+          style={{
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            width: `${pct}%`,
+            background: 'var(--pen)',
+          }}
+        />
       </span>
       {/* Decimal, not percent — the share column beside it is already a percentage. */}
       <span style={{ fontWeight: 600 }}>{formatBpDecimal(weightBp)}</span>
@@ -327,13 +362,13 @@ function Evidence({ party }: { party: Row }) {
       </table>
 
       {/*
-        * The conclusion, only when the two values actually match.
-        *
-        * Stated as an equality a reader can check against the row above rather
-        * than as a verdict to accept — and the reason chip already carries the
-        * verdict. If these two ever disagreed with the published reason, that
-        * disagreement is exactly what a viewer should be able to see.
-        */}
+       * The conclusion, only when the two values actually match.
+       *
+       * Stated as an equality a reader can check against the row above rather
+       * than as a verdict to accept — and the reason chip already carries the
+       * verdict. If these two ever disagreed with the published reason, that
+       * disagreement is exactly what a viewer should be able to see.
+       */}
       {sameFunder ? (
         <p
           style={{
@@ -353,11 +388,18 @@ function Evidence({ party }: { party: Row }) {
       ) : null}
 
       {party.funder === undefined ? (
-        <p style={{ margin: '14px 0 0', maxWidth: 620, fontSize: 12.5, lineHeight: 1.7, color: 'var(--ink-2)' }}>
+        <p
+          style={{
+            margin: '14px 0 0',
+            maxWidth: 620,
+            fontSize: 12.5,
+            lineHeight: 1.7,
+            color: 'var(--ink-2)',
+          }}
+        >
           No provenance has been published for this account, so the funding rules could not be
-          evaluated against it and it is counted as independent —{' '}
-          <strong>which fails open.</strong> Run <code>pnpm engine --publish</code>; a fact observed
-          once is on the topic permanently.
+          evaluated against it and it is counted as independent — <strong>which fails open.</strong>{' '}
+          Run <code>pnpm engine --publish</code>; a fact observed once is on the topic permanently.
         </p>
       ) : null}
     </div>

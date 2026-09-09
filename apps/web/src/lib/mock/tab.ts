@@ -17,8 +17,7 @@ export const PER_CALL_CAP = usdc('0.0500')
 export const OPENING_BALANCE = usdc('-0.4821')
 export const HOLDS = usdc('0.0900')
 
-export const INPUT_HASH =
-  '9f2c41b0d7e8a35c1146bb90ee2d7a04c8f31d5b6e07a9224fbb1c0d3e5a7788'
+export const INPUT_HASH = '9f2c41b0d7e8a35c1146bb90ee2d7a04c8f31d5b6e07a9224fbb1c0d3e5a7788'
 export const CEILING_SEQ = 41862
 
 /**
@@ -40,7 +39,6 @@ export const CEILING_ROWS: CeilingRow[] = [
 
 export const BINDING_NOTE =
   'the starter floor, not the computed value, is what the agent spends against'
-
 
 /** Stepped, because a ceiling changes discretely. A smooth curve would lie. */
 export const CEILING_HISTORY = {

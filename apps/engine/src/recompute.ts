@@ -8,15 +8,27 @@
  * bookkeeping — deciding which counterparties to ask about, and assembling the
  * published input record.
  */
-import { micro, type MicroUsdc } from '@tab/money'
-import { MODEL_ID, caps, params, tierMultipleBpFor, type Tier } from '@tab/params'
+
 import {
-  applyWeight, concentration, sharedFundingRoot, weightOf,
-  type AccountFacts, type AccountId, type TransferEdge, type Weight, type WeightPolicy,
+  type AccountFacts,
+  type AccountId,
+  applyWeight,
+  concentration,
+  sharedFundingRoot,
+  type TransferEdge,
+  type Weight,
+  type WeightPolicy,
+  weightOf,
 } from '@tab/graph'
+import { type MicroUsdc, micro } from '@tab/money'
+import { caps, MODEL_ID, params, type Tier, tierMultipleBpFor } from '@tab/params'
 import {
-  computeCeiling, effectiveRevenue, tierOf,
-  type CeilingInputs, type CeilingResult, type WindowRevenue,
+  type CeilingInputs,
+  type CeilingResult,
+  computeCeiling,
+  effectiveRevenue,
+  tierOf,
+  type WindowRevenue,
 } from '@tab/scoring'
 
 /**
@@ -127,7 +139,12 @@ export function recompute(inputs: RecomputeInputs): Recomputation {
    */
   const weights: Weight[] = []
   for (const counterparty of inputs.revenueByCounterparty.keys()) {
-    const shared = sharedFundingRoot(inputs.tab, counterparty, inputs.facts, params.fundingAncestryHops)
+    const shared = sharedFundingRoot(
+      inputs.tab,
+      counterparty,
+      inputs.facts,
+      params.fundingAncestryHops,
+    )
     weights.push(
       weightOf({
         agent: inputs.tab,

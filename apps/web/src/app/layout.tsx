@@ -39,6 +39,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${bricolage.variable} ${publicSans.variable} ${plexMono.variable}`}>
       <head>
+        {/*
+         * The no-flash theme script, which MUST run before first paint —
+         * otherwise a dark-mode reader gets a white flash on every navigation.
+         * There is no other way to inject a synchronous inline script in Next's
+         * app router.
+         *
+         * `NO_FLASH` is a module-level constant in this repo. No user input
+         * reaches it, which is the property the rule is actually protecting.
+         */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: a static,
+            module-local script that must run before paint; no user input. */}
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
       </head>
       <body>{children}</body>

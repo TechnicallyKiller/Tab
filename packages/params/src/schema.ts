@@ -97,23 +97,25 @@ export const parameterSet = z.object({
    * Same principle as the settlement gross legs and an unpublished tier: absent
    * means not published, never a default.
    */
-  weights: z.object({
-    /** Value flows back toward the agent above the reciprocity threshold. */
-    reciprocalBp: basisPoints,
-    /** Reciprocity ratio at which that discount applies. */
-    reciprocalThresholdBp: basisPoints,
-    /** Funded from the same root as the agent within the hop limit. */
-    sharedRootBp: basisPoints,
-    /** Account younger than `ageFullDays`. */
-    youngBp: basisPoints,
-    /** Over `caps.concentrationCapBp` of the agent's total. */
-    concentratedBp: basisPoints,
-    /**
-     * No funding provenance observed or published — the rules could not be
-     * asked. A discount, never a block: see `UNVERIFIED_FUNDING`.
-     */
-    unverifiedBp: basisPoints,
-  }).optional(),
+  weights: z
+    .object({
+      /** Value flows back toward the agent above the reciprocity threshold. */
+      reciprocalBp: basisPoints,
+      /** Reciprocity ratio at which that discount applies. */
+      reciprocalThresholdBp: basisPoints,
+      /** Funded from the same root as the agent within the hop limit. */
+      sharedRootBp: basisPoints,
+      /** Account younger than `ageFullDays`. */
+      youngBp: basisPoints,
+      /** Over `caps.concentrationCapBp` of the agent's total. */
+      concentratedBp: basisPoints,
+      /**
+       * No funding provenance observed or published — the rules could not be
+       * asked. A discount, never a block: see `UNVERIFIED_FUNDING`.
+       */
+      unverifiedBp: basisPoints,
+    })
+    .optional(),
 
   /** Account age at which the age factor reaches 1. See the invariant below. */
   ageFullDays: z.number().int().positive(),

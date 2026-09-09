@@ -1,6 +1,6 @@
 import { x402ResourceServer } from '@x402/core/server'
 import { ExactHederaScheme } from '@x402/hedera/exact/server'
-import { atomicAmount, type Asset } from './assets.ts'
+import { type Asset, atomicAmount } from './assets.ts'
 import { asFacilitatorClient, type TabFacilitator } from './facilitator.ts'
 
 /**

@@ -1,4 +1,4 @@
-import { mulBp, type BasisPoints, type MicroUsdc } from '@tab/money'
+import { type BasisPoints, type MicroUsdc, mulBp } from '@tab/money'
 
 /**
  * Interest on carried outstanding.

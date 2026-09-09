@@ -4,8 +4,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { usdc } from '@tab/money'
 import type { Tab } from '@tab/sdk'
-import { buildServer } from './server.ts'
 import { configFromEnv } from './config.ts'
+import { buildServer } from './server.ts'
 
 /**
  * The MCP surface, driven through a real MCP client.
@@ -61,10 +61,15 @@ test('exactly one tool moves money, and it is annotated as such', async () => {
   const client = await connect(fakeTab({}))
   const { tools } = await client.listTools()
 
-  assert.deepEqual(
-    tools.map((t) => t.name).sort(),
-    ['tab_balance', 'tab_ceiling', 'tab_counterparties', 'tab_health', 'tab_quote', 'tab_receipts', 'tab_spend'],
-  )
+  assert.deepEqual(tools.map((t) => t.name).sort(), [
+    'tab_balance',
+    'tab_ceiling',
+    'tab_counterparties',
+    'tab_health',
+    'tab_quote',
+    'tab_receipts',
+    'tab_spend',
+  ])
 
   /*
    * An MCP client uses these hints to decide what to confirm with a human.
@@ -138,10 +143,12 @@ test('a RETRYABLE refusal says so, because the advice is the opposite', async ()
       }),
     }),
   )
-  const body = textOf(await client.callTool({
-    name: 'tab_spend',
-    arguments: { url: 'http://seller', max: '0.040000' },
-  }))
+  const body = textOf(
+    await client.callTool({
+      name: 'tab_spend',
+      arguments: { url: 'http://seller', max: '0.040000' },
+    }),
+  )
   assert.match(body, /can clear on its own/)
   assert.doesNotMatch(body, /will be refused again/)
 })
@@ -191,10 +198,12 @@ test('a paid spend reports the SETTLED amount, not the cap it was allowed', asyn
       }),
     }),
   )
-  const body = textOf(await client.callTool({
-    name: 'tab_spend',
-    arguments: { url: 'http://seller', max: '0.200000' },
-  }))
+  const body = textOf(
+    await client.callTool({
+      name: 'tab_spend',
+      arguments: { url: 'http://seller', max: '0.200000' },
+    }),
+  )
   assert.match(body, /PAID 0\.0400 USDC to 0\.0\.5000/)
   assert.match(body, /receipt seq 29 on HCS/)
   assert.doesNotMatch(body, /0\.2000/)

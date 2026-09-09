@@ -8,7 +8,7 @@
  *   pnpm fund:payer [accountId] [amount]
  */
 import { clientFromEnv, transferToken } from '@tab/hedera'
-import { MirrorClient, canReceiveToken, configureGlobalHttp, getUsdcBalance } from '@tab/mirror'
+import { canReceiveToken, configureGlobalHttp, getUsdcBalance, MirrorClient } from '@tab/mirror'
 import { format, usdc } from '@tab/money'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -38,7 +38,10 @@ if (!recv.canReceive) {
 }
 
 const moved = await transferToken(tab.client, {
-  tokenId, from: operator, to: target, amount,
+  tokenId,
+  from: operator,
+  to: target,
+  amount,
   idempotencyKey: 'bootstrap:fund-payer',
 })
 console.log(`  transferred     ${format(amount)} · ${moved.consensusStatus}`)

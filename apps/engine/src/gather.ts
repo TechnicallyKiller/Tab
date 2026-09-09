@@ -11,13 +11,18 @@
  * not reach the formula. So this module's job is to produce exactly those
  * numbers and nothing that quietly influences them on the side.
  */
-import {
-  getAccount, getTransactionAt, getTransactions, toTransferEdges, type MirrorClient,
-} from '@tab/mirror'
-import { micro, usdc, type MicroUsdc } from '@tab/money'
-import { params, windowConsensusRange, windowOf } from '@tab/params'
+
 import type { AccountFacts, AccountId, TransferEdge as GraphEdge } from '@tab/graph'
 import type { Entry } from '@tab/ledger'
+import {
+  getAccount,
+  getTransactionAt,
+  getTransactions,
+  type MirrorClient,
+  toTransferEdges,
+} from '@tab/mirror'
+import { type MicroUsdc, micro, usdc } from '@tab/money'
+import { params, windowConsensusRange, windowOf } from '@tab/params'
 import type { WindowRevenue } from '@tab/scoring'
 
 export interface GatheredInputs {
@@ -190,7 +195,6 @@ export function isYoungFrom(
   const ageDays = (nowSeconds - createdSeconds) / 86_400
   return ageDays < ageFullDays
 }
-
 
 /**
  * Token transfer edges touching an account, over a bounded window span.

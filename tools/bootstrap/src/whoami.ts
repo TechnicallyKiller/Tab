@@ -12,7 +12,11 @@
  */
 import { clientFromEnv } from '@tab/hedera'
 import {
-  MirrorClient, canReceiveToken, decimalsOf, getAccount, getToken,
+  canReceiveToken,
+  decimalsOf,
+  getAccount,
+  getToken,
+  MirrorClient,
   type TokenRelationship,
 } from '@tab/mirror'
 import { format, micro } from '@tab/money'
@@ -43,7 +47,9 @@ const held = raw.tokens ?? []
 console.log(`\nOperator ${operator} · Hedera ${tab.network}`)
 console.log(`  created             ${account.created_timestamp}`)
 console.log(`  auto-assoc slots    ${account.max_automatic_token_associations}`)
-console.log(`  USDC_TOKEN_ID       ${configured}${configured === REAL_USDC ? '  (real USDC)' : '  (NOT real USDC)'}`)
+console.log(
+  `  USDC_TOKEN_ID       ${configured}${configured === REAL_USDC ? '  (real USDC)' : '  (NOT real USDC)'}`,
+)
 
 console.log('\n  Token holdings')
 if (held.length === 0) {
@@ -68,7 +74,9 @@ const usdcRecv = await canReceiveToken(mirror, operator, REAL_USDC)
 const holdsUsdc = held.some((t) => t.token_id === REAL_USDC && t.balance > 0)
 
 console.log(`\n  Real USDC (${REAL_USDC})`)
-console.log(`    token             ${usdcToken.symbol} "${usdcToken.name}" · ${usdcToken.decimals} dp`)
+console.log(
+  `    token             ${usdcToken.symbol} "${usdcToken.name}" · ${usdcToken.decimals} dp`,
+)
 console.log(`    balance           ${holdsUsdc ? 'present' : 'ZERO'}`)
 console.log(`    can receive       ${usdcRecv.canReceive}`)
 

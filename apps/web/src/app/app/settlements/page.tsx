@@ -1,15 +1,15 @@
 'use client'
 
-import { useState } from 'react'
 import { params, windowEnd, windowStart } from '@tab/params'
 import type { SettlementView } from '@tab/sdk'
+import { useState } from 'react'
 import { Card, CardHead, Chip } from '@/components/ui'
-import { bp, format, formatBpPercent, micro, usdc } from '@/lib/money'
 import { seq as fmtSeq } from '@/lib/format'
 import { useSettlements } from '@/lib/hooks/use-settlements'
 import { SETTLEMENTS } from '@/lib/mock/settlements'
-import type { MicroUsdc } from '@/lib/money'
 import type { Outcome, Settlement } from '@/lib/mock/types'
+import type { MicroUsdc } from '@/lib/money'
+import { bp, format, formatBpPercent, micro, usdc } from '@/lib/money'
 
 /**
  * Settled windows, from the settlements topic.
@@ -169,10 +169,18 @@ export default function SettlementsView() {
               <tr>
                 <th scope="col">Window</th>
                 <th scope="col">Range</th>
-                <th scope="col" className="n">Credits</th>
-                <th scope="col" className="n">Debits</th>
-                <th scope="col" className="n">Interest</th>
-                <th scope="col" className="n">Net</th>
+                <th scope="col" className="n">
+                  Credits
+                </th>
+                <th scope="col" className="n">
+                  Debits
+                </th>
+                <th scope="col" className="n">
+                  Interest
+                </th>
+                <th scope="col" className="n">
+                  Net
+                </th>
                 <th scope="col">Ramp</th>
                 <th scope="col">Outcome</th>
               </tr>
@@ -190,7 +198,10 @@ export default function SettlementsView() {
                 <tr
                   key={`${s.window}-${s.seq ?? i}`}
                   onClick={() => setOpen(open === s.window ? null : s.window)}
-                  style={{ cursor: 'pointer', background: expanded?.window === s.window ? 'var(--pen-soft)' : undefined }}
+                  style={{
+                    cursor: 'pointer',
+                    background: expanded?.window === s.window ? 'var(--pen-soft)' : undefined,
+                  }}
                 >
                   <td style={{ fontWeight: 600 }}>{s.window}</td>
                   <td style={{ color: 'var(--ink-3)' }}>{s.range}</td>
@@ -203,13 +214,21 @@ export default function SettlementsView() {
                   <td className="n" style={{ color: 'var(--ink-2)' }}>
                     {s.netted ? format(s.interest) : '—'}
                   </td>
-                  <td className="n" style={{ fontWeight: 600, color: s.net < 0n ? 'var(--debit)' : 'var(--credit)' }}>
+                  <td
+                    className="n"
+                    style={{
+                      fontWeight: 600,
+                      color: s.net < 0n ? 'var(--debit)' : 'var(--credit)',
+                    }}
+                  >
                     {format(s.net, { sign: 'always' })}
                   </td>
                   <td style={{ color: 'var(--ink-2)' }}>
                     {formatBpPercent(s.rampFromBp, 0)} → {formatBpPercent(s.rampToBp, 0)}
                   </td>
-                  <td><Chip tone={outcomeTone(s.outcome)}>{s.outcome}</Chip></td>
+                  <td>
+                    <Chip tone={outcomeTone(s.outcome)}>{s.outcome}</Chip>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -242,7 +261,10 @@ function Netting({ s }: { s: Row }) {
    */
   const sums = !s.netted || s.credits + s.debits + s.interest === s.net
   return (
-    <div className="rule-t" style={{ background: 'var(--sunk)', padding: 20, display: 'flex', flexWrap: 'wrap', gap: 40 }}>
+    <div
+      className="rule-t"
+      style={{ background: 'var(--sunk)', padding: 20, display: 'flex', flexWrap: 'wrap', gap: 40 }}
+    >
       <div>
         <div className="t-label" style={{ marginBottom: 10 }}>
           Netting · window {s.window}
@@ -256,13 +278,34 @@ function Netting({ s }: { s: Row }) {
                   key={k}
                   style={{
                     borderBottom:
-                      i === 2 ? 'var(--bw) solid var(--ink)' : i === 3 ? '4px double var(--ink)' : '1px solid var(--rule-soft)',
+                      i === 2
+                        ? 'var(--bw) solid var(--ink)'
+                        : i === 3
+                          ? '4px double var(--ink)'
+                          : '1px solid var(--rule-soft)',
                   }}
                 >
-                  <th scope="row" style={{ textAlign: 'left', padding: '6px 20px 6px 0', fontWeight: weight, color: colour }}>
+                  <th
+                    scope="row"
+                    style={{
+                      textAlign: 'left',
+                      padding: '6px 20px 6px 0',
+                      fontWeight: weight,
+                      color: colour,
+                    }}
+                  >
                     {k}
                   </th>
-                  <td style={{ textAlign: 'right', padding: '6px 0', fontWeight: weight, color: colour }}>{v}</td>
+                  <td
+                    style={{
+                      textAlign: 'right',
+                      padding: '6px 0',
+                      fontWeight: weight,
+                      color: colour,
+                    }}
+                  >
+                    {v}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -275,10 +318,13 @@ function Netting({ s }: { s: Row }) {
            * carries, next to a receipt count that is also absent — the exact
            * shape of a dashboard that cannot be trusted.
            */
-          <div className="t-mono" style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 300, lineHeight: 1.8 }}>
+          <div
+            className="t-mono"
+            style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 300, lineHeight: 1.8 }}
+          >
             The gross legs were not published for this window — only the net{' '}
-            <strong style={{ color: 'var(--ink)' }}>{format(s.net, { sign: 'always' })}</strong>. The
-            netting is not shown rather than shown as zero.
+            <strong style={{ color: 'var(--ink)' }}>{format(s.net, { sign: 'always' })}</strong>.
+            The netting is not shown rather than shown as zero.
           </div>
         )}
       </div>

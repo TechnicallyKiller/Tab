@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { add, isNegative, micro, usdc, type MicroUsdc } from '../money'
 import {
   BLOCKED_SELLER,
   CREDIT_PAYERS,
@@ -11,6 +10,7 @@ import {
 } from '../mock/receipts'
 import { CEILING, HOLDS, OPENING_BALANCE, PER_CALL_CAP, WINDOW_SECONDS } from '../mock/tab'
 import type { Leg, Receipt } from '../mock/types'
+import { add, isNegative, type MicroUsdc, micro, usdc } from '../money'
 
 const EMIT_MS = 3400
 const MAX_ROWS = 40

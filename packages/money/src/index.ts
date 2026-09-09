@@ -4,25 +4,9 @@
  * Zero dependencies, zero I/O, zero floating point. Everything else in the repo
  * rests on this package, so it must be auditable in one sitting.
  */
-export {
-  DECIMALS,
-  ZERO,
-  abs,
-  add,
-  atLeastZero,
-  isNegative,
-  isZero,
-  max,
-  micro,
-  min,
-  neg,
-  sub,
-  sum,
-  usdc,
-  type MicroUsdc,
-} from './micro-usdc.ts'
 
 export {
+  type BasisPoints,
   BP_ONE,
   bp,
   bpFromRatio,
@@ -30,8 +14,23 @@ export {
   formatBpMultiple,
   formatBpPercent,
   mulBp,
-  type BasisPoints,
   type Rounding,
 } from './basis-points.ts'
-
-export { format, toWire, type SignMode } from './format.ts'
+export { format, type SignMode, toWire } from './format.ts'
+export {
+  abs,
+  add,
+  atLeastZero,
+  DECIMALS,
+  isNegative,
+  isZero,
+  type MicroUsdc,
+  max,
+  micro,
+  min,
+  neg,
+  sub,
+  sum,
+  usdc,
+  ZERO,
+} from './micro-usdc.ts'

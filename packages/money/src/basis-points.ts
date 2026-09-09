@@ -1,4 +1,4 @@
-import { micro, type MicroUsdc } from './micro-usdc.ts'
+import { type MicroUsdc, micro } from './micro-usdc.ts'
 
 /**
  * Rates are integer basis points, never decimals. A 0.6 unattested weight is

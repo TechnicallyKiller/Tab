@@ -1,4 +1,4 @@
-import { parameterSet, type ParameterSet } from '../schema.ts'
+import { type ParameterSet, parameterSet } from '../schema.ts'
 
 /**
  * v1 — FROZEN.

@@ -1,8 +1,8 @@
 'use client'
 
-import { createContext, useContext, type ReactNode } from 'react'
-import { useReceiptStream } from '@/lib/hooks/use-receipt-stream'
+import { createContext, type ReactNode, useContext } from 'react'
 import { useLiveTab } from '@/lib/hooks/use-live-tab'
+import { useReceiptStream } from '@/lib/hooks/use-receipt-stream'
 import { LIVE } from '@/lib/live/client'
 
 /**

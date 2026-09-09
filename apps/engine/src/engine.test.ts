@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { format, micro, usdc, type MicroUsdc } from '@tab/money'
-import { canonicalHash } from '@tab/protocol'
+import type { AccountFacts, AccountId, TransferEdge } from '@tab/graph'
+import type { Entry } from '@tab/ledger'
+import { format, type MicroUsdc, micro, usdc } from '@tab/money'
 import { caps, MODEL_VERSION, weightPolicyFor } from '@tab/params'
+import { canonicalHash } from '@tab/protocol'
 import { computeCeiling } from '@tab/scoring'
+import { type Observation, resolveAncestry } from './ancestry.ts'
+import { isYoungFrom, revenueFromEntries } from './gather.ts'
 import {
-  onCleanSettlement, onMissedSettlement, transition, type CeilingState,
+  type CeilingState,
+  onCleanSettlement,
+  onMissedSettlement,
+  transition,
 } from './guards/asymmetry.ts'
 import { ceilingInputRecord } from './publish/ceiling.ts'
-import { recompute, WEIGHT_POLICY } from './recompute.ts'
-import { isYoungFrom, revenueFromEntries } from './gather.ts'
 import { newFactFields } from './publish/facts.ts'
-import { resolveAncestry, type Observation } from './ancestry.ts'
-import type { Entry } from '@tab/ledger'
-import type { AccountFacts, AccountId, TransferEdge } from '@tab/graph'
+import { recompute, WEIGHT_POLICY } from './recompute.ts'
 
 const TAB = '0.0.1000'
 const SELLER = '0.0.2000'
@@ -100,8 +103,13 @@ test('growth can never reach the fast path without a settlement, over many windo
 
 function credit(counterparty: AccountId, amount: string, window: number, attested = true): Entry {
   return {
-    kind: 'credit', counterparty, amount: usdc(amount), attested, window,
-    at: `1788600${String(1000 + window)}.000000000`, transactionId: `tx-${counterparty}-${window}`,
+    kind: 'credit',
+    counterparty,
+    amount: usdc(amount),
+    attested,
+    window,
+    at: `1788600${String(1000 + window)}.000000000`,
+    transactionId: `tx-${counterparty}-${window}`,
   }
 }
 
@@ -110,7 +118,10 @@ test('the OPEN window is excluded from revenue', () => {
   // mid-window and recover at the tick, for no underlying reason.
   const entries = [credit(HONEST, '1.000000', 147), credit(HONEST, '5.000000', 148)]
   const r = revenueFromEntries(entries, 6, 148)
-  assert.deepEqual(r.history.map((h) => h.window), [147])
+  assert.deepEqual(
+    r.history.map((h) => h.window),
+    [147],
+  )
 })
 
 test('the attested split is kept so the discount stays auditable', () => {
@@ -124,7 +135,10 @@ test('the attested split is kept so the discount stays auditable', () => {
 test('windows older than the trailing span age out', () => {
   const entries = [credit(HONEST, '9.000000', 140), credit(HONEST, '1.000000', 147)]
   const r = revenueFromEntries(entries, 3, 148)
-  assert.deepEqual(r.history.map((h) => h.window), [147])
+  assert.deepEqual(
+    r.history.map((h) => h.window),
+    [147],
+  )
 })
 
 /* ── the loop attack, end to end through the engine ─────────────────────── */
@@ -216,7 +230,10 @@ test('funded sellers do not count toward tier diversity', () => {
     ...BASE,
     tab: TAB,
     edges: funded.map((id) => ({
-      from: TAB, to: id, amount: usdc('1.000000'), at: '1788601000.000000000',
+      from: TAB,
+      to: id,
+      amount: usdc('1.000000'),
+      at: '1788601000.000000000',
     })),
     facts: facts(Object.fromEntries(funded.map((id) => [id, [TAB]]))),
     history: [{ window: 147, attested: usdc('10.000000'), unattested: usdc('0.000000') }],
@@ -246,10 +263,17 @@ test('the published input record hashes stably and carries every input', () => {
   // Exactly the fields the protocol's ceilingInputs schema declares — no more,
   // no fewer. A field that affects the output and is not here makes
   // verify-ceiling unable to reproduce the number.
-  assert.deepEqual(
-    Object.keys(record).sort(),
-    ['cap', 'def', 'floor', 'mult', 'ramp', 'rev', 'revAtt', 'revUnatt', 'tier'],
-  )
+  assert.deepEqual(Object.keys(record).sort(), [
+    'cap',
+    'def',
+    'floor',
+    'mult',
+    'ramp',
+    'rev',
+    'revAtt',
+    'revUnatt',
+    'tier',
+  ])
   // Amounts are decimal STRINGS: JSON has no bigint and canonicalize refuses
   // floats outright.
   assert.equal(record['rev'], '2.500000')
@@ -258,9 +282,15 @@ test('the published input record hashes stably and carries every input', () => {
 
 test('two hashes of the same inputs match; a changed input changes the hash', async () => {
   const base = {
-    revenue: usdc('2.500000'), attested: usdc('2.500000'), unattested: usdc('0.000000'),
-    tier: 'B' as const, multipleBp: 20_000, rampBp: 4000,
-    hardCap: usdc('1000.000000'), starterFloor: usdc('1.000000'), hasDefaulted: false,
+    revenue: usdc('2.500000'),
+    attested: usdc('2.500000'),
+    unattested: usdc('0.000000'),
+    tier: 'B' as const,
+    multipleBp: 20_000,
+    rampBp: 4000,
+    hardCap: usdc('1000.000000'),
+    starterFloor: usdc('1.000000'),
+    hasDefaulted: false,
   }
   const a = await canonicalHash(ceilingInputRecord(computeCeiling(base)))
   const b = await canonicalHash(ceilingInputRecord(computeCeiling(base)))
@@ -276,9 +306,15 @@ test('a bigint never reaches the hashed record as a number', () => {
   // ceiling was computed, which is the worst moment to find out.
   const record = ceilingInputRecord(
     computeCeiling({
-      revenue: micro(1n) as MicroUsdc, attested: micro(1n) as MicroUsdc,
-      unattested: micro(0n) as MicroUsdc, tier: 'C', multipleBp: 12_500, rampBp: 10_000,
-      hardCap: usdc('1000.000000'), starterFloor: usdc('1.000000'), hasDefaulted: false,
+      revenue: micro(1n) as MicroUsdc,
+      attested: micro(1n) as MicroUsdc,
+      unattested: micro(0n) as MicroUsdc,
+      tier: 'C',
+      multipleBp: 12_500,
+      rampBp: 10_000,
+      hardCap: usdc('1000.000000'),
+      starterFloor: usdc('1.000000'),
+      hasDefaulted: false,
     }),
   )
   for (const [key, value] of Object.entries(record)) {
@@ -307,7 +343,11 @@ test('a trailing span of N collects N windows, not N−1', () => {
 test('a trailing span of 1 is the most recent CLOSED window', () => {
   const entries = [credit(HONEST, '1.000000', 147), credit(HONEST, '9.000000', 148)]
   const r = revenueFromEntries(entries, 1, 148)
-  assert.deepEqual(r.history.map((h) => h.window), [147], 'not the open window, and not empty')
+  assert.deepEqual(
+    r.history.map((h) => h.window),
+    [147],
+    'not the open window, and not empty',
+  )
   assert.equal(format(r.history[0]!.attested), '1.0000')
 })
 
@@ -356,11 +396,20 @@ test('only NEW facts are published — a duplicate costs a message to say nothin
   ])
 
   // Already fully known: nothing to add.
-  assert.equal(newFactFields({ account: '0.0.5000', createdAt: '1.0', funder: '0.0.99' }, known), undefined)
+  assert.equal(
+    newFactFields({ account: '0.0.5000', createdAt: '1.0', funder: '0.0.99' }, known),
+    undefined,
+  )
   // Known birth, newly observed funder.
-  assert.equal(newFactFields({ account: '0.0.5001', createdAt: '1.0', funder: '0.0.99' }, known), 'funder')
+  assert.equal(
+    newFactFields({ account: '0.0.5001', createdAt: '1.0', funder: '0.0.99' }, known),
+    'funder',
+  )
   // Never seen at all.
-  assert.equal(newFactFields({ account: '0.0.5002', createdAt: '1.0', funder: '0.0.99' }, known), 'both')
+  assert.equal(
+    newFactFields({ account: '0.0.5002', createdAt: '1.0', funder: '0.0.99' }, known),
+    'both',
+  )
 })
 
 test('an observation with NO funder is never published — absence carries nothing', () => {
@@ -386,8 +435,8 @@ const OPERATOR = '0.0.99'
 const working = (map: Record<string, Observation>) => async (account: string) => map[account] ?? {}
 
 /** Mirror Node that is down for these accounts — the intermittent index. */
-const broken = (map: Record<string, Observation>, failing: readonly string[]) =>
-  async (account: string) => {
+const broken =
+  (map: Record<string, Observation>, failing: readonly string[]) => async (account: string) => {
     if (failing.includes(account)) {
       throw new Error('Mirror Node returned 0 transactions (index not populated)')
     }
@@ -466,9 +515,7 @@ test('a remembered funder is still WALKED, so the chain does not stop at the gap
   }
   const result = await resolveAncestry(['0.0.3000'], {
     observe: broken(deep, ['0.0.3000']),
-    remembered: new Map([
-      ['0.0.3000', { account: '0.0.3000', funder: '0.0.2999', funderSeq: 5 }],
-    ]),
+    remembered: new Map([['0.0.3000', { account: '0.0.3000', funder: '0.0.2999', funderSeq: 5 }]]),
     hops: 3,
   })
   assert.deepEqual(result.facts.get('0.0.3000')?.fundedBy, ['0.0.2999'])
@@ -508,7 +555,10 @@ test('a SUCCESSFUL fetch that finds no funder cannot erase a remembered one', as
 
 test('the hop limit is respected, so a long chain cannot walk forever', async () => {
   const long: Record<string, Observation> = {
-    a: { funder: 'b' }, b: { funder: 'c' }, c: { funder: 'd' }, d: { funder: 'e' },
+    a: { funder: 'b' },
+    b: { funder: 'c' },
+    c: { funder: 'd' },
+    d: { funder: 'e' },
   }
   const result = await resolveAncestry(['a'], {
     observe: working(long),

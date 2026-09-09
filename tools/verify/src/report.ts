@@ -27,11 +27,7 @@ export function field(label: string, value: string, note?: string): string {
 }
 
 /** A claim and whether it held. Never just the verdict. */
-export function claim(
-  ok: boolean,
-  statement: string,
-  evidence: readonly string[] = [],
-): string {
+export function claim(ok: boolean, statement: string, evidence: readonly string[] = []): string {
   const lines = [`  ${ok ? 'PASS' : 'FAIL'}  ${statement}`]
   for (const line of evidence) lines.push(`        ${line}`)
   return lines.join('\n')
@@ -93,7 +89,7 @@ export const CEILING_GUIDANCE = [
   '    The record contradicts itself. Suspect the publisher.',
   '',
   '  HASH MATCHES but the recomputed ceiling or binding differs — the record',
-  '    is authentic and today\'s code no longer reproduces it. The formula or',
+  "    is authentic and today's code no longer reproduces it. The formula or",
   '    the parameter set changed after publication WITHOUT a MODEL_VERSION',
   '    bump. That is a release-process failure, not a ledger failure, and the',
   '    fix is to bump the version and never edit a published generation.',

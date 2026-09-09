@@ -14,8 +14,8 @@
  * making a claim about a window must read the topic where that claim is
  * recorded. The gateway makes no such claim, so this stays out of `spend`.
  */
-import { entriesFromMessages, type Entry } from '@tab/ledger'
-import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
+import { type Entry, entriesFromMessages } from '@tab/ledger'
+import { type MirrorClient, readTopic, reassembleChunks } from '@tab/mirror'
 
 export type SettlementEntry = Extract<Entry, { kind: 'settlement' }>
 
@@ -49,13 +49,13 @@ export async function replaySettlements(
 
   const byTab = new Map<string, SettlementEntry[]>()
   for (const [tab, entries] of replay.byTab) {
-    const settlements = entries.filter(
-      (e): e is SettlementEntry => e.kind === 'settlement',
-    )
+    const settlements = entries.filter((e): e is SettlementEntry => e.kind === 'settlement')
     if (settlements.length === 0) continue
     byTab.set(
       tab,
-      [...settlements].sort((a, b) => a.window - b.window || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)),
+      [...settlements].sort(
+        (a, b) => a.window - b.window || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0),
+      ),
     )
   }
   return { byTab, read: assembled.length }

@@ -1,4 +1,4 @@
-import { usdc, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, usdc } from '@tab/money'
 import { caps } from '@tab/params'
 
 /**
@@ -90,9 +90,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): GatewayEnv {
     starterCeiling: source['STARTER_CEILING_USDC']
       ? usdc(source['STARTER_CEILING_USDC'])
       : caps.starterCeiling,
-    perCallCap: source['PER_CALL_CAP_USDC']
-      ? usdc(source['PER_CALL_CAP_USDC'])
-      : caps.perCall,
+    perCallCap: source['PER_CALL_CAP_USDC'] ? usdc(source['PER_CALL_CAP_USDC']) : caps.perCall,
     holdTtlSeconds: Number(source['HOLD_TTL_SECONDS'] ?? 60),
   }
 

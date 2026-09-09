@@ -104,19 +104,30 @@ export function Hazard() {
 }
 
 /** Funding-ancestry evidence. Never state a weight without the derivation. */
-export function Hops({ hops }: { hops: { label: string; tone?: 'neutral' | 'bad'; arrow?: string }[] }) {
+export function Hops({
+  hops,
+}: {
+  hops: { label: string; tone?: 'neutral' | 'bad'; arrow?: string }[]
+}) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
-      {hops.map((h, i) => (
-        <span key={`${h.label}-${i}`} style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <span className={h.tone === 'bad' ? 'hop hop-bad' : 'hop'}>{h.label}</span>
-          {i < hops.length - 1 ? (
-            <span className="hop-arrow">{h.arrow ?? '→'}</span>
-          ) : h.arrow ? (
-            <span className="hop-arrow">{h.arrow}</span>
-          ) : null}
-        </span>
-      ))}
+      {/*
+        A funding path can revisit an account (A → B → A), so the label alone is
+        not a usable key — the position in the chain is part of what identifies
+        a hop. Keyed on both, built up front rather than from the map index.
+      */}
+      {hops
+        .map((h, i) => ({ ...h, key: `${i}:${h.label}` }))
+        .map((h, i) => (
+          <span key={h.key} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <span className={h.tone === 'bad' ? 'hop hop-bad' : 'hop'}>{h.label}</span>
+            {i < hops.length - 1 ? (
+              <span className="hop-arrow">{h.arrow ?? '→'}</span>
+            ) : h.arrow ? (
+              <span className="hop-arrow">{h.arrow}</span>
+            ) : null}
+          </span>
+        ))}
     </div>
   )
 }
@@ -163,7 +174,9 @@ export function Eyebrow({ children, tone }: { children: ReactNode; tone?: 'cauti
   return (
     <div
       className="t-label"
-      style={{ color: tone === 'caution' ? 'var(--caution)' : tone === 'pen' ? 'var(--pen)' : undefined }}
+      style={{
+        color: tone === 'caution' ? 'var(--caution)' : tone === 'pen' ? 'var(--pen)' : undefined,
+      }}
     >
       {children}
     </div>

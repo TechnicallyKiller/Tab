@@ -15,13 +15,22 @@
  * **A refusal is a value, not an exception.** That is the one thing to know
  * before using this.
  */
-import { TabClient, type TabClientConfig } from './client.ts'
-import { quote, spend, state } from './spend.ts'
-import { ceiling, counterparties, health, holds, receipts, settlements, tabs } from './receipts.ts'
+
 import type { MicroUsdc } from '@tab/money'
+import { TabClient, type TabClientConfig } from './client.ts'
+import { ceiling, counterparties, health, holds, receipts, settlements, tabs } from './receipts.ts'
+import { quote, spend, state } from './spend.ts'
 import type {
-  CeilingView, CounterpartyWeight, Hold, Quote, ReceiptRow, SettlementView,
-  SpendRequest, SpendResult, TabList, TabState,
+  CeilingView,
+  CounterpartyWeight,
+  Hold,
+  Quote,
+  ReceiptRow,
+  SettlementView,
+  SpendRequest,
+  SpendResult,
+  TabList,
+  TabState,
 } from './types.ts'
 
 export interface Tab {
@@ -68,46 +77,45 @@ export function createTab(config: TabClientConfig): Tab {
   }
 }
 
+// Re-exported so `apps/web` can type a reason without importing @tab/graph,
+// which its allow list forbids.
+export type { WeightReason } from '@tab/protocol'
 export { TabClient, type TabClientConfig } from './client.ts'
-export { spend, quote, state, parseAmount } from './spend.ts'
-export { holds, receipts, counterparties, ceiling, settlements, tabs, health } from './receipts.ts'
 export {
+  isTabError,
+  type TabError,
   TabInvalidError,
   TabProtocolError,
   TabUnavailableError,
-  isTabError,
-  type TabError,
 } from './errors.ts'
+export { ceiling, counterparties, health, holds, receipts, settlements, tabs } from './receipts.ts'
+export { parseAmount, quote, spend, state } from './spend.ts'
 export type {
   CeilingInputsView,
   CeilingView,
   CounterpartyWeight,
   Hold,
   PublishedCeilingView,
-  SettlementView,
-  TabList,
-  TabSummary,
   Quote,
   ReceiptLeg,
   ReceiptRow,
   RefusalCode,
+  SettlementView,
   SpendFailed,
   SpendPaid,
   SpendRefused,
   SpendRequest,
   SpendResult,
+  TabList,
   TabState,
+  TabSummary,
 } from './types.ts'
 export {
   BLOCKING_REASONS,
-  REFUSAL_CODES,
-  REFUSAL_GUIDANCE,
-  WEIGHT_REASONS,
-  WEIGHT_REASON_DETAIL,
   isBlocking,
   isRetryable,
+  REFUSAL_CODES,
+  REFUSAL_GUIDANCE,
+  WEIGHT_REASON_DETAIL,
+  WEIGHT_REASONS,
 } from './types.ts'
-
-// Re-exported so `apps/web` can type a reason without importing @tab/graph,
-// which its allow list forbids.
-export type { WeightReason } from '@tab/protocol'

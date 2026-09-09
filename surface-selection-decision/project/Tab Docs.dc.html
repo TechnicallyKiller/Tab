@@ -35,7 +35,7 @@ a:hover{color:var(--ink);text-decoration-thickness:2px}
 table{border-collapse:collapse}
 @keyframes snap-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 [data-palette]{animation:snap-in 90ms cubic-bezier(.2,0,.4,1) both}
-@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:1ms !important;transition-duration:1ms !important}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:1ms;transition-duration:1ms}}
 #docs-shell{display:grid;grid-template-columns:260px minmax(0,1fr) 200px;max-width:1400px;margin:0 auto}
 #docs-rail{position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
 #docs-outline{display:block}
@@ -49,7 +49,7 @@ table{border-collapse:collapse}
   #docs-rail{position:fixed;top:56px;left:0;bottom:0;width:280px;z-index:50;background:var(--paper);box-shadow:var(--shadow);transform:translateX(-102%);transition:transform 220ms cubic-bezier(.2,.7,.3,1)}
   #docs-rail[data-open="1"]{transform:none}
   #docs-navtrigger{display:inline-flex}
-  #docs-search{min-width:0 !important;flex:1;margin-left:8px !important}
+  #docs-search{min-width:0;flex:1;margin-left:8px}
   #docs-main{padding:28px 20px 96px}
 }
 @media (max-width:640px){#docs-toplinks{display:none}}

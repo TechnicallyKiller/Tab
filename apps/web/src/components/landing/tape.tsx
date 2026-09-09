@@ -1,6 +1,6 @@
-import { format } from '@/lib/money'
 import { shortConsensus } from '@/lib/format'
 import { TAPE_ROWS } from '@/lib/mock/receipts'
+import { format } from '@/lib/money'
 
 /**
  * The page's proof of life. A linear marquee of real receipt rows — debits
@@ -10,7 +10,15 @@ import { TAPE_ROWS } from '@/lib/mock/receipts'
  * Doubled so translateX(-50%) loops seamlessly.
  */
 export function Tape() {
-  const rows = [...TAPE_ROWS, ...TAPE_ROWS]
+  /*
+   * Doubled so the marquee can loop seamlessly — which means every `seq`
+   * appears twice, so `seq` alone is not a usable React key. The pass tag makes
+   * each copy distinct without falling back to the array index.
+   */
+  const rows = [
+    ...TAPE_ROWS.map((r) => ({ ...r, id: `a-${r.seq}` })),
+    ...TAPE_ROWS.map((r) => ({ ...r, id: `b-${r.seq}` })),
+  ]
   return (
     <section
       className="rule-b"
@@ -22,12 +30,12 @@ export function Tape() {
         className="t-mono"
         style={{ display: 'flex', width: 'max-content', fontSize: 13, color: 'var(--paper)' }}
       >
-        {rows.map((r, i) => {
+        {rows.map((r) => {
           const colour =
             r.leg === 'REFUSED' ? 'var(--caution)' : r.leg === 'CREDIT' ? '#5FCB8B' : '#F0846C'
           return (
             <span
-              key={`${r.seq}-${i}`}
+              key={r.id}
               style={{
                 display: 'inline-flex',
                 gap: 18,

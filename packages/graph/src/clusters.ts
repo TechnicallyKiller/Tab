@@ -1,4 +1,4 @@
-import { micro, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, micro } from '@tab/money'
 import { fundedWithin } from './ancestry.ts'
 import type { AccountFacts, AccountId, TransferEdge, WeightReason } from './types.ts'
 

@@ -54,11 +54,7 @@ export interface Transition {
 /**
  * Apply a freshly computed ceiling to the state, mid-window.
  */
-export function transition(
-  state: CeilingState,
-  computed: MicroUsdc,
-  window: number,
-): Transition {
+export function transition(state: CeilingState, computed: MicroUsdc, window: number): Transition {
   const verdict = mayApplyMidWindow(state.inForce, computed)
 
   if (computed === state.inForce) {

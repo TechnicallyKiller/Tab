@@ -10,14 +10,14 @@
  */
 import { buildSettlementTransfer, clientFromEnv, scheduleSettlement } from '@tab/hedera'
 import {
-  MirrorClient,
+  configureGlobalHttp,
   getSchedule,
   getTransactionAt,
   hbarNetFor,
+  MirrorClient,
   waitForScheduleExecution,
 } from '@tab/mirror'
 import { micro } from '@tab/money'
-import { configureGlobalHttp } from '@tab/mirror'
 
 // Node's fetch dies after a 10s CONNECT timeout that no AbortController can
 // extend, and Mirror Node needs 5-15s from a high-latency link. Must run before
@@ -57,7 +57,9 @@ const scheduled = await scheduleSettlement(tab.client, {
   adminKey: tab.operatorKey,
 })
 console.log(`  [1] scheduled       ${scheduled.scheduleId}`)
-console.log(`      waitForExpiry   ${scheduled.waitForExpiry}   <- evaluated AT expiry, not on last signature`)
+console.log(
+  `      waitForExpiry   ${scheduled.waitForExpiry}   <- evaluated AT expiry, not on last signature`,
+)
 
 const before = await tinybars(seller)
 console.log(`      seller before   ${hbar(before)}`)

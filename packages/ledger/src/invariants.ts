@@ -1,5 +1,5 @@
-import { add, format, micro, sub, sum, type MicroUsdc } from '@tab/money'
-import { inConsensusOrder, type ConsensusTimestamp, type Entry } from './entries.ts'
+import { add, format, type MicroUsdc, micro, sub, sum } from '@tab/money'
+import { type ConsensusTimestamp, type Entry, inConsensusOrder } from './entries.ts'
 import { resolveHolds } from './holds.ts'
 
 /**
@@ -112,13 +112,20 @@ export function checkAvailableNonNegative(
 ): Violation[] {
   let balance = micro(0n)
   for (const entry of inConsensusOrder(entries)) {
-    if (entry.kind === 'debit' || entry.kind === 'credit' || entry.kind === 'interest' || entry.kind === 'repair') {
+    if (
+      entry.kind === 'debit' ||
+      entry.kind === 'credit' ||
+      entry.kind === 'interest' ||
+      entry.kind === 'repair'
+    ) {
       balance = add(balance, entry.amount)
     }
   }
   const outstanding = balance < 0n ? micro(-balance) : micro(0n)
   const holds = sum(
-    resolveHolds(entries, now).filter((h) => h.state === 'pending').map((h) => h.amount),
+    resolveHolds(entries, now)
+      .filter((h) => h.state === 'pending')
+      .map((h) => h.amount),
   )
   const available = sub(sub(ceiling, outstanding), holds)
   return available < 0n

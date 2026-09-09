@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { encode, SCHEMA_VERSION, type TabMessage } from '@tab/protocol'
 import { usdc } from '@tab/money'
+import { encode, SCHEMA_VERSION, type TabMessage } from '@tab/protocol'
 import {
   ceilingHistoryFromMessages,
   ceilingsFromMessages,
@@ -23,7 +23,10 @@ import {
 
 const TAB = '0.0.9001'
 
-function at(seconds: number, seq: number): Pick<TopicMessage, 'consensusTimestamp' | 'sequenceNumber'> {
+function at(
+  seconds: number,
+  seq: number,
+): Pick<TopicMessage, 'consensusTimestamp' | 'sequenceNumber'> {
   // Nanos zero-padded to 9, because the ordering is a STRING comparison —
   // `1788686819.57` sorts before `1788686819.100000000`, which is backwards.
   return { consensusTimestamp: `${seconds}.000000000`, sequenceNumber: seq }
@@ -68,7 +71,9 @@ function ceiling(overrides: {
 }
 
 test('a published ceiling carries the arithmetic, not only the result', () => {
-  const byTab = ceilingsFromMessages([published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 1000, 7)])
+  const byTab = ceilingsFromMessages([
+    published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 1000, 7),
+  ])
   const snapshot = byTab.get(TAB)
   assert.ok(snapshot)
   assert.equal(snapshot.ceiling, usdc('0.250000'))
@@ -88,7 +93,11 @@ test('absent `def` normalises to false, so no reader has to know the difference'
   assert.equal(withoutFlag?.inputs.defaulted, false)
 
   const defaulted = ceilingsFromMessages([
-    published(ceiling({ ceil: '0.000000', w: 11, bind: 'unrated', tier: 'Unrated', def: true }), 2000, 2),
+    published(
+      ceiling({ ceil: '0.000000', w: 11, bind: 'unrated', tier: 'Unrated', def: true }),
+      2000,
+      2,
+    ),
   ]).get(TAB)
   // The distinction this preserves: an Unrated tab with no history gets the
   // starter floor, a tab that DEFAULTED gets exactly zero. Same tier.
@@ -117,23 +126,33 @@ test('history is ascending, so the last element is the ceiling in force', () => 
   const history = ceilingHistoryFromMessages([
     published(ceiling({ ceil: '0.400000', w: 12, bind: 'computed' }), 3000, 3),
     published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 1000, 1),
-    published(ceiling({ ceil: '0.000000', w: 11, bind: 'unrated', tier: 'Unrated', cause: 'graph_change' }), 2000, 2),
+    published(
+      ceiling({ ceil: '0.000000', w: 11, bind: 'unrated', tier: 'Unrated', cause: 'graph_change' }),
+      2000,
+      2,
+    ),
   ]).get(TAB)
 
-  assert.deepEqual(history?.map((c) => c.ceiling), [
-    usdc('0.250000'),
-    usdc('0.000000'),
-    usdc('0.400000'),
-  ])
-  assert.equal(history?.at(-1)?.ceiling, ceilingsFromMessages([
-    published(ceiling({ ceil: '0.400000', w: 12, bind: 'computed' }), 3000, 3),
-  ]).get(TAB)?.ceiling)
+  assert.deepEqual(
+    history?.map((c) => c.ceiling),
+    [usdc('0.250000'), usdc('0.000000'), usdc('0.400000')],
+  )
+  assert.equal(
+    history?.at(-1)?.ceiling,
+    ceilingsFromMessages([
+      published(ceiling({ ceil: '0.400000', w: 12, bind: 'computed' }), 3000, 3),
+    ]).get(TAB)?.ceiling,
+  )
 })
 
 test('history keeps every ceiling; the collapse is the interesting one', () => {
   const history = ceilingHistoryFromMessages([
     published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 1000, 1),
-    published(ceiling({ ceil: '0.000000', w: 11, bind: 'unrated', tier: 'Unrated', cause: 'graph_change' }), 2000, 2),
+    published(
+      ceiling({ ceil: '0.000000', w: 11, bind: 'unrated', tier: 'Unrated', cause: 'graph_change' }),
+      2000,
+      2,
+    ),
   ]).get(TAB)
   assert.equal(history?.length, 2)
   // The cause is what makes a zero explainable rather than alarming.
@@ -207,9 +226,12 @@ test('an undecodable message is skipped, never fatal', () => {
   assert.equal(replay.skipped, 1)
   // The ceiling decoded fine — it is simply not an entry.
   assert.equal(replay.replayed, 0)
-  assert.equal(ceilingsFromMessages([
-    published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 2000, 2),
-  ]).size, 1)
+  assert.equal(
+    ceilingsFromMessages([
+      published(ceiling({ ceil: '0.250000', w: 10, bind: 'starter_floor' }), 2000, 2),
+    ]).size,
+    1,
+  )
 })
 
 /* ── graph facts: the merge is the fix ───────────────────────────────────── */
@@ -380,9 +402,7 @@ test('a ROOTLESS registration claims nothing, so it cannot lock anyone out', () 
    * let an attacker lock out honest tabs by registering during an indexer
    * outage.
    */
-  const replay = registrationsFromMessages([
-    published(register({ tab: '0.0.1001' }), 1000, 1),
-  ])
+  const replay = registrationsFromMessages([published(register({ tab: '0.0.1001' }), 1000, 1)])
   assert.equal(replay.byRoot.size, 0)
   assert.equal(replay.byTab.size, 1)
 })

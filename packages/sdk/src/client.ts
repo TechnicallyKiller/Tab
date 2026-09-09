@@ -70,11 +70,7 @@ export class TabClient {
    * connection reset, timeout) is retried, and only because in that case the
    * caller has no answer at all.
    */
-  async request<T>(
-    method: 'GET' | 'POST',
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`
     let lastError: unknown
 

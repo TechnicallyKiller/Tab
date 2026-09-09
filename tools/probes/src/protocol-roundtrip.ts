@@ -9,9 +9,13 @@
  */
 import { clientFromEnv, submitMessage } from '@tab/hedera'
 import {
-  MirrorClient, configureGlobalHttp, decodeUtf8, readTopic, reassembleChunks,
+  configureGlobalHttp,
+  decodeUtf8,
+  MirrorClient,
+  readTopic,
+  reassembleChunks,
 } from '@tab/mirror'
-import { decode, encode, type DebitReceipt } from '@tab/protocol'
+import { type DebitReceipt, decode, encode } from '@tab/protocol'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
 
@@ -22,7 +26,10 @@ const tab = clientFromEnv()
 const mirror = new MirrorClient({ network: tab.network, timeoutMs: 45_000, maxRetries: 4 })
 
 const receipt: DebitReceipt = {
-  v: 1, t: 'debit', tab: tab.operatorId.toString(), w: 148,
+  v: 1,
+  t: 'debit',
+  tab: tab.operatorId.toString(),
+  w: 148,
   cp: process.env['X402_SELLER_ID'] ?? '0.0.10379572',
   amt: '-0.040000',
   hold: `h_${Date.now().toString(36)}`,
@@ -63,7 +70,9 @@ if (!found.ok) {
   tab.close()
   process.exit(1)
 }
-console.log(`  read back           t=${found.message.t} amt=${'amt' in found.message ? found.message.amt : '-'}`)
+console.log(
+  `  read back           t=${found.message.t} amt=${'amt' in found.message ? found.message.amt : '-'}`,
+)
 
 // A replay must survive the bootstrap.hello already on this topic.
 const walk = await readTopic(mirror, { topicId: topic })
@@ -74,7 +83,9 @@ for (const m of assembled) {
   if (decode(decodeUtf8(m.payload)).ok) typed++
   else skipped++
 }
-console.log(`\n  full replay         ${assembled.length} messages · ${typed} typed · ${skipped} skipped`)
+console.log(
+  `\n  full replay         ${assembled.length} messages · ${typed} typed · ${skipped} skipped`,
+)
 console.log(`  ${skipped > 0 ? 'Replay survived the pre-schema bootstrap.hello messages.' : ''}`)
 
 const ok = typed >= 1

@@ -1,4 +1,4 @@
-import { MirrorError, type MirrorClient } from './client.ts'
+import { type MirrorClient, MirrorError } from './client.ts'
 import type { ConsensusTimestamp, EntityId } from './types.ts'
 
 /**
@@ -59,7 +59,5 @@ export async function waitForScheduleExecution(
     }
     await new Promise((r) => setTimeout(r, intervalMs))
   }
-  throw new Error(
-    `Schedule ${scheduleId} did not execute within ${Math.round(timeoutMs / 1000)}s`,
-  )
+  throw new Error(`Schedule ${scheduleId} did not execute within ${Math.round(timeoutMs / 1000)}s`)
 }

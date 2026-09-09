@@ -27,11 +27,11 @@
  */
 import { configureGlobalHttp, MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
-import { readCeilings, readWeights } from './replay.ts'
 // The tested logic, so the code that runs is the code the tests cover.
 import { recheck } from './recheck.ts'
-import { reweigh } from './reweigh.ts'
+import { readCeilings, readWeights } from './replay.ts'
 import { CEILING_GUIDANCE, claim, field, heading, verdict } from './report.ts'
+import { reweigh } from './reweigh.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
 
@@ -54,7 +54,9 @@ if (!network) {
 }
 const seqArg = process.argv.find((a) => a.startsWith('--seq'))
 const wanted = seqArg
-  ? Number(seqArg.includes('=') ? seqArg.split('=')[1] : process.argv[process.argv.indexOf(seqArg) + 1])
+  ? Number(
+      seqArg.includes('=') ? seqArg.split('=')[1] : process.argv[process.argv.indexOf(seqArg) + 1],
+    )
   : undefined
 
 const mirror = new MirrorClient({ network, timeoutMs: 45_000, maxRetries: 4 })
@@ -66,7 +68,13 @@ console.log(field('ceiling topic', ceilingTopic))
 const all = await readCeilings(mirror, ceilingTopic)
 const targets = wanted === undefined ? all : all.filter((c) => c.sequenceNumber === wanted)
 
-console.log(field('published', `${all.length} ceiling(s)`, wanted !== undefined ? `verifying seq ${wanted}` : 'verifying all'))
+console.log(
+  field(
+    'published',
+    `${all.length} ceiling(s)`,
+    wanted !== undefined ? `verifying seq ${wanted}` : 'verifying all',
+  ),
+)
 
 if (targets.length === 0) {
   console.log(

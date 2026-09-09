@@ -9,7 +9,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { allDeps, readWorkspace, rel, report, ROOT, walk } from './lib.mjs'
+import { allDeps, ROOT, readWorkspace, rel, report, walk } from './lib.mjs'
 
 const WHY =
   'Two copies of the SDK means two distinct Transaction, AccountId and PrivateKey classes. ' +

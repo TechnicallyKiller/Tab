@@ -7,15 +7,15 @@
  * testable without standing up infrastructure.
  */
 export {
-  compareConsensus,
-  compareEntries,
-  inConsensusOrder,
   type ConsensusTimestamp,
   type CreditEntry,
+  compareConsensus,
+  compareEntries,
   type DebitEntry,
   type Entry,
   type HoldEntry,
   type InterestEntry,
+  inConsensusOrder,
   type RefusalEntry,
   type RepairEntry,
   type SettlementEntry,
@@ -23,38 +23,23 @@ export {
 
 export {
   canReserve,
-  pendingHoldTotal,
-  position,
-  resolveHolds,
   type HoldState,
   type HoldView,
   type Position,
+  pendingHoldTotal,
+  position,
   type ReserveDecision,
+  resolveHolds,
 } from './holds.ts'
 
 export {
-  SECONDS_PER_YEAR,
+  type AccrualInput,
   accrue,
   accrueWindow,
-  type AccrualInput,
+  SECONDS_PER_YEAR,
 } from './interest.ts'
-
 export {
-  RAMP_CLEAN_STEP_BP,
-  RAMP_MAX_BP,
-  RAMP_MIN_BP,
-  RAMP_MISSED_STEP_BP,
-  RAMP_START_BP,
-  netWindow,
-  netWindows,
-  planSettlement,
-  rampAfter,
-  type SettlementOutcome,
-  type SettlementPlan,
-  type WindowNet,
-} from './netting.ts'
-
-export {
+  type CheckResult,
   checkAvailableNonNegative,
   checkCommitAmountsMatch,
   checkDebitsHaveHolds,
@@ -63,27 +48,40 @@ export {
   checkLedger,
   checkPublicLedger,
   checkWindowSettledOnce,
-  LOCAL_ONLY_INVARIANTS,
-  type CheckResult,
   type FloatInvariantInput,
+  LOCAL_ONLY_INVARIANTS,
   type Violation,
 } from './invariants.ts'
+export {
+  netWindow,
+  netWindows,
+  planSettlement,
+  RAMP_CLEAN_STEP_BP,
+  RAMP_MAX_BP,
+  RAMP_MIN_BP,
+  RAMP_MISSED_STEP_BP,
+  RAMP_START_BP,
+  rampAfter,
+  type SettlementOutcome,
+  type SettlementPlan,
+  type WindowNet,
+} from './netting.ts'
 
 export {
   ceilingHistoryFromMessages,
   ceilingsFromMessages,
-  factsFromMessages,
-  registrationsFromMessages,
-  starterGrantFor,
-  weightsFromMessages,
   entriesFromMessages,
   type FactsReplay,
+  factsFromMessages,
   type PublishedCeiling,
   type PublishedCeilingInputs,
+  type PublishedWeight,
   type Registration,
   type RegistrationReplay,
   type RememberedFacts,
-  type PublishedWeight,
   type Replay,
+  registrationsFromMessages,
+  starterGrantFor,
   type TopicMessage,
+  weightsFromMessages,
 } from './replay.ts'

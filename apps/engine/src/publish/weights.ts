@@ -13,10 +13,11 @@
  * of them. See `weightUpdate` in `@tab/protocol` for why that limit is fatal
  * rather than merely awkward.
  */
-import { submitMessage, type TabClient } from '@tab/hedera'
-import { toWire, type MicroUsdc } from '@tab/money'
-import { encode, weightUpdate } from '@tab/protocol'
+
 import type { Weight } from '@tab/graph'
+import { submitMessage, type TabClient } from '@tab/hedera'
+import { type MicroUsdc, toWire } from '@tab/money'
+import { encode, weightUpdate } from '@tab/protocol'
 
 export interface PublishWeightsParams {
   hedera: TabClient
@@ -36,9 +37,7 @@ export interface PublishedWeight {
   sequenceNumber: number | null
 }
 
-export async function publishWeights(
-  params: PublishWeightsParams,
-): Promise<PublishedWeight[]> {
+export async function publishWeights(params: PublishWeightsParams): Promise<PublishedWeight[]> {
   let total = 0n
   for (const amount of params.revenue.values()) total += amount
 

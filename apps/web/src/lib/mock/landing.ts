@@ -133,7 +133,7 @@ export const NOT_BUILT = [
   'no agent deployment platform',
 ]
 
-import { bp, usdc, type BasisPoints, type MicroUsdc } from '../money'
+import { type BasisPoints, bp, type MicroUsdc, usdc } from '../money'
 
 /** Tier multiples as basis points: 30000 = 3.0x. Any default collapses to Unrated. */
 export const TIER_MULTIPLE_BP: Record<string, BasisPoints> = {

@@ -25,9 +25,10 @@
  * Reporting the second as a violation would cry wolf on a healthy ledger, which
  * is the worst possible behaviour for the command whose job is proving the books.
  */
-import { normalizeTransactionId } from '@tab/mirror'
-import { abs, format, micro, sum, type MicroUsdc } from '@tab/money'
+
 import type { Entry } from '@tab/ledger'
+import { normalizeTransactionId } from '@tab/mirror'
+import { abs, format, type MicroUsdc, micro, sum } from '@tab/money'
 
 export type Severity = 'violation' | 'question'
 
@@ -93,9 +94,7 @@ export function reconcile(
    */
   settlementTxs: ReadonlySet<string> = new Set(),
 ): Reconciliation {
-  const debits = entries.filter(
-    (e): e is Extract<Entry, { kind: 'debit' }> => e.kind === 'debit',
-  )
+  const debits = entries.filter((e): e is Extract<Entry, { kind: 'debit' }> => e.kind === 'debit')
 
   /*
    * Repairs already on the topic.

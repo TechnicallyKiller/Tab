@@ -80,8 +80,17 @@ export function HeroScene({ children }: { children: React.ReactNode }) {
     // Colour by sign, on the geometry, so the meaning lives in the object.
     const points = (
       [
-        [-6.2, 0], [-4.9, -0.55], [-3.6, -1.35], [-2.3, -1.72], [-1.0, -1.24],
-        [0.35, -0.35], [1.7, 0.42], [3.0, 0.74], [4.4, 0.46], [5.5, 0.12], [6.2, 0],
+        [-6.2, 0],
+        [-4.9, -0.55],
+        [-3.6, -1.35],
+        [-2.3, -1.72],
+        [-1.0, -1.24],
+        [0.35, -0.35],
+        [1.7, 0.42],
+        [3.0, 0.74],
+        [4.4, 0.46],
+        [5.5, 0.12],
+        [6.2, 0],
       ] as [number, number][]
     ).map(([x, y]) => new THREE.Vector3(x, y, 0))
     const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.4)
@@ -138,7 +147,7 @@ export function HeroScene({ children }: { children: React.ReactNode }) {
 
     const total = tube.index ? tube.index.count : position.count
     const start = performance.now()
-    const ease = (x: number) => 1 - Math.pow(1 - x, 3)
+    const ease = (x: number) => 1 - (1 - x) ** 3
     let frame = 0
 
     const onResize = () => {

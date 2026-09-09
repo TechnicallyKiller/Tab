@@ -15,10 +15,10 @@
  * then fails every call looks like a broken rail instead of a missing variable.
  */
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { clientFor, configFromEnv } from './config.ts'
+import { clientFor, configFromEnv, type McpConfig } from './config.ts'
 import { buildServer } from './server.ts'
 
-let config
+let config: McpConfig
 try {
   config = configFromEnv()
 } catch (error) {

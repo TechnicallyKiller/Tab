@@ -8,10 +8,10 @@
  * that a stranger can assert our invariants themselves, and that argument is
  * only true if this tool genuinely needs nothing from us.
  */
-import { entriesFromMessages, type Entry, type Replay } from '@tab/ledger'
-import { decodeUtf8, readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
+import { type Entry, entriesFromMessages, type Replay } from '@tab/ledger'
+import { decodeUtf8, type MirrorClient, readTopic, reassembleChunks } from '@tab/mirror'
+import { type MicroUsdc, usdc } from '@tab/money'
 import { decode, type WeightReason } from '@tab/protocol'
-import { usdc, type MicroUsdc } from '@tab/money'
 
 export async function replayTopic(mirror: MirrorClient, topicId: string): Promise<Replay> {
   const walk = await readTopic(mirror, { topicId })

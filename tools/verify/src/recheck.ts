@@ -6,10 +6,11 @@
  * not the same as knowing that a TAMPERED record fails — which is the only
  * property that makes a PASS worth anything.
  */
-import { canonicalHash } from '@tab/protocol'
-import { usdc, type MicroUsdc } from '@tab/money'
+
+import { type MicroUsdc, usdc } from '@tab/money'
 import { paramsForVersion, type Tier } from '@tab/params'
-import { computeCeiling, type CeilingInputs } from '@tab/scoring'
+import { canonicalHash } from '@tab/protocol'
+import { type CeilingInputs, computeCeiling } from '@tab/scoring'
 
 export interface RecheckTarget {
   /** In force, from the message. */

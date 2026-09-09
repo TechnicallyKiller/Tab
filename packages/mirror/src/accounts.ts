@@ -1,5 +1,5 @@
-import { micro, type MicroUsdc } from '@tab/money'
-import { MirrorError, type MirrorClient } from './client.ts'
+import { type MicroUsdc, micro } from '@tab/money'
+import { type MirrorClient, MirrorError } from './client.ts'
 import type {
   ConsensusTimestamp,
   EntityId,

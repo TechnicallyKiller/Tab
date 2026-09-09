@@ -13,11 +13,12 @@
  *
  *   pnpm seller
  */
-import express from 'express'
-import { paymentMiddleware } from '@x402/express'
+
 import { PrivateKey } from '@hiero-ledger/sdk'
-import { NETWORKS, createEarnServer, createFacilitator, tokenAsset } from '@tab/x402'
 import { configureGlobalHttp } from '@tab/mirror'
+import { createEarnServer, createFacilitator, NETWORKS, tokenAsset } from '@tab/x402'
+import { paymentMiddleware } from '@x402/express'
+import express from 'express'
 
 configureGlobalHttp({ connectTimeoutMs: 90_000 })
 

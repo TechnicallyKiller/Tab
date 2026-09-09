@@ -1,7 +1,7 @@
 'use client'
 
 import type { SettlementView } from '@tab/sdk'
-import { usePolled, type Polled } from './use-polled'
+import { type Polled, usePolled } from './use-polled'
 
 /**
  * Settled windows, from the settlements topic.

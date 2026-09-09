@@ -7,7 +7,7 @@
  * zero balance it reports and exits rather than sending an empty transfer.
  */
 import { clientFromEnv, parsePrivateKey, transferToken } from '@tab/hedera'
-import { MirrorClient, canReceiveToken, getUsdcBalance } from '@tab/mirror'
+import { canReceiveToken, getUsdcBalance, MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
 
 const REAL_USDC = '0.0.429274'

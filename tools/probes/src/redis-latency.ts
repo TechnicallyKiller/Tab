@@ -9,8 +9,9 @@
  *
  *   pnpm probe:latency
  */
-import { Redis } from 'ioredis'
+
 import { configureGlobalHttp } from '@tab/mirror'
+import { Redis } from 'ioredis'
 
 // Node's fetch dies after a 10s CONNECT timeout that no AbortController can
 // extend, and Mirror Node needs 5-15s from a high-latency link. Must run before

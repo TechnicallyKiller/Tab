@@ -50,7 +50,7 @@ export function tokenAsset(tokenId: string, symbol = 'USDC'): Asset {
 }
 
 /** Atomic units for x402 payment requirements. Never a float, never "$1". */
-export function atomicAmount(asset: Asset, atomic: bigint): string {
+export function atomicAmount(_asset: Asset, atomic: bigint): string {
   if (atomic <= 0n) throw new Error(`Price must be positive, received ${atomic}`)
   return atomic.toString()
 }

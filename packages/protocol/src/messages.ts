@@ -1,12 +1,5 @@
 import { z } from 'zod'
-import {
-  amount,
-  base,
-  basisPoints,
-  consensusTimestamp,
-  entityId,
-  shortHash,
-} from './common.ts'
+import { amount, base, basisPoints, consensusTimestamp, entityId, shortHash } from './common.ts'
 import { REFUSAL_CODES } from './refusal-codes.ts'
 import { WEIGHT_REASONS } from './weight-reasons.ts'
 
@@ -191,8 +184,6 @@ export const weightUpdate = base.extend({
   model: z.string().min(3).max(32).optional(),
 })
 
-
-
 /**
  * One account's observed graph facts — creation time and funder.
  *
@@ -323,7 +314,13 @@ export const ceilingUpdate = base.extend({
   /** SHA-256 of the canonical inputs. verify-ceiling recomputes and compares. */
   hash: shortHash,
   /** Why it moved, for the operator. Shrink is instant; growth waits. */
-  cause: z.enum(['clean_settlement', 'missed_settlement', 'graph_change', 'registration', 'freeze']),
+  cause: z.enum([
+    'clean_settlement',
+    'missed_settlement',
+    'graph_change',
+    'registration',
+    'freeze',
+  ]),
 })
 
 /* ── settlements topic ──────────────────────────────────────────────────── */

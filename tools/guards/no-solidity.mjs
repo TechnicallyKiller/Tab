@@ -8,14 +8,22 @@
  * for the EVM at all.
  */
 import { readdirSync } from 'node:fs'
-import { allDeps, readWorkspace, rel, report, ROOT, walk } from './lib.mjs'
+import { allDeps, ROOT, readWorkspace, rel, report, walk } from './lib.mjs'
 
 const BANNED_DEPS = [
-  'hardhat', 'solc', 'ethers', 'web3', 'viem', 'wagmi', 'truffle',
-  '@openzeppelin/contracts', '@openzeppelin/contracts-upgradeable',
+  'hardhat',
+  'solc',
+  'ethers',
+  'web3',
+  'viem',
+  'wagmi',
+  'truffle',
+  '@openzeppelin/contracts',
+  '@openzeppelin/contracts-upgradeable',
 ]
 const BANNED_DEP_PREFIXES = ['@nomicfoundation/', '@nomiclabs/']
-const BANNED_CONFIGS = /^(hardhat\.config\.|truffle-config\.|truffle\.js$|foundry\.toml$|remappings\.txt$)/
+const BANNED_CONFIGS =
+  /^(hardhat\.config\.|truffle-config\.|truffle\.js$|foundry\.toml$|remappings\.txt$)/
 
 const WHY_SOURCE =
   'The "No Solidity Allowed" track requires zero contracts. The agent holds nothing, so there is ' +
@@ -40,8 +48,7 @@ for (const name of readdirSync(ROOT)) {
 for (const { name, group, shortName, pkg } of readWorkspace()) {
   const deps = allDeps(pkg)
   for (const dep of Object.keys(deps)) {
-    const banned =
-      BANNED_DEPS.includes(dep) || BANNED_DEP_PREFIXES.some((p) => dep.startsWith(p))
+    const banned = BANNED_DEPS.includes(dep) || BANNED_DEP_PREFIXES.some((p) => dep.startsWith(p))
     if (banned) {
       failures.push({
         where: `${group}/${shortName}/package.json`,
@@ -55,6 +62,8 @@ for (const { name, group, shortName, pkg } of readWorkspace()) {
 const code = report('no-solidity', failures, 'zero .sol files, zero EVM tooling')
 if (code === 0) {
   // The track requires at least two native Hedera services; we claim four.
-  console.log('        native Hedera services in use: HCS · HTS · Schedule Service · Mirror Node (4)')
+  console.log(
+    '        native Hedera services in use: HCS · HTS · Schedule Service · Mirror Node (4)',
+  )
 }
 process.exit(code)

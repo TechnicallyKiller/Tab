@@ -1,4 +1,4 @@
-import { micro, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, micro } from '@tab/money'
 import { MODEL_VERSION } from '@tab/params'
 import type { Binding, CeilingInputs, CeilingResult } from './inputs.ts'
 

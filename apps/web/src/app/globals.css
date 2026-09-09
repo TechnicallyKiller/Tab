@@ -976,6 +976,14 @@ input[type='checkbox'] {
   padding-top: 14vh;
 }
 .palette {
+  /*
+   * Above the absolutely-positioned dismiss button, which fills the scrim and
+   * comes first in the DOM. Without this the palette is static, the button
+   * paints over it, and every click inside the search box hits the dismiss
+   * target instead — the palette would close the instant you tried to type.
+   */
+  position: relative;
+  z-index: 1;
   width: min(620px, 92vw);
   border: var(--bw) solid var(--ink);
   border-radius: 2px;
@@ -1032,4 +1040,22 @@ input[type='checkbox'] {
   .docs-toplinks {
     display: none;
   }
+}
+
+/*
+ * The dismiss target behind the palette.
+ *
+ * A real <button> filling the scrim rather than a click handler on the backdrop
+ * div: click-to-dismiss must be keyboard reachable and announced, and a button
+ * already is both. Visually it is nothing — the scrim itself paints the dim.
+ */
+.palette-scrim-dismiss {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
 }

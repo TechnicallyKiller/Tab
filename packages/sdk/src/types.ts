@@ -17,12 +17,12 @@ import type { RefusalCode, WeightReason } from '@tab/protocol'
 export type { RefusalCode, WeightReason } from '@tab/protocol'
 export {
   BLOCKING_REASONS,
-  REFUSAL_CODES,
-  REFUSAL_GUIDANCE,
-  WEIGHT_REASONS,
-  WEIGHT_REASON_DETAIL,
   isBlocking,
   isRetryable,
+  REFUSAL_CODES,
+  REFUSAL_GUIDANCE,
+  WEIGHT_REASON_DETAIL,
+  WEIGHT_REASONS,
 } from '@tab/protocol'
 
 /* ── spend ──────────────────────────────────────────────────────────────── */

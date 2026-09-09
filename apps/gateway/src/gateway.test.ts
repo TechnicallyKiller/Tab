@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { format, micro, toWire, usdc, type MicroUsdc } from '@tab/money'
-import { SCHEMA_VERSION, type TabMessage } from '@tab/protocol'
 import { registrationsFromMessages, type TopicMessage } from '@tab/ledger'
-import { encode } from '@tab/protocol'
-import { LedgerState } from './state.ts'
-import { loadEnv, type GatewayEnv } from './env.ts'
-import { nowConsensus } from './receipts.ts'
-import { spend, type SpendDeps } from './spend.ts'
+import { format, type MicroUsdc, micro, toWire, usdc } from '@tab/money'
+import { encode, SCHEMA_VERSION, type TabMessage } from '@tab/protocol'
 import { describeCeiling } from './ceilings.ts'
+import { type GatewayEnv, loadEnv } from './env.ts'
+import { nowConsensus } from './receipts.ts'
 import { buildServer } from './server.ts'
+import { type SpendDeps, spend } from './spend.ts'
+import { LedgerState } from './state.ts'
 
 /**
  * `apps/gateway` — the component that actually moves money.
@@ -97,12 +96,14 @@ function fakeClient(result: {
   }
 }
 
-function depsFor(over: {
-  client?: ReturnType<typeof fakeClient>['client']
-  receipts?: ReturnType<typeof fakeReceipts>['writer']
-  ceiling?: MicroUsdc
-  env?: Partial<GatewayEnv>
-} = {}) {
+function depsFor(
+  over: {
+    client?: ReturnType<typeof fakeClient>['client']
+    receipts?: ReturnType<typeof fakeReceipts>['writer']
+    ceiling?: MicroUsdc
+    env?: Partial<GatewayEnv>
+  } = {},
+) {
   const state = new LedgerState(over.ceiling ?? usdc('0.250000'))
   const receipts = over.receipts ?? fakeReceipts().writer
   const client = over.client ?? fakeClient({ amountPaid: 40_000n }).client
@@ -181,7 +182,10 @@ test('the HOLD is published BEFORE the seller is called, in that order', async (
 
   await spend(deps, { tab: TAB, url: URL_FOR(), max: usdc('0.040000') })
 
-  assert.deepEqual(receipts.written.map((m) => m.t), ['hold', 'debit'])
+  assert.deepEqual(
+    receipts.written.map((m) => m.t),
+    ['hold', 'debit'],
+  )
   const hold = receipts.written[0]!
   const debit = receipts.written[1]!
   assert.ok(hold.t === 'hold' && debit.t === 'debit')
@@ -218,7 +222,10 @@ test('an idempotency key becomes the hold id, so a retry cannot double-spend', a
     receipts: receipts.writer,
   })
   await spend(deps, {
-    tab: TAB, url: URL_FOR(), max: usdc('0.040000'), idempotencyKey: 'caller-key-123',
+    tab: TAB,
+    url: URL_FOR(),
+    max: usdc('0.040000'),
+    idempotencyKey: 'caller-key-123',
   })
   const hold = receipts.written[0]!
   assert.ok(hold.t === 'hold')
@@ -311,8 +318,13 @@ test('spending past the ceiling is refused, with the shortfall as evidence', asy
   const { deps, state } = depsFor({ ceiling: usdc('0.100000') })
   // Two spends of 0.05 fit; a third does not.
   state.push(TAB, {
-    kind: 'debit', at: nowConsensus(), window: 5_963_000, holdId: 'h1',
-    counterparty: SELLER, amount: micro(-100_000n), transactionId: 'tx1',
+    kind: 'debit',
+    at: nowConsensus(),
+    window: 5_963_000,
+    holdId: 'h1',
+    counterparty: SELLER,
+    amount: micro(-100_000n),
+    transactionId: 'tx1',
   })
 
   const result = await spend(deps, { tab: TAB, url: URL_FOR(), max: usdc('0.050000') })
@@ -332,8 +344,12 @@ test('a HOLD counts against the ceiling, so two racing spends cannot both pass',
    */
   const { deps, state } = depsFor({ ceiling: usdc('0.050000') })
   state.push(TAB, {
-    kind: 'hold', at: nowConsensus(), window: 5_963_000, holdId: 'h1',
-    counterparty: SELLER, amount: usdc('0.050000'),
+    kind: 'hold',
+    at: nowConsensus(),
+    window: 5_963_000,
+    holdId: 'h1',
+    counterparty: SELLER,
+    amount: usdc('0.050000'),
     expiresAt: `${Math.floor(Date.now() / 1000) + 60}.000000000`,
   })
   const result = await spend(deps, { tab: TAB, url: URL_FOR(), max: usdc('0.050000') })
@@ -436,10 +452,7 @@ test('a PLACEHOLDER value counts as missing, not as configured', () => {
    * than an empty string: the service starts, writes to a topic that does not
    * exist, and fails on the first receipt with an unrelated-looking error.
    */
-  assert.throws(
-    () => loadEnv({ ...FULL_ENV, TOPIC_RECEIPTS: '0.0.xxxxx' }),
-    /TOPIC_RECEIPTS/,
-  )
+  assert.throws(() => loadEnv({ ...FULL_ENV, TOPIC_RECEIPTS: '0.0.xxxxx' }), /TOPIC_RECEIPTS/)
 })
 
 test('every missing variable is named at ONCE, not one per restart', () => {
@@ -450,7 +463,12 @@ test('every missing variable is named at ONCE, not one per restart', () => {
     assert.fail('expected a throw')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    for (const name of ['USDC_TOKEN_ID', 'TOPIC_RECEIPTS', 'TOPIC_CEILINGS', 'FAUCET_ACCOUNT_KEY']) {
+    for (const name of [
+      'USDC_TOKEN_ID',
+      'TOPIC_RECEIPTS',
+      'TOPIC_CEILINGS',
+      'FAUCET_ACCOUNT_KEY',
+    ]) {
       assert.match(message, new RegExp(name))
     }
   }
@@ -516,9 +534,15 @@ test('describeCeiling FORMATS the amount rather than interpolating a bigint', ()
     model: 'tab-v3',
     hash: 'abcdef012345',
     inputs: {
-      rev: usdc('0.000000'), revAttested: usdc('0.000000'), revUnattested: usdc('0.000000'),
-      tier: 'Unrated', multBp: 0, rampBp: 2500,
-      cap: usdc('2.000000'), floor: usdc('0.250000'), defaulted: false,
+      rev: usdc('0.000000'),
+      revAttested: usdc('0.000000'),
+      revUnattested: usdc('0.000000'),
+      tier: 'Unrated',
+      multBp: 0,
+      rampBp: 2500,
+      cap: usdc('2.000000'),
+      floor: usdc('0.250000'),
+      defaulted: false,
     },
   })
   assert.match(line, /1\.0000/)
@@ -546,9 +570,15 @@ test('a HELD growth is named in the description, not silently equal', () => {
     model: 'tab-v3',
     hash: 'abcdef012345',
     inputs: {
-      rev: usdc('0.000000'), revAttested: usdc('0.000000'), revUnattested: usdc('0.000000'),
-      tier: 'C', multBp: 10_000, rampBp: 2500,
-      cap: usdc('2.000000'), floor: usdc('0.250000'), defaulted: false,
+      rev: usdc('0.000000'),
+      revAttested: usdc('0.000000'),
+      revUnattested: usdc('0.000000'),
+      tier: 'C',
+      multBp: 10_000,
+      rampBp: 2500,
+      cap: usdc('2.000000'),
+      floor: usdc('0.250000'),
+      defaulted: false,
     },
   })
   assert.match(line, /computed 0\.4000 HELD by the asymmetry rule/)
@@ -622,8 +652,13 @@ test('EVERY amount in a JSON response is six decimals, never a display string', 
    */
   const { deps, state } = depsFor({})
   state.push(TAB, {
-    kind: 'debit', at: nowConsensus(), window: 5_963_000, holdId: 'h1',
-    counterparty: SELLER, amount: micro(-1_234_567n), transactionId: 'tx1',
+    kind: 'debit',
+    at: nowConsensus(),
+    window: 5_963_000,
+    holdId: 'h1',
+    counterparty: SELLER,
+    amount: micro(-1_234_567n),
+    transactionId: 'tx1',
   })
   const app = buildServer(deps)
 
@@ -641,8 +676,12 @@ test('entries come back with amounts on the wire, and refusals keep `requested`'
   // Conflating them would make the Refusals view show refused intent as spend.
   const { deps, state } = depsFor({})
   state.push(TAB, {
-    kind: 'refusal', at: nowConsensus(), window: 5_963_000,
-    counterparty: SELLER, requested: usdc('0.500000'), rule: 'PER_CALL_CAP',
+    kind: 'refusal',
+    at: nowConsensus(),
+    window: 5_963_000,
+    counterparty: SELLER,
+    requested: usdc('0.500000'),
+    rule: 'PER_CALL_CAP',
   })
   const app = buildServer(deps)
   const rows = (await app.inject({ method: 'GET', url: `/v1/tabs/${TAB}/entries` })).json()
@@ -686,9 +725,15 @@ test('a published ceiling carries its arithmetic and what is ENFORCED right now'
     hash: 'abcdef012345',
     seq: 12,
     inputs: {
-      rev: usdc('1.000000'), revAttested: usdc('0.600000'), revUnattested: usdc('0.400000'),
-      tier: 'C' as const, multBp: 10_000, rampBp: 7000,
-      cap: usdc('2.000000'), floor: usdc('0.250000'), defaulted: false,
+      rev: usdc('1.000000'),
+      revAttested: usdc('0.600000'),
+      revUnattested: usdc('0.400000'),
+      tier: 'C' as const,
+      multBp: 10_000,
+      rampBp: 7000,
+      cap: usdc('2.000000'),
+      floor: usdc('0.250000'),
+      defaulted: false,
     },
   }
   const { deps } = depsFor({})
@@ -731,9 +776,15 @@ test('the counterparties route carries the two values COMMON_FUNDER compares', a
         [
           `${TAB}:${SELLER}`,
           {
-            tab: TAB, counterparty: SELLER, bp: 0, reasons: ['COMMON_FUNDER'] as const,
-            blocking: true, revenue: usdc('0.500000'), shareBp: 884,
-            window: 5_963_000, at: '1.0',
+            tab: TAB,
+            counterparty: SELLER,
+            bp: 0,
+            reasons: ['COMMON_FUNDER'] as const,
+            blocking: true,
+            revenue: usdc('0.500000'),
+            shareBp: 884,
+            window: 5_963_000,
+            at: '1.0',
           },
         ],
       ]),
@@ -766,9 +817,15 @@ test('an unknown provenance stays ABSENT rather than being defaulted', async () 
         [
           'k',
           {
-            tab: TAB, counterparty: SELLER, bp: 10_000, reasons: ['INDEPENDENT'] as const,
-            blocking: false, revenue: usdc('0.100000'), shareBp: 100,
-            window: 5_963_000, at: '1.0',
+            tab: TAB,
+            counterparty: SELLER,
+            bp: 10_000,
+            reasons: ['INDEPENDENT'] as const,
+            blocking: false,
+            revenue: usdc('0.100000'),
+            shareBp: 100,
+            window: 5_963_000,
+            at: '1.0',
           },
         ],
       ]),
@@ -796,8 +853,13 @@ test('the tab list states the registration RULE, on the response itself', async 
    */
   const { deps, state } = depsFor({})
   state.push(TAB, {
-    kind: 'debit', at: nowConsensus(), window: 5_963_000, holdId: 'h1',
-    counterparty: SELLER, amount: micro(-40_000n), transactionId: 'tx1',
+    kind: 'debit',
+    at: nowConsensus(),
+    window: 5_963_000,
+    holdId: 'h1',
+    counterparty: SELLER,
+    amount: micro(-40_000n),
+    transactionId: 'tx1',
   })
   const app = buildServer(deps)
   const body = (await app.inject({ method: 'GET', url: '/v1/tabs' })).json()
@@ -820,8 +882,13 @@ test('the tab list states the registration RULE, on the response itself', async 
 test('a tab that HOLDS a claim reports the root and the seq that established it', async () => {
   const { deps, state } = depsFor({})
   state.push(TAB, {
-    kind: 'debit', at: nowConsensus(), window: 5_963_000, holdId: 'h1',
-    counterparty: SELLER, amount: micro(-40_000n), transactionId: 'tx1',
+    kind: 'debit',
+    at: nowConsensus(),
+    window: 5_963_000,
+    holdId: 'h1',
+    counterparty: SELLER,
+    amount: micro(-40_000n),
+    transactionId: 'tx1',
   })
   const app = buildServer({
     ...deps,
@@ -831,8 +898,13 @@ test('a tab that HOLDS a claim reports the root and the seq that established it'
         [
           TAB,
           {
-            tab: TAB, root: '0.0.8812188', ceiling: usdc('0.250000'),
-            perCall: usdc('0.050000'), allowlist: [], at: '1.0', seq: 41,
+            tab: TAB,
+            root: '0.0.8812188',
+            ceiling: usdc('0.250000'),
+            perCall: usdc('0.050000'),
+            allowlist: [],
+            at: '1.0',
+            seq: 41,
           },
         ],
       ]),
@@ -857,9 +929,13 @@ test('settlements pass through absent gross legs rather than defaulting to zero'
           TAB,
           [
             {
-              kind: 'settlement' as const, at: '1.0', window: 5_963_000,
-              net: usdc('0.110000'), outcome: 'clean' as const,
-              rampFromBp: 2500, rampToBp: 4000,
+              kind: 'settlement' as const,
+              at: '1.0',
+              window: 5_963_000,
+              net: usdc('0.110000'),
+              outcome: 'clean' as const,
+              rampFromBp: 2500,
+              rampToBp: 4000,
             },
           ],
         ],
@@ -906,16 +982,28 @@ test('rootsClaimed counts ROOTS, not tabs — they are not the same number', () 
   const claims = [
     published(
       {
-        v: SCHEMA_VERSION, t: 'register', tab: TAB, w: 1,
-        root: '0.0.2', ceil: '0.250000', perCall: '0.050000', allowlist: [],
+        v: SCHEMA_VERSION,
+        t: 'register',
+        tab: TAB,
+        w: 1,
+        root: '0.0.2',
+        ceil: '0.250000',
+        perCall: '0.050000',
+        allowlist: [],
       } as TabMessage,
       1000,
       1,
     ),
     published(
       {
-        v: SCHEMA_VERSION, t: 'register', tab: TAB, w: 2,
-        root: '0.0.8812188', ceil: '0.250000', perCall: '0.050000', allowlist: [],
+        v: SCHEMA_VERSION,
+        t: 'register',
+        tab: TAB,
+        w: 2,
+        root: '0.0.8812188',
+        ceil: '0.250000',
+        perCall: '0.050000',
+        allowlist: [],
       } as TabMessage,
       2000,
       2,

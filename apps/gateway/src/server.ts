@@ -1,12 +1,12 @@
-import Fastify, { type FastifyInstance } from 'fastify'
-import { paymentMiddleware } from '@x402/fastify'
-import { format, usdc, toWire } from '@tab/money'
-import { REFUSAL_GUIDANCE, isRetryable } from '@tab/protocol'
 import type { PublishedCeiling } from '@tab/ledger'
-import { createEarnServer, type Asset, type TabFacilitator } from '@tab/x402'
-import { serveAndCredit, type AgentEndpoint } from './earn.ts'
+import { type MicroUsdc, toWire, usdc } from '@tab/money'
+import { isRetryable, REFUSAL_GUIDANCE } from '@tab/protocol'
+import { type Asset, createEarnServer, type TabFacilitator } from '@tab/x402'
+import { paymentMiddleware } from '@x402/fastify'
+import Fastify, { type FastifyInstance } from 'fastify'
+import { type AgentEndpoint, serveAndCredit } from './earn.ts'
 import { nowConsensus } from './receipts.ts'
-import { spend, type SpendDeps } from './spend.ts'
+import { type SpendDeps, spend } from './spend.ts'
 
 /**
  * The gateway's HTTP surface.
@@ -116,12 +116,20 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
        */
       const settled = (
         request as unknown as {
-          x402Context?: { beforeHandlerSettlement?: { result?: { success?: boolean; transaction?: string } } }
+          x402Context?: {
+            beforeHandlerSettlement?: { result?: { success?: boolean; transaction?: string } }
+          }
         }
       ).x402Context?.beforeHandlerSettlement?.result
 
       const result = await serveAndCredit(
-        { env: deps.env, state: deps.state, receipts: deps.receipts, window: deps.window, endpoint: earn.endpoint },
+        {
+          env: deps.env,
+          state: deps.state,
+          receipts: deps.receipts,
+          window: deps.window,
+          endpoint: earn.endpoint,
+        },
         {
           payer,
           path: '/serve',
@@ -150,7 +158,12 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
 
   /** The spend leg. The agent asks; the gateway decides, pays and records. */
   app.post('/v1/spend', async (request, reply) => {
-    const body = request.body as { tab?: string; url?: string; max?: string; idempotencyKey?: string }
+    const body = request.body as {
+      tab?: string
+      url?: string
+      max?: string
+      idempotencyKey?: string
+    }
 
     if (!body?.url || !body?.max || !body?.tab) {
       return reply.status(400).send({
@@ -159,7 +172,7 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
       })
     }
 
-    let max
+    let max: MicroUsdc
     try {
       max = usdc(body.max)
     } catch {

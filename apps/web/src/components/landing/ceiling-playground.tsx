@@ -1,19 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import { TIER_HARD_CAP, TIER_MULTIPLE_BP } from '@/lib/mock/landing'
 import {
+  type BasisPoints,
   bp,
   format,
   formatBpMultiple,
   formatBpPercent,
+  type MicroUsdc,
   micro,
   min,
   mulBp,
   usdc,
-  type BasisPoints,
-  type MicroUsdc,
 } from '@/lib/money'
-import { TIER_HARD_CAP, TIER_MULTIPLE_BP } from '@/lib/mock/landing'
 
 const STARTER_FLOOR = usdc('1.0000')
 
@@ -114,7 +114,9 @@ export function CeilingPlayground() {
         </div>
       </div>
       <div className="rule-t" data-flash={flash} style={{ padding: 20 }}>
-        <div className="t-label" style={{ marginBottom: 4 }}>Ceiling in force · USDC</div>
+        <div className="t-label" style={{ marginBottom: 4 }}>
+          Ceiling in force · USDC
+        </div>
         <div
           className="t-figure"
           style={{
@@ -134,7 +136,10 @@ export function CeilingPlayground() {
 
 function SliderLabel({ left, right }: { left: string; right: string }) {
   return (
-    <div className="t-label" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+    <div
+      className="t-label"
+      style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}
+    >
       <span>{left}</span>
       <span style={{ color: 'var(--ink)', fontSize: 12.5, letterSpacing: 0 }}>{right}</span>
     </div>

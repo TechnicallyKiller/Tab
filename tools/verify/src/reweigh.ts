@@ -20,7 +20,7 @@
  * much weaker check, since it would compare our reading of an
  * eventually-consistent index against theirs.
  */
-import { paramsForVersion, weightPolicyFor, type ParameterSet } from '@tab/params'
+import { type ParameterSet, paramsForVersion, weightPolicyFor } from '@tab/params'
 import { BLOCKING_REASONS, type WeightReason } from '@tab/protocol'
 
 /**

@@ -1,4 +1,4 @@
-import { usdc, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, usdc } from '@tab/money'
 import type { Tier } from '@tab/params'
 
 /**
@@ -28,7 +28,12 @@ export interface TierResult {
 }
 
 /** Revenue bands, per window. A tier needs revenue AND diversity AND history. */
-const BANDS: readonly { tier: Exclude<Tier, 'Unrated'>; min: string; counterparties: number; streak: number }[] = [
+const BANDS: readonly {
+  tier: Exclude<Tier, 'Unrated'>
+  min: string
+  counterparties: number
+  streak: number
+}[] = [
   { tier: 'A', min: '5.000000', counterparties: 5, streak: 10 },
   { tier: 'B', min: '1.000000', counterparties: 3, streak: 4 },
   { tier: 'C', min: '0.100000', counterparties: 1, streak: 1 },

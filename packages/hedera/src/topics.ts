@@ -1,10 +1,10 @@
 import {
-  PrivateKey,
+  type Client,
+  type PrivateKey,
   Status,
   TopicCreateTransaction,
   TopicId,
   TopicMessageSubmitTransaction,
-  type Client,
 } from '@hiero-ledger/sdk'
 
 /**
@@ -75,9 +75,7 @@ export async function submitMessage(
   const chunks = Math.max(1, Math.ceil(bytes.length / MAX_SINGLE_CHUNK_BYTES))
 
   let tx: TopicMessageSubmitTransaction | ReturnType<TopicMessageSubmitTransaction['freezeWith']> =
-    new TopicMessageSubmitTransaction()
-      .setTopicId(TopicId.fromString(topicId))
-      .setMessage(bytes)
+    new TopicMessageSubmitTransaction().setTopicId(TopicId.fromString(topicId)).setMessage(bytes)
 
   if (submitKey) {
     tx = (tx as TopicMessageSubmitTransaction).freezeWith(client)

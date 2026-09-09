@@ -48,8 +48,8 @@ export interface Receipt {
  * matched `HARD_BLOCK*`, so every real hard block showed as a mere caution.
  */
 export type { WeightReason } from '@tab/sdk'
-import type { WeightReason } from '@tab/sdk'
 
+import type { WeightReason } from '@tab/sdk'
 
 export interface Counterparty {
   id: string

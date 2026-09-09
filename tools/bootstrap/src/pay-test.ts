@@ -7,8 +7,8 @@
  * auto-association and would hide the failure mode.
  */
 import { associateToken, clientFromEnv, createAccount, transferToken } from '@tab/hedera'
-import { MirrorClient, canReceiveToken, getUsdcBalance, waitForAccount } from '@tab/mirror'
-import { format, micro, usdc, type MicroUsdc } from '@tab/money'
+import { canReceiveToken, getUsdcBalance, MirrorClient, waitForAccount } from '@tab/mirror'
+import { format, type MicroUsdc, micro, usdc } from '@tab/money'
 
 const TOKEN = process.env['USDC_TOKEN_ID']
 if (!TOKEN || TOKEN.includes('xxxxx')) {
@@ -51,7 +51,10 @@ if (before.canReceive) {
 let refused = false
 try {
   await transferToken(tab.client, {
-    tokenId: TOKEN, from: operator, to: seller, amount: PAYMENT,
+    tokenId: TOKEN,
+    from: operator,
+    to: seller,
+    amount: PAYMENT,
     idempotencyKey: 'probe3:before-association',
   })
 } catch (err) {
@@ -63,12 +66,17 @@ if (!refused) console.log('  transfer SUCCEEDED before association — auto-asso
 
 // ── associate, then pay ──────────────────────────────────────────────────────
 const assoc = await associateToken(tab.client, {
-  accountId: seller, tokenId: TOKEN, signWith: sellerKey,
+  accountId: seller,
+  tokenId: TOKEN,
+  signWith: sellerKey,
 })
 console.log(`  associated          ${assoc.alreadyAssociated ? 'already' : assoc.transactionId}`)
 
 const paid = await transferToken(tab.client, {
-  tokenId: TOKEN, from: operator, to: seller, amount: PAYMENT,
+  tokenId: TOKEN,
+  from: operator,
+  to: seller,
+  amount: PAYMENT,
   idempotencyKey: 'probe3:seller-payment',
 })
 console.log(`  paid                ${format(PAYMENT)} · ${paid.consensusStatus}`)

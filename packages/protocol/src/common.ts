@@ -18,7 +18,9 @@ import { z } from 'zod'
 export const SCHEMA_VERSION = 1
 
 /** "0.0.1234" */
-export const entityId = z.string().regex(/^\d+\.\d+\.\d+$/, 'expected a Hedera entity id like 0.0.1234')
+export const entityId = z
+  .string()
+  .regex(/^\d+\.\d+\.\d+$/, 'expected a Hedera entity id like 0.0.1234')
 
 /** "seconds.nanos" — the consensus ordering key. */
 export const consensusTimestamp = z.string().regex(/^\d+\.\d{1,9}$/, 'expected seconds.nanos')

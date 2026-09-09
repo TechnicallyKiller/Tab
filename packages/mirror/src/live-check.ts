@@ -8,10 +8,16 @@
  *   pnpm --filter @tab/mirror test:live
  */
 import { format } from '@tab/money'
+import {
+  accountAgeDays,
+  canReceiveToken,
+  getAccount,
+  getToken,
+  getUsdcBalance,
+} from './accounts.ts'
 import { MirrorClient } from './client.ts'
-import { accountAgeDays, canReceiveToken, getAccount, getToken, getUsdcBalance } from './accounts.ts'
-import { getTransactions, toTransferEdges } from './transfers.ts'
 import { readTopic, reassembleChunks } from './topics.ts'
+import { getTransactions, toTransferEdges } from './transfers.ts'
 import type { TransactionsPage } from './types.ts'
 
 const USDC = '0.0.429274'
@@ -51,8 +57,10 @@ await check('association check answers before we send', async () => {
   if (!yes.associated) throw new Error('treasury should be associated with its own token')
   // A brand-new account with no slots must come back as cannot-receive.
   const no = await canReceiveToken(client, '0.0.98', USDC)
-  return `treasury: associated=${yes.associated} canReceive=${yes.canReceive} · ` +
+  return (
+    `treasury: associated=${yes.associated} canReceive=${yes.canReceive} · ` +
     `0.0.98: associated=${no.associated} canReceive=${no.canReceive} slots=${no.autoAssociationSlots}`
+  )
 })
 
 await check('USDC balance reads as MicroUsdc', async () => {

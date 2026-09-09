@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { z } from 'zod'
 import { format, toWire, usdc } from '@tab/money'
 import { REFUSAL_GUIDANCE, WEIGHT_REASON_DETAIL } from '@tab/protocol'
 import type { Tab } from '@tab/sdk'
+import { z } from 'zod'
 import type { McpConfig } from './config.ts'
 
 /**
@@ -80,8 +80,13 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
         'commits — so a crash cannot leave the tab overdrawn. Returns paid, refused or failed. ' +
         'A REFUSED result is not an error: it names the rule that fired and what to do instead.',
       inputSchema: {
-        url: z.string().url().describe('The seller URL, including whatever the seller needs to be paid'),
-        max: AMOUNT.describe('The most this call may cost. The tab is debited what was actually settled, not this cap.'),
+        url: z
+          .string()
+          .url()
+          .describe('The seller URL, including whatever the seller needs to be paid'),
+        max: AMOUNT.describe(
+          'The most this call may cost. The tab is debited what was actually settled, not this cap.',
+        ),
         idempotencyKey: z
           .string()
           .min(8)
@@ -185,7 +190,12 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
         'Ask whether a spend of `max` would be allowed, WITHOUT taking a hold. Use this before ' +
         'planning a batch: a hold taken by a quote would be headroom the agent never uses.',
       inputSchema: { max: AMOUNT },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ max }) => {
       const q = await tab.quote({ tab: config.tab, max: usdc(max) })
@@ -195,7 +205,14 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
           `available    ${format(q.available)}`,
           `ceiling      ${format(q.ceiling)}`,
           `per-call cap ${format(q.perCallCap)}`,
-          ...(q.wouldRefuse ? ['', `would refuse: ${q.wouldRefuse}`, `${q.reason ?? ''}`, REFUSAL_GUIDANCE[q.wouldRefuse]] : []),
+          ...(q.wouldRefuse
+            ? [
+                '',
+                `would refuse: ${q.wouldRefuse}`,
+                `${q.reason ?? ''}`,
+                REFUSAL_GUIDANCE[q.wouldRefuse],
+              ]
+            : []),
         ]
           .filter(Boolean)
           .join('\n'),
@@ -212,7 +229,12 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
       description:
         'The tab’s current position: balance (negative means the agent owes), outstanding, ' +
         'holds, available headroom and the ceiling in force.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       const s = await tab.state(config.tab)
@@ -238,7 +260,12 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
       description:
         'The credit ceiling in force, what bound it, and the published inputs it was computed ' +
         'from. Use this to explain to a user WHY the tab can or cannot afford something.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       const c = await tab.ceiling(config.tab)
@@ -269,7 +296,9 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
           `  earned ramp       ${i.rampBp / 100}%`,
           `  hard cap          ${format(i.cap)}`,
           `  starter floor     ${format(i.floor)}`,
-          ...(i.defaulted ? ['  DEFAULTED         this tab has missed a settlement, so the ceiling is zero'] : []),
+          ...(i.defaulted
+            ? ['  DEFAULTED         this tab has missed a settlement, so the ceiling is zero']
+            : []),
           '',
           `model ${c.current.model} · HCS seq ${c.current.seq ?? '?'} · input hash ${c.current.hash}`,
           'Anyone can recompute this from the public topic: pnpm verify-ceiling.',
@@ -286,9 +315,20 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
         'The tab’s recent ledger entries from the HCS receipt topic — holds, debits, ' +
         'credits, refusals and settlements, newest first.',
       inputSchema: {
-        limit: z.number().int().min(1).max(50).default(10).describe('How many entries, newest first'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .default(10)
+          .describe('How many entries, newest first'),
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ limit }) => {
       const rows = await tab.receipts(config.tab)
@@ -320,7 +360,12 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
       description:
         'Published independence weights for the tab’s counterparties, with the reason each ' +
         'was discounted or blocked. This is why revenue does or does not raise the ceiling.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       const rows = await tab.counterparties(config.tab)
@@ -335,7 +380,9 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
               ...(w.funder && w.tabFunder
                 ? [
                     `  funded by ${w.funder} · tab funded by ${w.tabFunder}` +
-                      (w.funder === w.tabFunder ? '  ← SAME, which is what COMMON_FUNDER tests' : ''),
+                      (w.funder === w.tabFunder
+                        ? '  ← SAME, which is what COMMON_FUNDER tests'
+                        : ''),
                   ]
                 : []),
             ].join('\n'),
@@ -350,7 +397,12 @@ export function buildServer(tab: Tab, config: McpConfig): McpServer {
     {
       title: 'Is the rail up',
       description: 'Gateway reachability, network, token and current window.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       const h = await tab.health()

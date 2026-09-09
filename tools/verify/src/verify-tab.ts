@@ -13,12 +13,22 @@
  *
  * Exits non-zero on failure.
  */
-import { LOCAL_ONLY_INVARIANTS, checkFloatInvariant, checkPublicLedger, position } from '@tab/ledger'
-import { compareConsensus, configureGlobalHttp, MirrorClient, getBalanceSnapshot } from '@tab/mirror'
-import { add, format, micro, usdc, type MicroUsdc } from '@tab/money'
+import {
+  checkFloatInvariant,
+  checkPublicLedger,
+  LOCAL_ONLY_INVARIANTS,
+  position,
+} from '@tab/ledger'
+import {
+  compareConsensus,
+  configureGlobalHttp,
+  getBalanceSnapshot,
+  MirrorClient,
+} from '@tab/mirror'
+import { add, format, type MicroUsdc, micro, usdc } from '@tab/money'
 import { caps } from '@tab/params'
 import { mergeReplays, replayTopic } from './replay.ts'
-import { TAB_GUIDANCE, claim, field, heading, verdict } from './report.ts'
+import { claim, field, heading, TAB_GUIDANCE, verdict } from './report.ts'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
 
@@ -129,11 +139,19 @@ const asOf =
 console.log()
 console.log(field('hot float bal', format(hotSnapshot.balance), `as of ${hotSnapshot.asOf}`))
 if (treasurySnapshot) {
-  console.log(field('treasury bal', format(treasurySnapshot.balance), `as of ${treasurySnapshot.asOf}`))
+  console.log(
+    field('treasury bal', format(treasurySnapshot.balance), `as of ${treasurySnapshot.asOf}`),
+  )
 }
-console.log(field('replay bounded', `to ${asOf}`, 'the older snapshot — balances are not live reads'))
 console.log(
-  field('fee payer HBAR', `${(Number(hotSnapshot.tinybars) / 1e8).toFixed(4)} ℏ`, 'runway for fees'),
+  field('replay bounded', `to ${asOf}`, 'the older snapshot — balances are not live reads'),
+)
+console.log(
+  field(
+    'fee payer HBAR',
+    `${(Number(hotSnapshot.tinybars) / 1e8).toFixed(4)} ℏ`,
+    'runway for fees',
+  ),
 )
 
 /* ── the checks ─────────────────────────────────────────────────────────── */
@@ -221,7 +239,10 @@ for (const [tab, all] of byTab) {
 if (byTab.size === 0) {
   results.push({
     ok: true,
-    text: claim(true, 'no receipts on the topic — nothing to contradict, and nothing proven either'),
+    text: claim(
+      true,
+      'no receipts on the topic — nothing to contradict, and nothing proven either',
+    ),
   })
 }
 
@@ -301,7 +322,9 @@ if (floatTotal === undefined) {
     claim(
       ok,
       `treasury + hot float == float total + outstanding  (${format(held)} vs ${format(add(floatTotal, outstandingTotal))})`,
-      ok ? [`float total ${format(floatTotal)} · outstanding ${format(outstandingTotal)}`] : violations.map((v) => v.detail),
+      ok
+        ? [`float total ${format(floatTotal)} · outstanding ${format(outstandingTotal)}`]
+        : violations.map((v) => v.detail),
     ),
   )
   results.push({ ok, text: '' })

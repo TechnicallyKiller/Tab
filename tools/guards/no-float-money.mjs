@@ -14,7 +14,14 @@ import { join } from 'node:path'
 import { readWorkspace, rel, report, walk } from './lib.mjs'
 
 const MONEY_PACKAGES = new Set([
-  'money', 'ledger', 'scoring', 'fastpath', 'gateway', 'settlement', 'engine', 'web',
+  'money',
+  'ledger',
+  'scoring',
+  'fastpath',
+  'gateway',
+  'settlement',
+  'engine',
+  'web',
 ])
 
 const PATTERNS = [

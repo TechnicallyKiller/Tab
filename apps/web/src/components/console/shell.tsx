@@ -1,13 +1,13 @@
 'use client'
 
+import { MODEL_ID as MODEL_VERSION } from '@tab/params'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { useConsole } from './provider'
 import { mmss } from '@/lib/format'
-import { MODEL_ID as MODEL_VERSION } from '@tab/params'
 import { AGENT_ID, WINDOW_LABEL } from '@/lib/mock/tab'
+import { useConsole } from './provider'
 
 /**
  * Console shell. The rail order is information — most-glanced to least — and the
@@ -45,7 +45,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     <div className="console">
       <aside className="console-rail">
         <div style={{ padding: '14px 18px', borderBottom: '2px solid var(--rail-rule)' }}>
-          <div className="t-display" style={{ fontSize: 24 }}>Tab</div>
+          <div className="t-display" style={{ fontSize: 24 }}>
+            Tab
+          </div>
           <div className="t-label" style={{ color: 'var(--rail-fg-mute)', marginTop: 2 }}>
             operator console
           </div>
@@ -70,8 +72,12 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             <div>MODEL_VERSION</div>
             <div style={{ color: 'var(--rail-fg)' }}>{MODEL_VERSION}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 10 }}>
-              <Link href="/" style={{ color: 'var(--rail-fg-dim)', textDecoration: 'none' }}>← landing</Link>
-              <Link href="/docs" style={{ color: 'var(--rail-fg-dim)', textDecoration: 'none' }}>docs</Link>
+              <Link href="/" style={{ color: 'var(--rail-fg-dim)', textDecoration: 'none' }}>
+                ← landing
+              </Link>
+              <Link href="/docs" style={{ color: 'var(--rail-fg-dim)', textDecoration: 'none' }}>
+                docs
+              </Link>
             </div>
           </div>
         </nav>
@@ -81,7 +87,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <header className="console-top">
           <div className="agent-chip">
             <span className="t-label">agent</span>
-            <span className="t-mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{AGENT_ID}</span>
+            <span className="t-mono" style={{ fontSize: 12.5, fontWeight: 600 }}>
+              {AGENT_ID}
+            </span>
           </div>
           <div className="t-mono window-clock">
             <span className="t-label">window {WINDOW_LABEL} closes in</span>
@@ -139,9 +147,21 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </header>
 
         <main style={{ padding: 22, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-            <h1 className="t-display" style={{ fontSize: 32, margin: 0 }}>{title}</h1>
-            <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{subtitle}</span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 12,
+              marginBottom: 18,
+              flexWrap: 'wrap',
+            }}
+          >
+            <h1 className="t-display" style={{ fontSize: 32, margin: 0 }}>
+              {title}
+            </h1>
+            <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
+              {subtitle}
+            </span>
           </div>
           {children}
         </main>

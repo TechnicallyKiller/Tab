@@ -1,7 +1,7 @@
 'use client'
 
 import type { CounterpartyWeight } from '@tab/sdk'
-import { usePolled, type Polled } from './use-polled'
+import { type Polled, usePolled } from './use-polled'
 
 /**
  * Published independence weights.

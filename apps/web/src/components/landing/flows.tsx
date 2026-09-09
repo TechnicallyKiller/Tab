@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { FLOWS } from '@/lib/mock/landing'
 import { useReducedMotion } from '@/lib/hooks/use-reduced-motion'
+import { FLOWS } from '@/lib/mock/landing'
 import { EarnDiagram, SettleDiagram, SpendDiagram } from './diagrams'
 
 /**
@@ -38,7 +38,7 @@ export function Flows() {
       },
       { rootMargin: '-45% 0px -45% 0px' },
     )
-    els.forEach((el) => io.observe(el))
+    for (const el of els) io.observe(el)
     return () => io.disconnect()
   }, [reduced])
 
@@ -49,21 +49,32 @@ export function Flows() {
     return (
       <section id="flows" className="rule-b">
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: '80px 28px' }}>
-          <div className="t-label" style={{ marginBottom: 14 }}>The mechanism · three flows</div>
-          <h2 className="t-display" style={{ fontSize: 'clamp(32px,4.4vw,68px)', margin: '0 0 40px', maxWidth: '20ch' }}>
+          <div className="t-label" style={{ marginBottom: 14 }}>
+            The mechanism · three flows
+          </div>
+          <h2
+            className="t-display"
+            style={{ fontSize: 'clamp(32px,4.4vw,68px)', margin: '0 0 40px', maxWidth: '20ch' }}
+          >
             A gateway on both legs of the agent&rsquo;s economic life.
           </h2>
           <div style={{ display: 'grid', gap: 28 }}>
             {FLOWS.map((f, i) => (
               <div key={f.kicker} className="card" style={{ padding: 20 }}>
-                <div className="t-label" style={{ marginBottom: 12 }}>{f.label}</div>
+                <div className="t-label" style={{ marginBottom: 12 }}>
+                  {f.label}
+                </div>
                 <div style={{ height: 300 }}>
                   {i === 0 ? <SpendDiagram dotX={310} balance="−0.4821" /> : null}
                   {i === 1 ? <EarnDiagram dotX={310} balance="+0.0250" /> : null}
                   {i === 2 ? <SettleDiagram collapsed /> : null}
                 </div>
-                <h3 className="t-display" style={{ fontSize: 28, margin: '18px 0 10px' }}>{f.title}</h3>
-                <p style={{ fontSize: 17, color: 'var(--ink-2)', maxWidth: '52ch', margin: 0 }}>{f.body}</p>
+                <h3 className="t-display" style={{ fontSize: 28, margin: '18px 0 10px' }}>
+                  {f.title}
+                </h3>
+                <p style={{ fontSize: 17, color: 'var(--ink-2)', maxWidth: '52ch', margin: 0 }}>
+                  {f.body}
+                </p>
               </div>
             ))}
           </div>
@@ -75,8 +86,13 @@ export function Flows() {
   return (
     <section id="flows" className="rule-b" style={{ position: 'relative' }}>
       <div style={{ maxWidth: 1240, margin: '0 auto', padding: '80px 28px 0' }}>
-        <div className="t-label" style={{ marginBottom: 14 }}>The mechanism · three flows</div>
-        <h2 className="t-display" style={{ fontSize: 'clamp(32px,4.4vw,68px)', margin: 0, maxWidth: '20ch' }}>
+        <div className="t-label" style={{ marginBottom: 14 }}>
+          The mechanism · three flows
+        </div>
+        <h2
+          className="t-display"
+          style={{ fontSize: 'clamp(32px,4.4vw,68px)', margin: 0, maxWidth: '20ch' }}
+        >
           A gateway on both legs of the agent&rsquo;s economic life.
         </h2>
       </div>
@@ -122,11 +138,24 @@ export function Flows() {
                 />
               ))}
             </div>
-            <div className="t-label" style={{ color: 'var(--pen)', marginBottom: 10 }}>{flow.kicker}</div>
-            <h3 className="t-display" style={{ fontSize: 'clamp(28px,3.2vw,44px)', margin: '0 0 18px' }}>
+            <div className="t-label" style={{ color: 'var(--pen)', marginBottom: 10 }}>
+              {flow.kicker}
+            </div>
+            <h3
+              className="t-display"
+              style={{ fontSize: 'clamp(28px,3.2vw,44px)', margin: '0 0 18px' }}
+            >
               {flow.title}
             </h3>
-            <p style={{ fontSize: 19, lineHeight: 1.6, color: 'var(--ink-2)', maxWidth: '46ch', margin: '0 0 20px' }}>
+            <p
+              style={{
+                fontSize: 19,
+                lineHeight: 1.6,
+                color: 'var(--ink-2)',
+                maxWidth: '46ch',
+                margin: '0 0 20px',
+              }}
+            >
               {flow.body}
             </p>
             <div
@@ -146,7 +175,14 @@ export function Flows() {
       </div>
 
       {[0, 1, 2].map((i) => (
-        <div key={i} ref={(el) => { spacers.current[i] = el }} style={{ height: '80vh' }} aria-hidden="true" />
+        <div
+          key={i}
+          ref={(el) => {
+            spacers.current[i] = el
+          }}
+          style={{ height: '80vh' }}
+          aria-hidden="true"
+        />
       ))}
     </section>
   )

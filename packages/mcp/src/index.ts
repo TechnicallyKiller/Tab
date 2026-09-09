@@ -11,5 +11,6 @@
  * The binary is `src/stdio.ts`. This module exists so a host can embed the
  * server on its own transport.
  */
-export { buildServer } from './server.ts'
+
 export { clientFor, configFromEnv, type McpConfig } from './config.ts'
+export { buildServer } from './server.ts'

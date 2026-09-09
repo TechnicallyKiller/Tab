@@ -1,19 +1,26 @@
 'use client'
 
-import Link from 'next/link'
 import { caps, params, windowOf } from '@tab/params'
+import Link from 'next/link'
 import { CapacityMeter } from '@/components/console/capacity-meter'
-import { useConsole } from '@/components/console/provider'
+import { useConsole, useIsLive } from '@/components/console/provider'
 import { ReceiptTable } from '@/components/console/receipt-table'
 import { Card, CardHead, Chip, Figure } from '@/components/ui'
-import { atLeastZero, format, isNegative, micro, pctOf, sub } from '@/lib/money'
 import { useCeiling } from '@/lib/hooks/use-ceiling'
-import { useIsLive } from '@/components/console/provider'
+import { atLeastZero, format, isNegative, micro, pctOf, sub } from '@/lib/money'
 
 export default function TabView() {
   const {
-    rows, balance, outstanding, holds, ceiling, perCallCap,
-    flashKey, stale, streaming, toggleStream,
+    rows,
+    balance,
+    outstanding,
+    holds,
+    ceiling,
+    perCallCap,
+    flashKey,
+    stale,
+    streaming,
+    toggleStream,
   } = useConsole()
   /*
    * The ceiling comes from the console, which polls the gateway — it used to be
@@ -66,7 +73,9 @@ export default function TabView() {
       <div className="tab-grid">
         <Card>
           <div data-flash={flashKey} style={{ padding: 22 }}>
-            <div className="t-label" style={{ marginBottom: 6 }}>Running balance · USDC</div>
+            <div className="t-label" style={{ marginBottom: 6 }}>
+              Running balance · USDC
+            </div>
             <div>
               <Figure
                 value={format(balance)}
@@ -75,13 +84,16 @@ export default function TabView() {
                 underline={stale}
               />
             </div>
-            <div className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}>
+            <div
+              className="t-mono"
+              style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}
+            >
               {/*
-                * No invented age. This read `snapshot age 41s · max 15s`, two
-                * numbers nothing measured — `stale` is a manual demo toggle, not
-                * a measurement, so it can say the figures are stale but not how
-                * stale.
-                */}
+               * No invented age. This read `snapshot age 41s · max 15s`, two
+               * numbers nothing measured — `stale` is a manual demo toggle, not
+               * a measurement, so it can say the figures are stale but not how
+               * stale.
+               */}
               {stale
                 ? `stream stopped · these figures are the last read, max age ${params.window.holdTtlSeconds}s`
                 : 'USDC · 6 dp, shown to 4 · truncated, not rounded'}
@@ -93,7 +105,12 @@ export default function TabView() {
         </Card>
 
         <div className="tile-grid">
-          <Tile label="available" value={format(available)} tone="credit" pct={pctOf(available, ceiling)} />
+          <Tile
+            label="available"
+            value={format(available)}
+            tone="credit"
+            pct={pctOf(available, ceiling)}
+          />
           <Tile label="per-call cap" value={format(perCallCap)} pct={0} />
           <Tile
             label="window spend"
@@ -124,15 +141,15 @@ export default function TabView() {
       </Card>
 
       {/*
-        * The empty state — shown only when the tab genuinely has no entries.
-        *
-        * It used to render ALWAYS, under the heading "agent registered 4 seconds
-        * ago", with a green STARTER TAB ISSUED stamp and a ceiling of 1.0000.
-        * Three problems: it appeared beside a live balance with dozens of
-        * receipts, nothing is "issued" because no registration flow exists, and
-        * 1.0000 was v1's floor — v2 opens at 0.250000, which is the whole point
-        * of v2.
-        */}
+       * The empty state — shown only when the tab genuinely has no entries.
+       *
+       * It used to render ALWAYS, under the heading "agent registered 4 seconds
+       * ago", with a green STARTER TAB ISSUED stamp and a ceiling of 1.0000.
+       * Three problems: it appeared beside a live balance with dozens of
+       * receipts, nothing is "issued" because no registration flow exists, and
+       * 1.0000 was v1's floor — v2 opens at 0.250000, which is the whole point
+       * of v2.
+       */}
       {empty ? (
         <Card style={{ padding: '20px 22px', maxWidth: 620 }}>
           <div className="t-label" style={{ marginBottom: 12 }}>
@@ -152,11 +169,19 @@ export default function TabView() {
                 <tr key={k}>
                   <th
                     scope="row"
-                    style={{ fontWeight: 400, color: 'var(--ink-2)', letterSpacing: 0, textTransform: 'none', fontSize: 12.5 }}
+                    style={{
+                      fontWeight: 400,
+                      color: 'var(--ink-2)',
+                      letterSpacing: 0,
+                      textTransform: 'none',
+                      fontSize: 12.5,
+                    }}
                   >
                     {k}
                   </th>
-                  <td className="n" style={{ fontWeight: 600 }}>{v}</td>
+                  <td className="n" style={{ fontWeight: 600 }}>
+                    {v}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -186,7 +211,10 @@ function Tile({
   return (
     <div className="tile">
       <div className="t-label">{label}</div>
-      <div className="t-figure" style={{ fontSize: 24, color: tone === 'credit' ? 'var(--credit)' : 'var(--ink)' }}>
+      <div
+        className="t-figure"
+        style={{ fontSize: 24, color: tone === 'credit' ? 'var(--credit)' : 'var(--ink)' }}
+      >
         {value}
       </div>
       <div className="tile-progress" style={{ width: `${pct}%` }} />

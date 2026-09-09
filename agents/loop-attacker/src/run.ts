@@ -32,9 +32,9 @@
  * sleep. A `sleep(10)` works in rehearsal and fails on stage exactly once.
  */
 import { clientFromEnv, createAccount, transferToken } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp, getUsdcBalance, waitForAccount } from '@tab/mirror'
+import { configureGlobalHttp, getUsdcBalance, MirrorClient, waitForAccount } from '@tab/mirror'
 import { format, usdc } from '@tab/money'
-import { NETWORKS, createSpendClient, tokenAsset } from '@tab/x402'
+import { createSpendClient, NETWORKS, tokenAsset } from '@tab/x402'
 
 configureGlobalHttp({ connectTimeoutMs: 90_000, headersTimeoutMs: 150_000, bodyTimeoutMs: 150_000 })
 
@@ -78,8 +78,12 @@ async function spend(path: string, payTo: string): Promise<SpendResponse> {
 const attacker = clientFromEnv()
 const mirror = new MirrorClient({ network: attacker.network, timeoutMs: 45_000, maxRetries: 4 })
 
-console.log(`\nloop-attacker · the attack that breaks our own design — Hedera ${attacker.network}\n`)
-console.log(`  attacker        ${attacker.operatorId.toString()}   (a second operator, with a real wallet)`)
+console.log(
+  `\nloop-attacker · the attack that breaks our own design — Hedera ${attacker.network}\n`,
+)
+console.log(
+  `  attacker        ${attacker.operatorId.toString()}   (a second operator, with a real wallet)`,
+)
 console.log(`  target tab      ${tab}`)
 console.log(`  gateway         ${GATEWAY}`)
 
@@ -117,7 +121,9 @@ const moved = await transferToken(attacker.client, {
   idempotencyKey: `loop-attacker:fund:${shill.accountId}`,
 })
 console.log(`  funded          ${format(funding)} · ${moved.consensusStatus}`)
-console.log(`                  edge now public: ${attacker.operatorId.toString()} ──funds──▶ ${shill.accountId}`)
+console.log(
+  `                  edge now public: ${attacker.operatorId.toString()} ──funds──▶ ${shill.accountId}`,
+)
 
 process.stdout.write('  confirming      ')
 for (let i = 0; i < 12; i++) {
@@ -176,7 +182,9 @@ console.log('  ── 3. spend against it — the first calls clear ──\n')
 
 const firstSpend = await spend('/rank', honestSeller)
 if (firstSpend.paid) {
-  console.log(`  CLEARED         ${firstSpend.paid.amount} to ${firstSpend.paid.seller} · receipt ${firstSpend.paid.receiptSeq}`)
+  console.log(
+    `  CLEARED         ${firstSpend.paid.amount} to ${firstSpend.paid.seller} · receipt ${firstSpend.paid.receiptSeq}`,
+  )
   console.log('                  nothing is visibly wrong yet, and that is the point\n')
 } else {
   console.log(`  REFUSED already [${firstSpend.refused?.rule}] ${firstSpend.refused?.reason}\n`)
@@ -185,7 +193,7 @@ if (firstSpend.paid) {
 /* ── 4. wait for the engine to notice ───────────────────────────────────── */
 
 console.log('  ── 4. wait for the graph to find the edge ──\n')
-console.log('  Waiting on the gateway\'s OWN published ceiling to change — not on a')
+console.log("  Waiting on the gateway's OWN published ceiling to change — not on a")
 console.log('  fixed sleep. A sleep works in rehearsal and fails on stage once.\n')
 
 const startCeiling = String(inflated['ceiling'])

@@ -1,4 +1,4 @@
-import { parameterSet, type ParameterSet } from '../schema.ts'
+import { type ParameterSet, parameterSet } from '../schema.ts'
 
 /**
  * v2 — the set in force. FROZEN once a ceiling is published under it.

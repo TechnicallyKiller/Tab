@@ -1,5 +1,5 @@
-import { tabMessage, type TabMessage } from './messages.ts'
 import { canonicalize } from './canonical.ts'
+import { type TabMessage, tabMessage } from './messages.ts'
 
 /**
  * Encoding to and from an HCS topic.

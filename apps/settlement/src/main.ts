@@ -15,9 +15,9 @@
  * memory would be a second source of truth to disagree with it.
  */
 import { clientFromEnv, submitMessage } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp, getUsdcBalance } from '@tab/mirror'
+import { checkWindowSettledOnce, type Entry, rampAfter } from '@tab/ledger'
+import { configureGlobalHttp, getUsdcBalance, MirrorClient } from '@tab/mirror'
 import { format, micro, toWire, usdc } from '@tab/money'
-import { checkWindowSettledOnce, rampAfter, type Entry } from '@tab/ledger'
 import { describeParams, params, windowOf } from '@tab/params'
 import { encode, settlement as settlementMessage } from '@tab/protocol'
 import { replayEntries, unsettledWindows } from './entries.ts'
@@ -272,7 +272,9 @@ console.log(`  settlements     ${settlementTopic}`)
 console.log(`  tier            ${tier}  (until @tab/scoring exists — the worst rate, not the best)`)
 console.log(`  mode            ${once ? 'single pass' : 'loop'}${dryRun ? ' · DRY RUN' : ''}`)
 if (demoMode && windowSeconds !== params.window.seconds) {
-  console.log(`  window          ${windowSeconds}s  (DEMO_MODE override of params' ${params.window.seconds}s)`)
+  console.log(
+    `  window          ${windowSeconds}s  (DEMO_MODE override of params' ${params.window.seconds}s)`,
+  )
 }
 console.log()
 for (const line of describeParams()) console.log(`  ${line}`)

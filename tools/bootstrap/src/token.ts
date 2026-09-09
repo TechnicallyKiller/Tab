@@ -10,7 +10,7 @@
  *   pnpm token:mint       mint the stand-in if USDC is absent
  */
 import { associateToken, clientFromEnv, mintStandInToken, transferToken } from '@tab/hedera'
-import { MirrorClient, canReceiveToken, getToken, getUsdcBalance } from '@tab/mirror'
+import { canReceiveToken, getToken, getUsdcBalance, MirrorClient } from '@tab/mirror'
 import { format, usdc } from '@tab/money'
 
 const REAL_USDC = '0.0.429274'

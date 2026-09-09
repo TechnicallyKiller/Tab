@@ -1,13 +1,13 @@
 'use client'
 
-import Link from 'next/link'
 import { caps, params } from '@tab/params'
 import type { TabSummary } from '@tab/sdk'
+import Link from 'next/link'
 import { Card, CardHead, Chip } from '@/components/ui'
-import { format, formatBpPercent, bp } from '@/lib/money'
 import { seq as fmtSeq } from '@/lib/format'
-import { TAB_ID } from '@/lib/live/client'
 import { useTabs } from '@/lib/hooks/use-tabs'
+import { TAB_ID } from '@/lib/live/client'
+import { bp, format, formatBpPercent } from '@/lib/money'
 
 /**
  * The tabs this gateway knows about — deliberately NOT called a registry.
@@ -46,15 +46,15 @@ export default function AgentsView() {
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       {/*
-        * The rule, stated first — and it is now ENFORCED.
-        *
-        * This card used to say NO REGISTRATION FLOW, because nothing wrote a
-        * `register` message and one Starter Tab per funding root was a README
-        * claim rather than a rule. The engine now resolves each tab's funding
-        * root from the published facts and claims it, first claim winning
-        * permanently. The card stays because a list of agents still LOOKS like
-        * a registry, and what the rule actually does is worth saying plainly.
-        */}
+       * The rule, stated first — and it is now ENFORCED.
+       *
+       * This card used to say NO REGISTRATION FLOW, because nothing wrote a
+       * `register` message and one Starter Tab per funding root was a README
+       * claim rather than a rule. The engine now resolves each tab's funding
+       * root from the published facts and claims it, first claim winning
+       * permanently. The card stays because a list of agents still LOOKS like
+       * a registry, and what the rule actually does is worth saying plainly.
+       */}
       <Card
         style={{
           borderColor: value.registrationEnforced ? 'var(--credit)' : 'var(--caution)',
@@ -65,7 +65,9 @@ export default function AgentsView() {
       >
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <Chip tone={value.registrationEnforced ? 'clean' : 'caution'}>
-            {value.registrationEnforced ? 'ONE STARTER TAB PER FUNDING ROOT' : 'NO REGISTRATION FLOW'}
+            {value.registrationEnforced
+              ? 'ONE STARTER TAB PER FUNDING ROOT'
+              : 'NO REGISTRATION FLOW'}
           </Chip>
           <span className="t-label">
             {value.registrationEnforced
@@ -73,7 +75,9 @@ export default function AgentsView() {
               : 'the rule is not enforced by this gateway'}
           </span>
         </div>
-        <p style={{ margin: 0, maxWidth: 680, fontSize: 13, lineHeight: 1.7, color: 'var(--ink-2)' }}>
+        <p
+          style={{ margin: 0, maxWidth: 680, fontSize: 13, lineHeight: 1.7, color: 'var(--ink-2)' }}
+        >
           {value.registrationEnforced ? (
             <>
               A tab&rsquo;s <strong>funding root</strong> is the furthest non-system account that
@@ -96,13 +100,22 @@ export default function AgentsView() {
       <Card style={{ overflow: 'hidden' }}>
         <CardHead>
           <span>Tabs seen on the receipt topic</span>
-          <span style={{ marginLeft: 'auto', color: 'var(--ink-3)', textTransform: 'none', letterSpacing: 0 }}>
+          <span
+            style={{
+              marginLeft: 'auto',
+              color: 'var(--ink-3)',
+              textTransform: 'none',
+              letterSpacing: 0,
+            }}
+          >
             {live ? (
-              loading
-                ? 'reading…'
-                : error
-                  ? `gateway unreachable — showing the last ${rows.length} known`
-                  : `${rows.length} tab(s) · window ${fmtSeq(value.window)}`
+              loading ? (
+                'reading…'
+              ) : error ? (
+                `gateway unreachable — showing the last ${rows.length} known`
+              ) : (
+                `${rows.length} tab(s) · window ${fmtSeq(value.window)}`
+              )
             ) : (
               <strong style={{ color: 'var(--caution)' }}>
                 NOT CONFIGURED — set NEXT_PUBLIC_TAB_ACCOUNT_ID
@@ -115,14 +128,24 @@ export default function AgentsView() {
             <thead>
               <tr>
                 <th scope="col">Tab</th>
-                <th scope="col" className="n">Balance</th>
-                <th scope="col" className="n">Holds</th>
-                <th scope="col" className="n">Available</th>
+                <th scope="col" className="n">
+                  Balance
+                </th>
+                <th scope="col" className="n">
+                  Holds
+                </th>
+                <th scope="col" className="n">
+                  Available
+                </th>
                 <th scope="col">Tier</th>
-                <th scope="col" className="n">Ceiling enforced</th>
+                <th scope="col" className="n">
+                  Ceiling enforced
+                </th>
                 <th scope="col">Bound by</th>
                 <th scope="col">Starter claim</th>
-                <th scope="col" className="n">Entries</th>
+                <th scope="col" className="n">
+                  Entries
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -161,20 +184,28 @@ export default function AgentsView() {
                       </span>
                     )}
                   </td>
-                  <td className="n" style={{ color: t.balance < 0n ? 'var(--debit)' : 'var(--credit)' }}>
+                  <td
+                    className="n"
+                    style={{ color: t.balance < 0n ? 'var(--debit)' : 'var(--credit)' }}
+                  >
                     {format(t.balance, { sign: 'always' })}
                   </td>
-                  <td className="n" style={{ color: 'var(--ink-2)' }}>{format(t.holds)}</td>
-                  <td className="n" style={{ fontWeight: 600 }}>{format(t.available)}</td>
-                  <td style={{ color: tierTone(t.tier) }}>
-                    {t.tier ?? 'not published'}
+                  <td className="n" style={{ color: 'var(--ink-2)' }}>
+                    {format(t.holds)}
                   </td>
-                  <td className="n" style={{ fontWeight: 600 }}>{format(t.ceiling)}</td>
+                  <td className="n" style={{ fontWeight: 600 }}>
+                    {format(t.available)}
+                  </td>
+                  <td style={{ color: tierTone(t.tier) }}>{t.tier ?? 'not published'}</td>
+                  <td className="n" style={{ fontWeight: 600 }}>
+                    {format(t.ceiling)}
+                  </td>
                   <td style={{ color: 'var(--ink-2)' }}>
                     {t.binding ?? '—'}
                     {t.publishedCeiling !== undefined && t.publishedCeiling !== t.ceiling ? (
                       <span style={{ color: 'var(--caution)' }}>
-                        {' '}· published {format(t.publishedCeiling)}, not yet enforced
+                        {' '}
+                        · published {format(t.publishedCeiling)}, not yet enforced
                       </span>
                     ) : null}
                   </td>
@@ -183,7 +214,10 @@ export default function AgentsView() {
                       <>
                         root {t.registeredRoot}
                         {t.registrationSeq !== undefined ? (
-                          <span style={{ color: 'var(--ink-3)' }}> · seq {fmtSeq(t.registrationSeq)}</span>
+                          <span style={{ color: 'var(--ink-3)' }}>
+                            {' '}
+                            · seq {fmtSeq(t.registrationSeq)}
+                          </span>
                         ) : null}
                       </>
                     ) : (
@@ -195,7 +229,9 @@ export default function AgentsView() {
                       <span style={{ color: 'var(--ink-3)' }}>none recorded</span>
                     )}
                   </td>
-                  <td className="n" style={{ color: 'var(--ink-3)' }}>{t.entries}</td>
+                  <td className="n" style={{ color: 'var(--ink-3)' }}>
+                    {t.entries}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -214,10 +250,10 @@ export default function AgentsView() {
             <strong>none recorded</strong> under Starter claim means the engine has not registered
             that tab yet — <em>not</em> that it was denied. The gateway cannot tell those apart:
             resolving a funding root needs the graph, which it may not import.{' '}
-            <strong>not published</strong> is likewise not the same as <strong>Unrated</strong>. A tab the
-            engine has never run for has no tier; <code>Unrated</code> is the tier that carries a ×0
-            multiple and therefore no credit. Guessing one from the balance would put a rating on
-            screen that no topic carries.
+            <strong>not published</strong> is likewise not the same as <strong>Unrated</strong>. A
+            tab the engine has never run for has no tier; <code>Unrated</code> is the tier that
+            carries a ×0 multiple and therefore no credit. Guessing one from the balance would put a
+            rating on screen that no topic carries.
           </p>
         ) : null}
       </Card>
@@ -239,11 +275,20 @@ export default function AgentsView() {
               <tr key={k}>
                 <th
                   scope="row"
-                  style={{ textAlign: 'left', fontWeight: 400, color: 'var(--ink-2)', letterSpacing: 0, textTransform: 'none', fontSize: 12.5 }}
+                  style={{
+                    textAlign: 'left',
+                    fontWeight: 400,
+                    color: 'var(--ink-2)',
+                    letterSpacing: 0,
+                    textTransform: 'none',
+                    fontSize: 12.5,
+                  }}
                 >
                   {k}
                 </th>
-                <td className="n" style={{ fontWeight: 600 }}>{v}</td>
+                <td className="n" style={{ fontWeight: 600 }}>
+                  {v}
+                </td>
               </tr>
             ))}
           </tbody>

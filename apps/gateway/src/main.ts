@@ -5,14 +5,14 @@
  */
 import { PrivateKey } from '@hiero-ledger/sdk'
 import { clientFromEnv } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp } from '@tab/mirror'
+import { configureGlobalHttp, MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
-import { NETWORKS, createFacilitator, createSpendClient, tokenAsset } from '@tab/x402'
+import { windowOf } from '@tab/params'
+import { createFacilitator, createSpendClient, NETWORKS, tokenAsset } from '@tab/x402'
+import { describeCeiling, replayCeilings } from './ceilings.ts'
 import { loadEnv } from './env.ts'
 import { ReceiptWriter } from './receipts.ts'
 import { buildServer } from './server.ts'
-import { windowOf } from '@tab/params'
-import { describeCeiling, replayCeilings } from './ceilings.ts'
 import { replaySettlements, type SettlementEntry } from './settlements.ts'
 import { LedgerState } from './state.ts'
 
@@ -37,16 +37,16 @@ console.log(`\nTab gateway · Hedera ${env.network}\n`)
 console.log(`  operator        ${env.operatorId}   (hot float)`)
 console.log(`  token           ${env.tokenId}`)
 console.log(`  receipt topic   ${env.receiptTopic}`)
-console.log(`  ceiling         ${format(env.starterCeiling)} · per-call cap ${format(env.perCallCap)}`)
+console.log(
+  `  ceiling         ${format(env.starterCeiling)} · per-call cap ${format(env.perCallCap)}`,
+)
 
 // HCS is the source of truth. The in-memory projection is rebuilt from it, so a
 // restart lands on the same position rather than an empty ledger.
 process.stdout.write('  replaying HCS   ')
 const state = new LedgerState(env.starterCeiling)
 const rebuilt = await state.rebuild(mirror, env.receiptTopic)
-console.log(
-  `${rebuilt.replayed} entries · ${rebuilt.skipped} skipped · ${rebuilt.tabs} tab(s)`,
-)
+console.log(`${rebuilt.replayed} entries · ${rebuilt.skipped} skipped · ${rebuilt.tabs} tab(s)`)
 for (const t of state.tabs()) {
   console.log(`    ${t}  ${state.describe(t, `${Math.floor(Date.now() / 1000)}.000000000`)}`)
 }
@@ -69,7 +69,10 @@ for (const t of state.tabs()) {
  * ceiling with no visible reason. Held in memory and refreshed on the same poll
  * as the ceiling, so the two cannot disagree on screen.
  */
-let latestWeights = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['weights'] extends Map<string, infer W> ? W : never>()
+let latestWeights = new Map<
+  string,
+  Awaited<ReturnType<typeof replayCeilings>>['weights'] extends Map<string, infer W> ? W : never
+>()
 
 /**
  * The published ceiling SERIES, kept for the console.
@@ -81,7 +84,10 @@ let latestWeights = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['
  * either give the spend path a series to choose from or give the console a
  * number with no story.
  */
-let latestCeilings = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['history'] extends Map<string, infer C> ? C : never>()
+let latestCeilings = new Map<
+  string,
+  Awaited<ReturnType<typeof replayCeilings>>['history'] extends Map<string, infer C> ? C : never
+>()
 
 /**
  * Published account provenance, kept for the Counterparties evidence panel.
@@ -92,10 +98,18 @@ let latestCeilings = new Map<string, Awaited<ReturnType<typeof replayCeilings>>[
  * the demo (`COMMON_FUNDER`: one operator on both sides) rendered with `—`
  * where its two supporting values should be.
  */
-let latestFacts = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['facts'] extends Map<string, infer F> ? F : never>()
+let latestFacts = new Map<
+  string,
+  Awaited<ReturnType<typeof replayCeilings>>['facts'] extends Map<string, infer F> ? F : never
+>()
 
 /** Starter Tab claims, kept for the console. Never consulted by the spend path. */
-let latestRegistrations = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['registrations'] extends Map<string, infer R> ? R : never>()
+let latestRegistrations = new Map<
+  string,
+  Awaited<ReturnType<typeof replayCeilings>>['registrations'] extends Map<string, infer R>
+    ? R
+    : never
+>()
 let latestRootsClaimed = 0
 
 export function weightsSnapshot() {

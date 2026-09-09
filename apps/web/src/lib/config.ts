@@ -1,4 +1,4 @@
-import { MODEL_ID, params, type ParameterSet, type Tier } from '@tab/params'
+import { MODEL_ID, type ParameterSet, params, type Tier } from '@tab/params'
 
 /**
  * The parameter table, derived from `@tab/params` — never retyped.
@@ -59,7 +59,10 @@ export function configGroups(set: ParameterSet = params): readonly ConfigGroup[]
         { key: 'APR_BP', value: byTier(set.aprBp, pct) },
         { key: 'TIER_MULTIPLE', value: byTier(set.tierMultipleBp, mult) },
         { key: 'STARTER_CEILING', value: set.caps.starterCeilingUsdc },
-        { key: 'INTEREST_ROUNDING', value: `${set.interestRounding} (never in the agent's favour)` },
+        {
+          key: 'INTEREST_ROUNDING',
+          value: `${set.interestRounding} (never in the agent's favour)`,
+        },
       ],
     },
     {

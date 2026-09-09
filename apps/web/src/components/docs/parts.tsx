@@ -60,7 +60,15 @@ export function DocsH2({ id, children }: { id: string; children: ReactNode }) {
 
 export function DocsP({ children }: { children: ReactNode }) {
   return (
-    <p style={{ fontSize: 16, lineHeight: 1.7, color: 'var(--ink-2)', maxWidth: '68ch', margin: '0 0 20px' }}>
+    <p
+      style={{
+        fontSize: 16,
+        lineHeight: 1.7,
+        color: 'var(--ink-2)',
+        maxWidth: '68ch',
+        margin: '0 0 20px',
+      }}
+    >
       {children}
     </p>
   )

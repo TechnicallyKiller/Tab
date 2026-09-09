@@ -1,6 +1,7 @@
 import {
   AccountCreateTransaction,
   AccountId,
+  type Client,
   Hbar,
   PrivateKey,
   Status,
@@ -10,7 +11,6 @@ import {
   TokenSupplyType,
   TokenType,
   TransferTransaction,
-  type Client,
 } from '@hiero-ledger/sdk'
 import { format, type MicroUsdc } from '@tab/money'
 

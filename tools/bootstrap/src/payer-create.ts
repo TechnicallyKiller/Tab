@@ -18,7 +18,7 @@
  *   pnpm payer:create
  */
 import { clientFromEnv, createAccount, transferToken } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp, getUsdcBalance, waitForAccount } from '@tab/mirror'
+import { configureGlobalHttp, getUsdcBalance, MirrorClient, waitForAccount } from '@tab/mirror'
 import { format, usdc } from '@tab/money'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -40,8 +40,11 @@ console.log('indexed')
 console.log(`  payer               ${payer.accountId}`)
 
 const moved = await transferToken(tab.client, {
-  tokenId, from: tab.operatorId.toString(), to: payer.accountId,
-  amount: funding, idempotencyKey: 'bootstrap:payer-create',
+  tokenId,
+  from: tab.operatorId.toString(),
+  to: payer.accountId,
+  amount: funding,
+  idempotencyKey: 'bootstrap:payer-create',
 })
 console.log(`  funded              ${format(funding)} · ${moved.consensusStatus}`)
 

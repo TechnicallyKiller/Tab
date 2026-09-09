@@ -24,7 +24,7 @@
  * attacker squat roots during an indexer outage.
  */
 import { submitMessage, type TabClient } from '@tab/hedera'
-import { toWire, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, toWire } from '@tab/money'
 import { encode, registration } from '@tab/protocol'
 
 export interface PublishRegistrationParams {

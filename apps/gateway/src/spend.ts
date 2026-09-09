@@ -1,4 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
+import type {
+  Entry,
+  PublishedCeiling,
+  PublishedWeight,
+  Registration,
+  RememberedFacts,
+} from '@tab/ledger'
 /*
  * `toWire` is IMPORTED, not redefined.
  *
@@ -10,15 +17,12 @@ import { createHash, randomUUID } from 'node:crypto'
  * type, and `whoami.ts`'s inline type re-created a decimals bug. The pattern
  * is reliable enough to treat as a rule.
  */
-import { format, micro, toWire, usdc, type MicroUsdc } from '@tab/money'
+import { format, type MicroUsdc, micro, toWire, usdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
-import type {
-  Entry, PublishedCeiling, PublishedWeight, Registration, RememberedFacts,
-} from '@tab/ledger'
-import type { SettlementEntry } from './settlements.ts'
 import type { SpendClient } from '@tab/x402'
 import type { GatewayEnv } from './env.ts'
 import { nowConsensus, type ReceiptWriter } from './receipts.ts'
+import type { SettlementEntry } from './settlements.ts'
 import type { LedgerState } from './state.ts'
 
 /**
@@ -150,8 +154,15 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
     // demonstrating that underwriting works.
     await receipts
       .write({
-        v: 1, t: 'refused', tab: request.tab, w: window, tok: env.tokenId,
-        cp: seller, amt: toWire(request.max), rule: refusal.rule, ev: refusal.evidence,
+        v: 1,
+        t: 'refused',
+        tab: request.tab,
+        w: window,
+        tok: env.tokenId,
+        cp: seller,
+        amt: toWire(request.max),
+        rule: refusal.rule,
+        ev: refusal.evidence,
       })
       .catch(() => undefined) // a receipt failure must not turn a refusal into a 500
     return refusal
@@ -161,8 +172,13 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   const holdId = request.idempotencyKey ?? `h_${randomUUID().replace(/-/g, '').slice(0, 16)}`
   const expiresAt = shiftSeconds(at, env.holdTtlSeconds)
   const hold: Entry = {
-    kind: 'hold', at, window, holdId, counterparty: seller,
-    amount: request.max, expiresAt,
+    kind: 'hold',
+    at,
+    window,
+    holdId,
+    counterparty: seller,
+    amount: request.max,
+    expiresAt,
   }
   state.push(request.tab, hold)
 
@@ -183,9 +199,16 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
    */
   const holdWrite = await receipts
     .write({
-      v: 1, t: 'hold', tab: request.tab, w: window, tok: env.tokenId,
-      hold: holdId, cp: seller, amt: toWire(request.max),
-      exp: expiresAt, req: requestHash(request.url, at),
+      v: 1,
+      t: 'hold',
+      tab: request.tab,
+      w: window,
+      tok: env.tokenId,
+      hold: holdId,
+      cp: seller,
+      amt: toWire(request.max),
+      exp: expiresAt,
+      req: requestHash(request.url, at),
     })
     .then((written) => ({ ok: true as const, written }))
     .catch((error: unknown) => ({ ok: false as const, error }))
@@ -211,7 +234,7 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
 
   // ── 2. PAY ───────────────────────────────────────────────────────────────
   const started = Date.now()
-  let result
+  let result: Awaited<ReturnType<SpendClient['call']>>
   try {
     result = await client.call(request.url)
   } catch (error) {
@@ -254,15 +277,25 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   }
 
   const debit: Entry = {
-    kind: 'debit', at: nowConsensus(), window, holdId, counterparty: seller,
+    kind: 'debit',
+    at: nowConsensus(),
+    window,
+    holdId,
+    counterparty: seller,
     amount: micro(-charged),
     transactionId: result.settlementTransaction ?? `unsettled:${holdId}`,
   }
   state.push(request.tab, debit)
 
   const written = await receipts.write({
-    v: 1, t: 'debit', tab: request.tab, w: window, tok: env.tokenId,
-    cp: seller, amt: toWire(micro(-charged)), hold: holdId,
+    v: 1,
+    t: 'debit',
+    tab: request.tab,
+    w: window,
+    tok: env.tokenId,
+    cp: seller,
+    amt: toWire(micro(-charged)),
+    hold: holdId,
     req: requestHash(request.url, at),
     tx: debit.transactionId,
   })
@@ -292,7 +325,8 @@ function check(deps: SpendDeps, request: SpendRequest, at: string): SpendRefused
 
   if (price > env.perCallCap) {
     return {
-      outcome: 'refused', rule: 'PER_CALL_CAP',
+      outcome: 'refused',
+      rule: 'PER_CALL_CAP',
       reason:
         `Spend of ${format(price)} refused. The request exceeds the per-call cap of ` +
         `${format(env.perCallCap)} in force for this tab.`,
@@ -305,13 +339,16 @@ function check(deps: SpendDeps, request: SpendRequest, at: string): SpendRefused
   if (!decision.allowed) {
     const p = state.position(request.tab, at)
     return {
-      outcome: 'refused', rule: 'CEILING_EXCEEDED',
+      outcome: 'refused',
+      rule: 'CEILING_EXCEEDED',
       reason:
         `Spend of ${format(price)} refused. Outstanding ${format(p.outstanding)} plus holds ` +
         `${format(p.holds)} plus the request would pass the ${format(p.ceiling)} ceiling.`,
       evidence: {
-        requested: format(price), outstanding: format(p.outstanding),
-        holds: format(p.holds), ceiling: format(p.ceiling),
+        requested: format(price),
+        outstanding: format(p.outstanding),
+        holds: format(p.holds),
+        ceiling: format(p.ceiling),
         shortfall: format(decision.shortfall ?? micro(0n)),
       },
       available: decision.available,

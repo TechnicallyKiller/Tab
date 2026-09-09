@@ -1,8 +1,8 @@
 'use client'
 
+import type { Tab } from '@tab/sdk'
 import { useEffect, useState } from 'react'
 import { LIVE, TAB_ID, tabClient } from '../live/client'
-import type { Tab } from '@tab/sdk'
 
 /**
  * One poller, shared by the views that read once a window rather than once a
@@ -82,7 +82,7 @@ export function usePolled<T>(
      * so a stale closure over it cannot go wrong.
      */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervalMs])
+  }, [intervalMs, read])
 
   return { value, live: LIVE, ...(error ? { error } : {}), loading }
 }

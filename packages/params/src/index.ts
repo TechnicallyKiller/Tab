@@ -9,7 +9,7 @@
  * why these are importable constants rather than env vars: an env var that has
  * since changed makes every historical ceiling unverifiable.
  */
-import { usdc, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, usdc } from '@tab/money'
 import type { ParameterSet, Tier } from './schema.ts'
 import { v1 } from './versions/v1.ts'
 import { v2 } from './versions/v2.ts'
@@ -86,9 +86,7 @@ export function tierMultipleBpFor(t: Tier, set: ParameterSet = params): number {
  * lookup bug; a known version that predates this field is a fact about history,
  * and the two should not present identically.
  */
-export function weightPolicyFor(
-  version: number,
-): NonNullable<ParameterSet['weights']> | undefined {
+export function weightPolicyFor(version: number): NonNullable<ParameterSet['weights']> | undefined {
   return paramsForVersion(version).weights
 }
 
@@ -138,18 +136,18 @@ export function describeParams(set: ParameterSet = params): string[] {
         `concentrated ${pct(set.weights.concentratedBp)} · unverified ${pct(set.weights.unverifiedBp)}`
       : 'weight discounts     not in this parameter set — they lived in the engine before v3, so a ' +
         'weight published under it is not reproducible from the frozen record',
-    'weight order         discounts MULTIPLY and truncate DOWN, in @tab/graph\'s fixed ORDER',
+    "weight order         discounts MULTIPLY and truncate DOWN, in @tab/graph's fixed ORDER",
   ]
 }
 
-export { parameterSet, tier, type ParameterSet, type Tier } from './schema.ts'
+export { type ParameterSet, parameterSet, type Tier, tier } from './schema.ts'
 export { v1 } from './versions/v1.ts'
 export { v2 } from './versions/v2.ts'
 export { v3 } from './versions/v3.ts'
 export {
+  type EpochSeconds,
   windowConsensusRange,
   windowEnd,
   windowOf,
   windowStart,
-  type EpochSeconds,
 } from './window.ts'

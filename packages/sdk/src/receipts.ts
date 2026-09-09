@@ -1,13 +1,16 @@
+import { REFUSAL_CODES, type RefusalCode, WEIGHT_REASONS, type WeightReason } from '@tab/protocol'
 import type { TabClient } from './client.ts'
 import { TabInvalidError } from './errors.ts'
 import { parseAmount } from './spend.ts'
-import {
-  REFUSAL_CODES, WEIGHT_REASONS,
-  type RefusalCode, type WeightReason,
-} from '@tab/protocol'
 import type {
-  CeilingView, CounterpartyWeight, Hold, PublishedCeilingView, ReceiptRow, SettlementView,
-  TabList, TabSummary,
+  CeilingView,
+  CounterpartyWeight,
+  Hold,
+  PublishedCeilingView,
+  ReceiptRow,
+  SettlementView,
+  TabList,
+  TabSummary,
 } from './types.ts'
 
 /**
@@ -128,7 +131,12 @@ export async function counterparties(
        * otherwise it stays empty and the view shows the number without a
        * fabricated justification for it.
        */
-      reasons: reasons.length > 0 ? reasons : Number(r['bp'] ?? 0) === 10_000 ? (['INDEPENDENT'] as const) : [],
+      reasons:
+        reasons.length > 0
+          ? reasons
+          : Number(r['bp'] ?? 0) === 10_000
+            ? (['INDEPENDENT'] as const)
+            : [],
       blocking: r['blocking'] === true,
       revenue: parseAmount(r['revenue'], 'counterparty.revenue'),
       shareBp: Number(r['shareBp'] ?? 0),
@@ -184,7 +192,10 @@ function ceilingOf(r: Record<string, unknown>): PublishedCeilingView {
     inputs: {
       revenue: parseAmount(inputs['revenue'], 'ceiling.inputs.revenue'),
       revenueAttested: parseAmount(inputs['revenueAttested'], 'ceiling.inputs.revenueAttested'),
-      revenueUnattested: parseAmount(inputs['revenueUnattested'], 'ceiling.inputs.revenueUnattested'),
+      revenueUnattested: parseAmount(
+        inputs['revenueUnattested'],
+        'ceiling.inputs.revenueUnattested',
+      ),
       tier: tierOf(inputs['tier']),
       multBp: Number(inputs['multBp'] ?? 0),
       rampBp: Number(inputs['rampBp'] ?? 0),
@@ -210,8 +221,8 @@ function ceilingOf(r: Record<string, unknown>): PublishedCeilingView {
 export async function ceiling(client: TabClient, tab: string): Promise<CeilingView> {
   if (!tab) throw new TabInvalidError('ceiling() needs a tab id')
   const body = await client.request<Record<string, unknown>>('GET', `/v1/tabs/${tab}/ceiling`)
-  const history = (Array.isArray(body['history']) ? body['history'] : []).map(
-    (row) => ceilingOf(row as Record<string, unknown>),
+  const history = (Array.isArray(body['history']) ? body['history'] : []).map((row) =>
+    ceilingOf(row as Record<string, unknown>),
   )
   const published = body['published'] === true
   return {
@@ -239,10 +250,7 @@ export async function ceiling(client: TabClient, tab: string): Promise<CeilingVi
  */
 export async function settlements(client: TabClient, tab: string): Promise<SettlementView[]> {
   if (!tab) throw new TabInvalidError('settlements() needs a tab id')
-  const rows = await client.request<Record<string, unknown>[]>(
-    'GET',
-    `/v1/tabs/${tab}/settlements`,
-  )
+  const rows = await client.request<Record<string, unknown>[]>('GET', `/v1/tabs/${tab}/settlements`)
   return rows.map((r) => ({
     window: Number(r['window'] ?? 0),
     at: String(r['at'] ?? ''),

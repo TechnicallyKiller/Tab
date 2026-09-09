@@ -8,11 +8,12 @@
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { readWorkspace, rel, report, ROOT, walk } from './lib.mjs'
+import { ROOT, readWorkspace, rel, report, walk } from './lib.mjs'
 
-const DER = /302[ae]020100300506032b6570/i          // Ed25519 DER private key prefix
+const DER = /302[ae]020100300506032b6570/i // Ed25519 DER private key prefix
 const HEX64 = /(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])/
-const OPERATOR_ASSIGN = /(OPERATOR_KEY|PRIVATE_KEY|HOT_FLOAT_KEY|TREASURY_KEY[A-Z_]*)\s*[=:]\s*['"]?([^\s'"#]+)/
+const OPERATOR_ASSIGN =
+  /(OPERATOR_KEY|PRIVATE_KEY|HOT_FLOAT_KEY|TREASURY_KEY[A-Z_]*)\s*[=:]\s*['"]?([^\s'"#]+)/
 
 const PLACEHOLDERS = new Set(['', '302e...', '0x', 'your-key-here'])
 const failures = []
@@ -42,7 +43,7 @@ for (const file of files) {
       return
     }
     const m = OPERATOR_ASSIGN.exec(line)
-    if (m && m[2] && !PLACEHOLDERS.has(m[2]) && (HEX64.test(m[2]) || m[2].length > 40)) {
+    if (m?.[2] && !PLACEHOLDERS.has(m[2]) && (HEX64.test(m[2]) || m[2].length > 40)) {
       failures.push({
         where: `${path}:${i + 1}`,
         what: `${m[1]} is assigned what looks like a real value`,
@@ -75,7 +76,9 @@ for (const file of walk(ROOT, ['.env'])) {
     failures.push({
       where: path,
       what: 'this .env is tracked by git',
-      why: 'Only .env.example is tracked. Run `git rm --cached ' + path +
+      why:
+        'Only .env.example is tracked. Run `git rm --cached ' +
+        path +
         '` and confirm .gitignore covers it. If a key was already committed, rotate it — ' +
         'it is in the history now.',
     })

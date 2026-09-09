@@ -1,9 +1,9 @@
 'use client'
 
-import { format } from '@/lib/money'
+import { Pill } from '@/components/ui'
 import { seq as fmtSeq } from '@/lib/format'
 import type { Receipt } from '@/lib/mock/types'
-import { Pill } from '@/components/ui'
+import { format } from '@/lib/money'
 
 const COLS: [string, boolean][] = [
   ['Consensus', false],
@@ -47,7 +47,9 @@ export function ReceiptTable({ rows }: { rows: Receipt[] }) {
               // present. `seq` is absent until a receipt is published.
               <tr key={r.consensus} data-flash={r.flash}>
                 <td style={{ color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{r.consensus}</td>
-                <td><Pill tone={tone}>{r.leg}</Pill></td>
+                <td>
+                  <Pill tone={tone}>{r.leg}</Pill>
+                </td>
                 <td>{r.counterparty}</td>
                 <td className="n" style={{ fontWeight: 600, color: amountColour }}>
                   {r.leg === 'REFUSED' ? format(r.amount) : format(r.amount, { sign: 'always' })}
@@ -57,7 +59,10 @@ export function ReceiptTable({ rows }: { rows: Receipt[] }) {
                 </td>
                 <td style={{ color: 'var(--ink-3)' }}>{r.requestHash ?? '—'}</td>
                 <td className="n">
-                  <a href={`https://hashscan.io/testnet/topic/0.0.4881203`} style={{ color: 'var(--pen)' }}>
+                  <a
+                    href={`https://hashscan.io/testnet/topic/0.0.4881203`}
+                    style={{ color: 'var(--pen)' }}
+                  >
                     {r.seq === undefined ? 'pending' : fmtSeq(r.seq)}
                   </a>
                 </td>

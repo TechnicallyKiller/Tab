@@ -1,9 +1,15 @@
 import {
-  canReserve, entriesFromMessages, inConsensusOrder, position, resolveHolds,
-  type Entry, type HoldView, type Position, type ReserveDecision,
+  canReserve,
+  type Entry,
+  entriesFromMessages,
+  type HoldView,
+  type Position,
+  position,
+  type ReserveDecision,
+  resolveHolds,
 } from '@tab/ledger'
-import { format, usdc, type MicroUsdc } from '@tab/money'
-import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
+import { type MirrorClient, readTopic, reassembleChunks } from '@tab/mirror'
+import { format, type MicroUsdc } from '@tab/money'
 
 /**
  * In-memory ledger state, rebuilt from HCS on boot.

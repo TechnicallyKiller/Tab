@@ -1,6 +1,6 @@
-import { toWire, usdc, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, toWire, usdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
-import { REFUSAL_GUIDANCE, isRetryable } from '@tab/protocol'
+import { isRetryable, REFUSAL_GUIDANCE } from '@tab/protocol'
 import type { TabClient } from './client.ts'
 import { TabInvalidError, TabProtocolError } from './errors.ts'
 import type { Quote, SpendRequest, SpendResult, TabState } from './types.ts'
@@ -89,7 +89,13 @@ export async function spend(client: TabClient, request: SpendRequest): Promise<S
   const idempotencyKey = request.idempotencyKey ?? newIdempotencyKey()
 
   const body = await client.request<{
-    paid?: { amount: string; seller: string; holdId: string; receiptSeq: number | null; elapsedMs: number }
+    paid?: {
+      amount: string
+      seller: string
+      holdId: string
+      receiptSeq: number | null
+      elapsedMs: number
+    }
     refused?: { rule: RefusalCode; reason: string; evidence?: Record<string, string | number> }
     failed?: { reason: string; holdId: string }
     error?: string

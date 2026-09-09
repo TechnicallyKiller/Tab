@@ -26,7 +26,7 @@
  *   pnpm tab:create
  */
 import { clientFromEnv, createAccount } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp, getUsdcBalance, waitForAccount } from '@tab/mirror'
+import { configureGlobalHttp, getUsdcBalance, MirrorClient, waitForAccount } from '@tab/mirror'
 import { format } from '@tab/money'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
@@ -65,7 +65,9 @@ console.log('indexed')
 const balance = await getUsdcBalance(mirror, tab.accountId, tokenId)
 
 console.log(`  tab account         ${tab.accountId}`)
-console.log(`  token balance       ${format(balance)}  (deliberately zero — the agent holds no float)`)
+console.log(
+  `  token balance       ${format(balance)}  (deliberately zero — the agent holds no float)`,
+)
 console.log(`  hot float           ${client.operatorId.toString()}  (must differ from the tab)`)
 
 console.log(`

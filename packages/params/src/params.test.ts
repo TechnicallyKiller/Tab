@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
 import { createHash } from 'node:crypto'
+import { test } from 'node:test'
 import {
-  MODEL_ID, MODEL_VERSION, aprBpFor, caps, describeParams, params, paramsForVersion,
-  tierMultipleBpFor, weightPolicyFor, v1,
+  aprBpFor,
+  caps,
+  describeParams,
+  MODEL_ID,
+  MODEL_VERSION,
+  params,
+  paramsForVersion,
+  tierMultipleBpFor,
+  v1,
+  weightPolicyFor,
 } from './index.ts'
+import { parameterSet } from './schema.ts'
 import { v2 } from './versions/v2.ts'
 import { v3 } from './versions/v3.ts'
-import { parameterSet } from './schema.ts'
 import { windowConsensusRange, windowEnd, windowOf, windowStart } from './window.ts'
 
 /* ── the snapshot ────────────────────────────────────────────────────────── */
@@ -83,7 +91,10 @@ test('every published version stays resolvable, not just the current one', () =>
   // becomes unverifiable.
   assert.equal(paramsForVersion(1).version, 1)
   assert.equal(paramsForVersion(2).version, 2)
-  assert.notEqual(paramsForVersion(1).caps.starterCeilingUsdc, paramsForVersion(2).caps.starterCeilingUsdc)
+  assert.notEqual(
+    paramsForVersion(1).caps.starterCeilingUsdc,
+    paramsForVersion(2).caps.starterCeilingUsdc,
+  )
 })
 
 test('the current set is the one MODEL_VERSION names', () => {
@@ -182,8 +193,7 @@ test('v3 is frozen — this hash may never change', () => {
 test('v3 differs from v2 in EXACTLY one field, plus the version', () => {
   // One deliberate change per version. `weights` moving in IS the change.
   const differing = Object.keys({ ...v2, ...v3 }).filter(
-    (k) =>
-      canonical(v2[k as keyof typeof v2]) !== canonical(v3[k as keyof typeof v3]),
+    (k) => canonical(v2[k as keyof typeof v2]) !== canonical(v3[k as keyof typeof v3]),
   )
   assert.deepEqual(differing.sort(), ['version', 'weights'])
 })

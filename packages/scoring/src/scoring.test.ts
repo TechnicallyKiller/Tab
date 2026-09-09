@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
 import { createHash } from 'node:crypto'
+import { test } from 'node:test'
 import { format, usdc } from '@tab/money'
 import { MODEL_VERSION, tierMultipleBpFor } from '@tab/params'
-import { effectiveRevenue } from './effective-revenue.ts'
-import { tierOf } from './tier.ts'
 import { computeCeiling, mayApplyMidWindow } from './ceiling.ts'
+import { effectiveRevenue } from './effective-revenue.ts'
 import type { CeilingInputs } from './inputs.ts'
+import { tierOf } from './tier.ts'
 
 const NO_CAP = usdc('1000.000000')
 const FLOOR = usdc('1.000000')
@@ -37,7 +37,11 @@ test('unattested revenue counts at the discount, attested at face', () => {
   // 1.00 + (1.00 × 0.6) = 1.60
   assert.equal(format(r.perWindow), '1.6000')
   assert.equal(format(r.attested), '1.0000')
-  assert.equal(format(r.unattested), '1.0000', 'the split stays visible so the discount is auditable')
+  assert.equal(
+    format(r.unattested),
+    '1.0000',
+    'the split stays visible so the discount is auditable',
+  )
 })
 
 test('an agent whose revenue is ENTIRELY unattested reflects only the discount', () => {
@@ -53,11 +57,19 @@ test('the average divides by the window COUNT, not by windows with activity', ()
   // Earning 6.00 once in six windows is a lower run-rate than 1.00 in each.
   // Dividing by non-empty windows would rate them identically and hand an
   // attacker a lever: earn once, borrow against a run-rate that never existed.
-  const spiky = effectiveRevenue([{ window: 6, attested: usdc('6.000000'), unattested: usdc('0.000000') }], 6, 6000)
+  const spiky = effectiveRevenue(
+    [{ window: 6, attested: usdc('6.000000'), unattested: usdc('0.000000') }],
+    6,
+    6000,
+  )
   assert.equal(format(spiky.perWindow), '1.0000')
 
   const steady = effectiveRevenue(
-    Array.from({ length: 6 }, (_, i) => ({ window: i + 1, attested: usdc('1.000000'), unattested: usdc('0.000000') })),
+    Array.from({ length: 6 }, (_, i) => ({
+      window: i + 1,
+      attested: usdc('1.000000'),
+      unattested: usdc('0.000000'),
+    })),
     6,
     6000,
   )
@@ -75,7 +87,10 @@ test('only the trailing N windows count, whatever order they arrive in', () => {
   assert.equal(format(effectiveRevenue(history, 2, 6000).perWindow), '3.0000')
   // And shuffling the input must not change the answer.
   const shuffled = [history[1]!, history[2]!, history[0]!]
-  assert.equal(effectiveRevenue(shuffled, 2, 6000).perWindow, effectiveRevenue(history, 2, 6000).perWindow)
+  assert.equal(
+    effectiveRevenue(shuffled, 2, 6000).perWindow,
+    effectiveRevenue(history, 2, 6000).perWindow,
+  )
 })
 
 test('no history is zero revenue, not a crash', () => {
@@ -86,7 +101,12 @@ test('no history is zero revenue, not a crash', () => {
 
 test('negative revenue is rejected', () => {
   assert.throws(
-    () => effectiveRevenue([{ window: 1, attested: -1n as never, unattested: usdc('0.000000') }], 1, 6000),
+    () =>
+      effectiveRevenue(
+        [{ window: 1, attested: -1n as never, unattested: usdc('0.000000') }],
+        1,
+        6000,
+      ),
     /cannot be negative/,
   )
 })
@@ -94,7 +114,12 @@ test('negative revenue is rejected', () => {
 /* ── tier ────────────────────────────────────────────────────────────────── */
 
 test('a default collapses the tab to Unrated regardless of revenue', () => {
-  const t = tierOf({ perWindow: usdc('100.000000'), counterparties: 20, cleanStreak: 50, hasDefaulted: true })
+  const t = tierOf({
+    perWindow: usdc('100.000000'),
+    counterparties: 20,
+    cleanStreak: 50,
+    hasDefaulted: true,
+  })
   assert.equal(t.tier, 'Unrated')
   assert.match(t.reason, /no partial credit/)
 })
@@ -102,28 +127,53 @@ test('a default collapses the tab to Unrated regardless of revenue', () => {
 test('A-grade revenue with no settlement history does NOT get B by falling through', () => {
   // The bug this catches: awarding "the tier below" without checking that
   // tier's own requirements. B needs a streak of 4; this tab has none.
-  const t = tierOf({ perWindow: usdc('50.000000'), counterparties: 20, cleanStreak: 0, hasDefaulted: false })
+  const t = tierOf({
+    perWindow: usdc('50.000000'),
+    counterparties: 20,
+    cleanStreak: 0,
+    hasDefaulted: false,
+  })
   assert.equal(t.tier, 'Unrated', 'no band is fully met, so no band is awarded')
   assert.match(t.reason, /clean streak/)
 })
 
 test('A-grade revenue with B-grade history settles at B', () => {
-  const t = tierOf({ perWindow: usdc('50.000000'), counterparties: 5, cleanStreak: 4, hasDefaulted: false })
+  const t = tierOf({
+    perWindow: usdc('50.000000'),
+    counterparties: 5,
+    cleanStreak: 4,
+    hasDefaulted: false,
+  })
   assert.equal(t.tier, 'B')
 })
 
 test('revenue from a single buyer cannot reach a diversified tier', () => {
-  const t = tierOf({ perWindow: usdc('50.000000'), counterparties: 1, cleanStreak: 50, hasDefaulted: false })
+  const t = tierOf({
+    perWindow: usdc('50.000000'),
+    counterparties: 1,
+    cleanStreak: 50,
+    hasDefaulted: false,
+  })
   assert.equal(t.tier, 'C', 'C needs only one counterparty; A and B need a market')
 })
 
 test('every requirement met earns the top tier', () => {
-  const t = tierOf({ perWindow: usdc('5.000000'), counterparties: 5, cleanStreak: 10, hasDefaulted: false })
+  const t = tierOf({
+    perWindow: usdc('5.000000'),
+    counterparties: 5,
+    cleanStreak: 10,
+    hasDefaulted: false,
+  })
   assert.equal(t.tier, 'A')
 })
 
 test('revenue below the lowest band is Unrated', () => {
-  const t = tierOf({ perWindow: usdc('0.010000'), counterparties: 9, cleanStreak: 99, hasDefaulted: false })
+  const t = tierOf({
+    perWindow: usdc('0.010000'),
+    counterparties: 9,
+    cleanStreak: 99,
+    hasDefaulted: false,
+  })
   assert.equal(t.tier, 'Unrated')
 })
 
@@ -136,7 +186,9 @@ test('the formula multiplies revenue by the tier multiple and the ramp', () => {
 })
 
 test('an agent with revenue but a default gets EXACTLY zero, floor and all', () => {
-  const r = computeCeiling(inputs({ tier: 'Unrated', revenue: usdc('500.000000'), hasDefaulted: true }))
+  const r = computeCeiling(
+    inputs({ tier: 'Unrated', revenue: usdc('500.000000'), hasDefaulted: true }),
+  )
   assert.equal(r.ceiling, 0n)
   assert.equal(r.binding, 'unrated')
   // The floor must not rescue a defaulted tab, or the harshest rule in the
@@ -157,13 +209,21 @@ test('the tier hard cap binds before the formula result does', () => {
 })
 
 test('the hard cap beats the starter floor — a cap that yields is not a cap', () => {
-  const r = computeCeiling(inputs({ revenue: usdc('0.000000'), hardCap: usdc('0.500000'), starterFloor: usdc('1.000000') }))
+  const r = computeCeiling(
+    inputs({
+      revenue: usdc('0.000000'),
+      hardCap: usdc('0.500000'),
+      starterFloor: usdc('1.000000'),
+    }),
+  )
   assert.equal(format(r.ceiling), '0.5000')
   assert.equal(r.binding, 'hard_cap')
 })
 
 test('the ramp clamps behave at both ends', () => {
-  const zero = computeCeiling(inputs({ revenue: usdc('10.000000'), rampBp: 0, starterFloor: usdc('0.000000') }))
+  const zero = computeCeiling(
+    inputs({ revenue: usdc('10.000000'), rampBp: 0, starterFloor: usdc('0.000000') }),
+  )
   assert.equal(zero.ceiling, 0n, 'a collapsed ramp means no credit, whatever the revenue')
 
   const full = computeCeiling(inputs({ revenue: usdc('10.000000'), rampBp: 10_000 }))
@@ -173,7 +233,14 @@ test('the ramp clamps behave at both ends', () => {
 test('one division, not two — truncation must not compound with the ramp', () => {
   // Two separate divisions truncate twice, and the loss lands harder on a low
   // ramp than a high one for no reason visible in the published inputs.
-  const r = computeCeiling(inputs({ revenue: usdc('0.000001'), multipleBp: 30_000, rampBp: 3333, starterFloor: usdc('0.000000') }))
+  const r = computeCeiling(
+    inputs({
+      revenue: usdc('0.000001'),
+      multipleBp: 30_000,
+      rampBp: 3333,
+      starterFloor: usdc('0.000000'),
+    }),
+  )
   // 1 × 30000 × 3333 / 100000000 = 0.99 → 0 micro-units, truncated once.
   assert.equal(r.ceiling, 0n)
 })
@@ -214,7 +281,9 @@ test('a ceiling recomputed from its published inputs hash-matches', () => {
 })
 
 test('the tier multiple comes from params, so the formula tracks a version bump', () => {
-  const r = computeCeiling(inputs({ tier: 'A', multipleBp: tierMultipleBpFor('A'), revenue: usdc('1.000000') }))
+  const r = computeCeiling(
+    inputs({ tier: 'A', multipleBp: tierMultipleBpFor('A'), revenue: usdc('1.000000') }),
+  )
   assert.equal(format(r.ceiling), '3.0000', 'A is 3.0x at MODEL_VERSION 1')
 })
 
@@ -244,9 +313,14 @@ test('A BRAND-NEW TAB CAN START: no revenue, Unrated, but gets the starter floor
   // had no revenue, so was Unrated, so had a ceiling of zero, so could not
   // spend, so could never earn the revenue that would rate it. The starter
   // floor existed for exactly this case and was unreachable.
-  const r = computeCeiling(inputs({
-    tier: 'Unrated', revenue: usdc('0.000000'), multipleBp: 0, hasDefaulted: false,
-  }))
+  const r = computeCeiling(
+    inputs({
+      tier: 'Unrated',
+      revenue: usdc('0.000000'),
+      multipleBp: 0,
+      hasDefaulted: false,
+    }),
+  )
   assert.equal(format(r.ceiling), '1.0000')
   assert.equal(r.binding, 'starter_floor')
 })

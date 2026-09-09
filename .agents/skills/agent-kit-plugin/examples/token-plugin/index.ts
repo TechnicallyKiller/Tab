@@ -8,9 +8,9 @@
  *   npm install @hashgraph/hedera-agent-kit @hiero-ledger/sdk zod
  */
 
-import { Context, Plugin } from '@hashgraph/hedera-agent-kit';
-import createTokenTool, { CREATE_TOKEN_TOOL } from './tools/create-token';
-import getTokenInfoTool, { GET_TOKEN_INFO_TOOL } from './tools/get-token-info';
+import type { Context, Plugin } from '@hashgraph/hedera-agent-kit'
+import createTokenTool, { CREATE_TOKEN_TOOL } from './tools/create-token'
+import getTokenInfoTool, { GET_TOKEN_INFO_TOOL } from './tools/get-token-info'
 
 /**
  * Token Plugin definition
@@ -24,12 +24,9 @@ export const tokenPlugin: Plugin = {
   version: '1.0.0',
   description: 'Example plugin for Hedera Token Service operations',
   tools: (context: Context) => {
-    return [
-      createTokenTool(context),
-      getTokenInfoTool(context),
-    ];
+    return [createTokenTool(context), getTokenInfoTool(context)]
   },
-};
+}
 
 /**
  * Export tool name constants
@@ -41,6 +38,6 @@ export const tokenPlugin: Plugin = {
 export const tokenPluginToolNames = {
   CREATE_TOKEN_TOOL,
   GET_TOKEN_INFO_TOOL,
-} as const;
+} as const
 
-export default { tokenPlugin, tokenPluginToolNames };
+export default { tokenPlugin, tokenPluginToolNames }

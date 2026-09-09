@@ -1,5 +1,10 @@
-import { add, atLeastZero, micro, sub, sum, type MicroUsdc } from '@tab/money'
-import { compareConsensus, inConsensusOrder, type ConsensusTimestamp, type Entry } from './entries.ts'
+import { add, atLeastZero, type MicroUsdc, micro, sub, sum } from '@tab/money'
+import {
+  type ConsensusTimestamp,
+  compareConsensus,
+  type Entry,
+  inConsensusOrder,
+} from './entries.ts'
 
 /**
  * Holds, and the available balance they protect.

@@ -32,10 +32,11 @@
  * because "blocked" versus "discounted" is a decision an operator has to defend
  * either way.
  */
-import { createAccount, createClient, clientFromEnv, transferToken } from '@tab/hedera'
-import { MirrorClient, configureGlobalHttp, getUsdcBalance, waitForAccount } from '@tab/mirror'
-import { format, usdc } from '@tab/money'
+
 import { appendFile } from 'node:fs/promises'
+import { clientFromEnv, createAccount, createClient, transferToken } from '@tab/hedera'
+import { configureGlobalHttp, getUsdcBalance, MirrorClient, waitForAccount } from '@tab/mirror'
+import { format, usdc } from '@tab/money'
 
 configureGlobalHttp({ connectTimeoutMs: 60_000 })
 

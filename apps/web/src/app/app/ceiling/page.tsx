@@ -1,13 +1,13 @@
 'use client'
 
-import { MODEL_ID as MODEL_VERSION, caps, params } from '@tab/params'
+import { caps, MODEL_ID as MODEL_VERSION, params } from '@tab/params'
 import type { PublishedCeilingView } from '@tab/sdk'
 import { Card, CardHead, Chip } from '@/components/ui'
 import { CopyButton } from '@/components/ui/copy-button'
-import { bp, format, formatBpMultiple, formatBpPercent, micro } from '@/lib/money'
 import { seq as fmtSeq, shortConsensus } from '@/lib/format'
 import { useCeiling } from '@/lib/hooks/use-ceiling'
 import { TOPICS } from '@/lib/mock/tab'
+import { bp, format, formatBpMultiple, formatBpPercent, micro } from '@/lib/money'
 
 /**
  * The ceiling in force, the arithmetic that produced it, and how to check it.
@@ -63,7 +63,11 @@ function calcRows(c: PublishedCeilingView, binding: string): CalcRow[] {
       value: format(inputs.revenueUnattested),
       emphasis: 'sub',
     },
-    { label: `tier ${inputs.tier}`, value: `× ${formatBpMultiple(bp(inputs.multBp))}`, emphasis: 'term' },
+    {
+      label: `tier ${inputs.tier}`,
+      value: `× ${formatBpMultiple(bp(inputs.multBp))}`,
+      emphasis: 'term',
+    },
     { label: 'earned ramp', value: `× ${formatBpPercent(bp(inputs.rampBp), 0)}`, emphasis: 'term' },
     {
       label: 'hard cap',
@@ -130,7 +134,8 @@ function stepPath(series: readonly PublishedCeilingView[], max: bigint): string 
   const height = PLOT.bottom - PLOT.top
   // Presentation geometry only — never a decision input, which is why floats
   // are fine here and nowhere near the money.
-  const x = (i: number) => PLOT.left + (series.length === 1 ? span : (span * i) / (series.length - 1))
+  const x = (i: number) =>
+    PLOT.left + (series.length === 1 ? span : (span * i) / (series.length - 1))
   const y = (v: bigint) =>
     max <= 0n ? PLOT.bottom : PLOT.bottom - (height * Number(v)) / Number(max)
 
@@ -160,12 +165,8 @@ export default function CeilingView() {
    * a tab that has only ever been blocked still gets a scale rather than a
    * division by zero.
    */
-  const ceilingMax = history.reduce(
-    (m, c) => (c.ceiling > m ? c.ceiling : m),
-    micro(0n),
-  )
-  const scaleMax =
-    ceilingMax > 0n ? ceilingMax : (current?.inputs.floor ?? caps.starterCeiling)
+  const ceilingMax = history.reduce((m, c) => (c.ceiling > m ? c.ceiling : m), micro(0n))
+  const scaleMax = ceilingMax > 0n ? ceilingMax : (current?.inputs.floor ?? caps.starterCeiling)
   const path = stepPath(history, scaleMax)
   // The endpoint marker always sits at the right edge, because `stepPath` maps
   // the last element there. (This was a ternary whose two branches computed the
@@ -182,7 +183,9 @@ export default function CeilingView() {
   if (!live) {
     return (
       <Card style={{ padding: 24 }}>
-        <div className="t-label" style={{ marginBottom: 8 }}>Ceiling</div>
+        <div className="t-label" style={{ marginBottom: 8 }}>
+          Ceiling
+        </div>
         <p style={{ margin: 0, maxWidth: 560, lineHeight: 1.7, color: 'var(--ink-2)' }}>
           <strong style={{ color: 'var(--caution)' }}>NOT CONFIGURED.</strong> This view shows only
           what the engine published to the ceiling topic — there is no mock, because a fabricated
@@ -274,7 +277,13 @@ export default function CeilingView() {
           {current ? (
             <div
               className="rule-t"
-              style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}
             >
               <Chip tone={current.binding === 'unrated' ? 'block' : 'caution'}>BINDING</Chip>
               <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
@@ -284,7 +293,16 @@ export default function CeilingView() {
           ) : null}
 
           {current?.computed !== undefined ? (
-            <div className="rule-t" style={{ padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div
+              className="rule-t"
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                gap: 10,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
               <Chip tone="caution">HELD</Chip>
               <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
                 The formula computes {format(current.computed)}, but {format(current.ceiling)} is in
@@ -296,7 +314,16 @@ export default function CeilingView() {
           ) : null}
 
           {lagging ? (
-            <div className="rule-t" style={{ padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div
+              className="rule-t"
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                gap: 10,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
               <Chip tone="caution">NOT YET ENFORCED</Chip>
               <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
                 Published {format(current!.ceiling)}, enforced {format(value.enforced)}. The gateway
@@ -344,7 +371,14 @@ export default function CeilingView() {
                   ))}
                 </g>
                 <path d={path} fill="none" stroke="var(--ink)" strokeWidth={2.5} />
-                <circle cx={lastX} cy={lastY} r={5} fill="var(--pen)" stroke="var(--ink)" strokeWidth={2.5} />
+                <circle
+                  cx={lastX}
+                  cy={lastY}
+                  r={5}
+                  fill="var(--pen)"
+                  stroke="var(--ink)"
+                  strokeWidth={2.5}
+                />
               </svg>
             )}
           </div>
@@ -355,7 +389,9 @@ export default function CeilingView() {
                   <tr>
                     <th scope="col">Seq</th>
                     <th scope="col">Window</th>
-                    <th scope="col" className="n">Ceiling</th>
+                    <th scope="col" className="n">
+                      Ceiling
+                    </th>
                     <th scope="col">Bound by</th>
                     <th scope="col">Cause</th>
                   </tr>
@@ -367,11 +403,21 @@ export default function CeilingView() {
                         {c.seq !== undefined ? fmtSeq(c.seq) : '—'}
                       </td>
                       <td>{fmtSeq(c.window)}</td>
-                      <td className="n" style={{ fontWeight: 600, color: c.ceiling === 0n ? 'var(--debit)' : 'var(--ink)' }}>
+                      <td
+                        className="n"
+                        style={{
+                          fontWeight: 600,
+                          color: c.ceiling === 0n ? 'var(--debit)' : 'var(--ink)',
+                        }}
+                      >
                         {format(c.ceiling)}
                       </td>
                       <td style={{ color: 'var(--ink-2)' }}>{c.binding}</td>
-                      <td style={{ color: c.cause === 'graph_change' ? 'var(--debit)' : 'var(--ink-2)' }}>
+                      <td
+                        style={{
+                          color: c.cause === 'graph_change' ? 'var(--debit)' : 'var(--ink-2)',
+                        }}
+                      >
                         {c.cause}
                       </td>
                     </tr>
@@ -388,7 +434,9 @@ export default function CeilingView() {
         <CardHead title="Verify · no contract required" />
         <div style={{ padding: 18, display: 'grid', gap: 14 }}>
           <div>
-            <div className="t-label" style={{ marginBottom: 4 }}>MODEL_VERSION</div>
+            <div className="t-label" style={{ marginBottom: 4 }}>
+              MODEL_VERSION
+            </div>
             <div className="t-mono" style={{ fontSize: 14, fontWeight: 600 }}>
               {current?.model ?? MODEL_VERSION}
             </div>
@@ -410,13 +458,27 @@ export default function CeilingView() {
               minHeight: 76,
             }}
           >
-            <div className="t-label" style={{ marginBottom: 6 }}>Canonical input hash</div>
-            <div className="t-mono" style={{ fontSize: 12.5, wordBreak: 'break-all', lineHeight: 1.6 }}>
+            <div className="t-label" style={{ marginBottom: 6 }}>
+              Canonical input hash
+            </div>
+            <div
+              className="t-mono"
+              style={{ fontSize: 12.5, wordBreak: 'break-all', lineHeight: 1.6 }}
+            >
               {current?.hash ?? (loading ? '…' : 'none published')}
             </div>
           </div>
 
-          <div className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink-2)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+          <div
+            className="t-mono"
+            style={{
+              fontSize: 12.5,
+              color: 'var(--ink-2)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
             <span>HCS sequence</span>
             <a
               href={`https://hashscan.io/testnet/topic/${TOPICS.ceilings}`}
@@ -429,14 +491,14 @@ export default function CeilingView() {
           </div>
 
           {/*
-            * No VERIFIED stamp, and no button that pretends to compute one.
-            *
-            * A checker that runs inside the thing being checked proves nothing.
-            * The command below replays the topic itself, resolves each
-            * message's own `model` field to the frozen parameter set it was
-            * published under, and trusts nothing this gateway says — which is
-            * the only kind of verification worth showing.
-            */}
+           * No VERIFIED stamp, and no button that pretends to compute one.
+           *
+           * A checker that runs inside the thing being checked proves nothing.
+           * The command below replays the topic itself, resolves each
+           * message's own `model` field to the frozen parameter set it was
+           * published under, and trusts nothing this gateway says — which is
+           * the only kind of verification worth showing.
+           */}
           <div
             style={{
               border: '1px dashed var(--ink-3)',
@@ -450,15 +512,19 @@ export default function CeilingView() {
             <code className="t-mono" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>
               pnpm verify-ceiling
             </code>
-            <CopyButton value="pnpm verify-ceiling" idleLabel="Copy command" className="btn btn-sm" />
+            <CopyButton
+              value="pnpm verify-ceiling"
+              idleLabel="Copy command"
+              className="btn btn-sm"
+            />
           </div>
 
           <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-2)', margin: 0 }}>
             This panel is <strong>not</strong> the verifier. It shows the sequence number, the model
             id and the input hash so you can find the message on HashScan and recompute it yourself.{' '}
             <code>pnpm verify-ceiling</code> replays the topic, recomputes each ceiling from the
-            frozen parameter set it names, and reports a mismatch — it caught a real one once, when a
-            change to the formula shipped without a version bump.
+            frozen parameter set it names, and reports a mismatch — it caught a real one once, when
+            a change to the formula shipped without a version bump.
           </p>
 
           {error ? (

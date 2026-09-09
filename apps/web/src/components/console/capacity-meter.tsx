@@ -1,6 +1,6 @@
 'use client'
 
-import { atLeastZero, format, pctOf, sub, type MicroUsdc } from '@/lib/money'
+import { atLeastZero, format, type MicroUsdc, pctOf, sub } from '@/lib/money'
 
 /**
  * The most important component in the app: outstanding solid, pending holds
@@ -25,7 +25,9 @@ export function CapacityMeter({
 
   return (
     <div>
-      <div className="t-label" style={{ marginBottom: 10 }}>Capacity against the ceiling</div>
+      <div className="t-label" style={{ marginBottom: 10 }}>
+        Capacity against the ceiling
+      </div>
       <div
         style={{
           display: 'flex',
@@ -38,7 +40,13 @@ export function CapacityMeter({
         role="img"
         aria-label={`Outstanding ${format(outstanding)}, held ${format(holds)}, of ceiling ${format(ceiling)}`}
       >
-        <div style={{ width: `${outPct}%`, background: 'var(--debit)', transition: 'width var(--settle)' }} />
+        <div
+          style={{
+            width: `${outPct}%`,
+            background: 'var(--debit)',
+            transition: 'width var(--settle)',
+          }}
+        />
         <div
           className="hatch"
           style={{
@@ -51,12 +59,27 @@ export function CapacityMeter({
       </div>
       <div
         className="t-mono"
-        style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}
+        style={{
+          fontSize: 12.5,
+          color: 'var(--ink-2)',
+          marginTop: 10,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '4px 16px',
+        }}
       >
-        <span>outstanding <b style={{ color: 'var(--debit)' }}>{format(outstanding)}</b></span>
-        <span>held <b>{format(holds)}</b></span>
-        <span>available <b style={{ color: 'var(--credit)' }}>{format(available)}</b></span>
-        <span>ceiling <b style={{ color: 'var(--pen)' }}>{format(ceiling)}</b></span>
+        <span>
+          outstanding <b style={{ color: 'var(--debit)' }}>{format(outstanding)}</b>
+        </span>
+        <span>
+          held <b>{format(holds)}</b>
+        </span>
+        <span>
+          available <b style={{ color: 'var(--credit)' }}>{format(available)}</b>
+        </span>
+        <span>
+          ceiling <b style={{ color: 'var(--pen)' }}>{format(ceiling)}</b>
+        </span>
       </div>
     </div>
   )

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { reweigh } from './reweigh.ts'
-import { canonicalHash } from '@tab/protocol'
 import { format, usdc } from '@tab/money'
 import { MODEL_ID } from '@tab/params'
+import { canonicalHash } from '@tab/protocol'
 import { computeCeiling } from '@tab/scoring'
-import { inputsFrom, recheck, versionOf, type RecheckTarget } from './recheck.ts'
+import { inputsFrom, type RecheckTarget, recheck, versionOf } from './recheck.ts'
+import { reweigh } from './reweigh.ts'
 
 /**
  * A record shaped exactly like a published one.
@@ -127,8 +127,14 @@ test('a float where basis points belong is rejected', () => {
   assert.throws(
     () =>
       inputsFrom({
-        rev: '1.000000', revAtt: '1.000000', revUnatt: '0.000000', tier: 'B',
-        mult: 2.5, ramp: 4000, cap: '1.000000', floor: '1.000000',
+        rev: '1.000000',
+        revAtt: '1.000000',
+        revUnatt: '0.000000',
+        tier: 'B',
+        mult: 2.5,
+        ramp: 4000,
+        cap: '1.000000',
+        floor: '1.000000',
       }),
     /not an integer basis-point value/,
   )
@@ -136,8 +142,14 @@ test('a float where basis points belong is rejected', () => {
 
 test('an absent `def` means false, so pre-field ceilings stay readable', () => {
   const inputs = inputsFrom({
-    rev: '0.000000', revAtt: '0.000000', revUnatt: '0.000000', tier: 'B',
-    mult: 20_000, ramp: 4000, cap: '1000.000000', floor: '1.000000',
+    rev: '0.000000',
+    revAtt: '0.000000',
+    revUnatt: '0.000000',
+    tier: 'B',
+    mult: 20_000,
+    ramp: 4000,
+    cap: '1000.000000',
+    floor: '1.000000',
   })
   assert.equal(inputs.hasDefaulted, false)
 })
@@ -230,25 +242,41 @@ test('an unknown parameter version is not verifiable rather than a crash', () =>
 
 test('a hard block must be exactly zero AND carry a blocking reason', () => {
   const good = reweigh({
-    counterparty: '0.0.10385196', bp: 0, reasons: ['COMMON_FUNDER'], blocking: true, model: 'tab-v3',
+    counterparty: '0.0.10385196',
+    bp: 0,
+    reasons: ['COMMON_FUNDER'],
+    blocking: true,
+    model: 'tab-v3',
   })
   assert.equal(good.verdict, 'ok')
 
   // A blocking reason that did not block.
   const notZero = reweigh({
-    counterparty: '0.0.1', bp: 5000, reasons: ['COMMON_FUNDER'], blocking: true, model: 'tab-v3',
+    counterparty: '0.0.1',
+    bp: 5000,
+    reasons: ['COMMON_FUNDER'],
+    blocking: true,
+    model: 'tab-v3',
   })
   assert.equal(notZero.verdict, 'blocking_inconsistent')
 
   // Zero weight with no blocking reason — a refusal nobody can explain.
   const unexplained = reweigh({
-    counterparty: '0.0.1', bp: 0, reasons: ['YOUNG_ACCOUNT'], blocking: false, model: 'tab-v3',
+    counterparty: '0.0.1',
+    bp: 0,
+    reasons: ['YOUNG_ACCOUNT'],
+    blocking: false,
+    model: 'tab-v3',
   })
   assert.equal(unexplained.verdict, 'blocking_inconsistent')
 
   // Blocking flag set without a blocking reason.
   const mislabelled = reweigh({
-    counterparty: '0.0.1', bp: 0, reasons: ['YOUNG_ACCOUNT'], blocking: true, model: 'tab-v3',
+    counterparty: '0.0.1',
+    bp: 0,
+    reasons: ['YOUNG_ACCOUNT'],
+    blocking: true,
+    model: 'tab-v3',
   })
   assert.equal(mislabelled.verdict, 'blocking_inconsistent')
 })
@@ -262,7 +290,11 @@ test('a blocking inconsistency is caught WITHOUT a model id', () => {
 
 test('INDEPENDENT reproduces full weight, and carries no step', () => {
   const r = reweigh({
-    counterparty: '0.0.1', bp: 10_000, reasons: ['INDEPENDENT'], blocking: false, model: 'tab-v3',
+    counterparty: '0.0.1',
+    bp: 10_000,
+    reasons: ['INDEPENDENT'],
+    blocking: false,
+    model: 'tab-v3',
   })
   assert.equal(r.verdict, 'ok')
   assert.equal(r.recomputed, 10_000)
@@ -288,7 +320,10 @@ test('reason ORDER on the message does not change the result', () => {
    * to list. A publisher that shuffled its reason array must not be able to
    * shift the number by a micro-unit and still pass.
    */
-  const r = reweigh({ ...WEIGHT, reasons: ['CONCENTRATED', 'YOUNG_ACCOUNT', 'SHARED_FUNDING_ROOT'] })
+  const r = reweigh({
+    ...WEIGHT,
+    reasons: ['CONCENTRATED', 'YOUNG_ACCOUNT', 'SHARED_FUNDING_ROOT'],
+  })
   assert.equal(r.verdict, 'ok')
   assert.equal(r.recomputed, 3360)
 })

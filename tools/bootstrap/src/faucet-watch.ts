@@ -6,7 +6,7 @@
  * Exists because the faucet has twice reported success and delivered nothing.
  * The only authority on whether a drip landed is the chain.
  */
-import { MirrorClient, getUsdcBalance } from '@tab/mirror'
+import { getUsdcBalance, MirrorClient } from '@tab/mirror'
 import { format, type MicroUsdc } from '@tab/money'
 
 const REAL_USDC = '0.0.429274'
@@ -45,7 +45,9 @@ for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
   const landed = results.find((r) => r.balance > 0n)
   if (landed) {
     console.log('\n')
-    console.log(`  ARRIVED — ${format(landed.balance)} USDC on ${landed.id} (${landed.label.trim()})`)
+    console.log(
+      `  ARRIVED — ${format(landed.balance)} USDC on ${landed.id} (${landed.label.trim()})`,
+    )
     if (landed.label.trim() === 'relay') {
       console.log('\n  Next:  pnpm faucet:sweep      # forward it to the operator')
       console.log(`         then set USDC_TOKEN_ID=${REAL_USDC} in .env`)

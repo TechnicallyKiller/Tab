@@ -12,7 +12,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { readWorkspace, report, ROOT } from './lib.mjs'
+import { ROOT, readWorkspace, report } from './lib.mjs'
 
 /**
  * Toolchain packages every workspace member needs to compile and test itself.
@@ -20,9 +20,7 @@ import { readWorkspace, report, ROOT } from './lib.mjs'
  * "zero dependencies" rule is about what the package PULLS IN when imported,
  * not about whether it can be typechecked.
  */
-const TOOLCHAIN = new Set([
-  'typescript', '@types/node', 'vitest', 'tsup', 'tsx', '@biomejs/biome',
-])
+const TOOLCHAIN = new Set(['typescript', '@types/node', 'vitest', 'tsup', 'tsx', '@biomejs/biome'])
 
 const spec = JSON.parse(readFileSync(join(ROOT, 'boundaries.json'), 'utf8'))
 const SCOPE = `${spec.scope}/`
@@ -44,7 +42,8 @@ for (const { name, group, shortName, pkg } of present) {
     failures.push({
       where: `${group}/${shortName}/package.json`,
       what: `${name} is not declared in boundaries.json`,
-      why: 'Every workspace package needs an entry stating what it may depend on and why. ' +
+      why:
+        'Every workspace package needs an entry stating what it may depend on and why. ' +
         'Add one, or the package sits outside the architecture with nothing checking it.',
     })
     continue

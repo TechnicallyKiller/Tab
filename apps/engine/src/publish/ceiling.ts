@@ -12,7 +12,7 @@
  * decoration. There is no partial version of this property.
  */
 import { submitMessage, type TabClient } from '@tab/hedera'
-import { toWire, type MicroUsdc } from '@tab/money'
+import { type MicroUsdc, toWire } from '@tab/money'
 import { canonicalHash, ceilingUpdate, encode } from '@tab/protocol'
 import type { CeilingResult } from '@tab/scoring'
 

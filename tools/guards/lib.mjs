@@ -9,8 +9,15 @@ import { join, relative, resolve } from 'node:path'
 export const ROOT = resolve(import.meta.dirname, '../..')
 const WORKSPACE_DIRS = ['apps', 'packages', 'agents', 'tools']
 const SKIP_DIRS = new Set([
-  'node_modules', 'dist', '.next', '.turbo', 'coverage', '.git',
-  'drizzle', '.pnpm-store', 'surface-selection-decision',
+  'node_modules',
+  'dist',
+  '.next',
+  '.turbo',
+  'coverage',
+  '.git',
+  'drizzle',
+  '.pnpm-store',
+  'surface-selection-decision',
 ])
 
 /** Every workspace package: { name, shortName, group, dir, pkg }. */

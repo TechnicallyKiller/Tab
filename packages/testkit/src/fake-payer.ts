@@ -13,7 +13,7 @@
 import { PrivateKey } from '@hiero-ledger/sdk'
 import { configureGlobalHttp } from '@tab/mirror'
 import { format, usdc } from '@tab/money'
-import { NETWORKS, createSpendClient, tokenAsset } from '@tab/x402'
+import { createSpendClient, NETWORKS, tokenAsset } from '@tab/x402'
 
 configureGlobalHttp({ connectTimeoutMs: 90_000, headersTimeoutMs: 150_000, bodyTimeoutMs: 150_000 })
 
