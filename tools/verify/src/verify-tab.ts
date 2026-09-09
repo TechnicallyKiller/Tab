@@ -230,7 +230,7 @@ for (const r of results) console.log(r.text)
 /*
  * Say what this command cannot check — and say when that list is EMPTY.
  *
- * It used to name `debit_has_hold` and `commit_amount_matches_hold`, because
+ * It used to name `debit_has_hold` and `commit_within_hold`, because
  * holds were never published and an HCS replay showed debits appearing from
  * nowhere. Holds are on the topic now, so the write-ahead ordering is
  * externally checkable and the list is empty.

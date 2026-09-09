@@ -222,11 +222,38 @@ test('a debit that bypassed reserve is caught', () => {
   assert.ok(r.violations.some((v) => v.invariant === 'debit_has_hold'))
 })
 
-test('debiting more than was held is caught', () => {
+test('debiting MORE than was held is caught — the direction that protects the house', () => {
   const r = checkLedger(
     [hold('h1', '0.100000', 1), debit('h1', '-0.900000', 2)], CEILING, NOW,
   )
-  assert.ok(r.violations.some((v) => v.invariant === 'commit_amount_matches_hold'))
+  assert.ok(r.violations.some((v) => v.invariant === 'commit_within_hold'))
+})
+
+test('debiting LESS than was held is NORMAL, not a violation', () => {
+  /*
+   * A hold reserves up to `max`; the debit is what the seller actually charged.
+   * This invariant required EQUALITY, which was true only while the gateway
+   * debited the cap — so fixing that bug made the checker start failing on a
+   * correct ledger:
+   *
+   *     commit_amount_matches_hold: hold h_11c3bc63b0be4530 reserved 0.2000
+   *     but debited 0.0400 — the difference is unaccounted for
+   *
+   * Nothing was unaccounted for. The agent reserved headroom it did not use.
+   * Only a live run against real history surfaced it, because every fixture had
+   * been written when the two numbers were always equal.
+   */
+  const r = checkLedger(
+    [hold('h1', '0.200000', 1), debit('h1', '-0.040000', 2)], CEILING, NOW,
+  )
+  assert.equal(r.violations.filter((v) => v.invariant === 'commit_within_hold').length, 0)
+})
+
+test('debiting EXACTLY what was held is still fine', () => {
+  const r = checkLedger(
+    [hold('h1', '0.040000', 1), debit('h1', '-0.040000', 2)], CEILING, NOW,
+  )
+  assert.equal(r.violations.filter((v) => v.invariant === 'commit_within_hold').length, 0)
 })
 
 test('spending past the ceiling is caught', () => {

@@ -53,7 +53,32 @@ export function checkDebitsHaveHolds(entries: readonly Entry[]): Violation[] {
     }))
 }
 
-/** A committed hold must debit exactly what it reserved. */
+/**
+ * A committed hold must never debit MORE than it reserved.
+ *
+ * ## This required equality, and equality was wrong
+ *
+ * A hold reserves up to `max`; the debit is what the seller actually charged.
+ * Those are legitimately different — the gateway used to debit the CAP, and
+ * fixing that (so a 0.200000 cap against a 0.040000 seller debits 0.040000) is
+ * what made this invariant start failing on a correct ledger:
+ *
+ *     commit_amount_matches_hold: hold h_11c3bc63b0be4530 reserved 0.2000
+ *     but debited 0.0400 — the difference is unaccounted for
+ *
+ * Nothing was unaccounted for. The agent reserved headroom it did not use, and
+ * the unused part expires with the hold.
+ *
+ * The real invariant is one-directional, and it is the direction that protects
+ * the house: **debiting more than was authorised** means a spend escaped the
+ * reservation that was supposed to bound it. Debiting less is the system
+ * working.
+ *
+ * Worth naming as a class of mistake: a fix to the WRITER invalidated an
+ * invariant in the CHECKER, and only a live run against real history surfaced
+ * it. An invariant is code too, and "the tests pass" did not cover it because
+ * every fixture had been written when the two numbers were always equal.
+ */
 export function checkCommitAmountsMatch(entries: readonly Entry[]): Violation[] {
   const reserved = new Map<string, MicroUsdc>()
   for (const entry of entries) {
@@ -66,12 +91,12 @@ export function checkCommitAmountsMatch(entries: readonly Entry[]): Violation[] 
     if (held === undefined) continue // covered by checkDebitsHaveHolds
     // A debit is negative; a hold is positive.
     const debited = micro(-entry.amount)
-    if (debited !== held) {
+    if (debited > held) {
       out.push({
-        invariant: 'commit_amount_matches_hold',
+        invariant: 'commit_within_hold',
         detail:
           `hold ${entry.holdId} reserved ${format(held)} but debited ${format(debited)} — ` +
-          'the difference is unaccounted for',
+          'the spend exceeded the headroom that was authorised for it',
         material: true,
       })
     }
@@ -204,7 +229,7 @@ export function checkLedger(
     checked: [
       'hold_committed_once',
       'debit_has_hold',
-      'commit_amount_matches_hold',
+      'commit_within_hold',
       'available_non_negative',
       'window_settled_once',
     ],
@@ -241,7 +266,7 @@ export function checkLedger(
  *
  * Empty, and that is the point of publishing holds.
  *
- * It used to hold `debit_has_hold` and `commit_amount_matches_hold`, because
+ * It used to hold `debit_has_hold` and `commit_within_hold`, because
  * `@tab/protocol` had no hold message: holds lived in the gateway's memory and
  * never reached a topic, so an HCS replay showed debits appearing from nowhere
  * and `verify-tab` printed FAIL for every tab on a correct ledger. Holds are
@@ -328,7 +353,7 @@ export function checkPublicLedger(
     checked: [
       'hold_committed_once',
       'debit_has_hold',
-      'commit_amount_matches_hold',
+      'commit_within_hold',
       'available_non_negative',
       'window_settled_once',
     ],
