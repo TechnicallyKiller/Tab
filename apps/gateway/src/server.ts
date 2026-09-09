@@ -309,20 +309,51 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
   app.get('/v1/tabs/:tab/counterparties', async (request) => {
     const { tab } = request.params as { tab: string }
     const weights = deps.weights?.() ?? new Map()
+    const facts = deps.facts?.()
+
+    /*
+     * The tab's OWN funder, carried on every row.
+     *
+     * Denormalised on purpose. `COMMON_FUNDER` is decided by comparing exactly
+     * two values — `facts[tab].funder` and `facts[counterparty].funder` — and
+     * putting both on the row makes each one self-contained: a reader can check
+     * the rule without holding the rest of the response in their head, and the
+     * console does not have to correlate two shapes to render one sentence.
+     *
+     * These are the values the rule actually compared, not a re-derivation. The
+     * gateway cannot import `@tab/graph` and does not need to.
+     */
+    const tabFacts = facts?.get(tab)
+
     return [...weights.values()]
       .filter((w) => w.tab === tab)
       .sort((a, b) => b.shareBp - a.shareBp || (a.counterparty < b.counterparty ? -1 : 1))
-      .map((w) => ({
-        counterparty: w.counterparty,
-        bp: w.bp,
-        reasons: w.reasons,
-        blocking: w.blocking,
-        revenue: toWire(w.revenue),
-        shareBp: w.shareBp,
-        window: w.window,
-        at: w.at,
-        ...(w.token ? { token: w.token } : {}),
-      }))
+      .map((w) => {
+        const own = facts?.get(w.counterparty)
+        return {
+          counterparty: w.counterparty,
+          bp: w.bp,
+          reasons: w.reasons,
+          blocking: w.blocking,
+          revenue: toWire(w.revenue),
+          shareBp: w.shareBp,
+          window: w.window,
+          at: w.at,
+          ...(w.token ? { token: w.token } : {}),
+          /*
+           * Absent when nothing has been published for this account.
+           *
+           * Never defaulted. A counterparty whose provenance we have not
+           * observed is a DIFFERENT fact from one funded by nobody, and the
+           * console renders the difference — inventing a funder here would
+           * fabricate the exact evidence this panel exists to expose.
+           */
+          ...(own?.createdAt ? { firstSeen: own.createdAt } : {}),
+          ...(own?.funder ? { funder: own.funder } : {}),
+          ...(own?.funderSeq !== undefined ? { funderSeq: own.funderSeq } : {}),
+          ...(tabFacts?.funder ? { tabFunder: tabFacts.funder } : {}),
+        }
+      })
   })
 
   /**

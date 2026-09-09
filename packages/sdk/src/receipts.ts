@@ -135,6 +135,14 @@ export async function counterparties(
       window: Number(r['window'] ?? 0),
       at: String(r['at']),
       ...(r['token'] ? { token: String(r['token']) } : {}),
+      // Absent stays absent — see `CounterpartyWeight` for why defaulting any
+      // of these would fabricate the evidence the panel exists to show.
+      ...(r['firstSeen'] ? { firstSeen: String(r['firstSeen']) } : {}),
+      ...(r['funder'] ? { funder: String(r['funder']) } : {}),
+      ...(r['funderSeq'] !== undefined && r['funderSeq'] !== null
+        ? { funderSeq: Number(r['funderSeq']) }
+        : {}),
+      ...(r['tabFunder'] ? { tabFunder: String(r['tabFunder']) } : {}),
     }
   })
 }

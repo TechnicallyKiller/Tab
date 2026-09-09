@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { format, micro, usdc, type MicroUsdc } from '@tab/money'
 import type { RefusalCode } from '@tab/protocol'
-import type { Entry, PublishedCeiling, PublishedWeight } from '@tab/ledger'
+import type { Entry, PublishedCeiling, PublishedWeight, RememberedFacts } from '@tab/ledger'
 import type { SettlementEntry } from './settlements.ts'
 import type { SpendClient } from '@tab/x402'
 import type { GatewayEnv } from './env.ts'
@@ -96,6 +96,13 @@ export interface SpendDeps {
    * claim, nothing more.
    */
   settlements?: () => ReadonlyMap<string, SettlementEntry[]>
+  /**
+   * Published account provenance, for the Counterparties evidence panel.
+   *
+   * Read-only and never consulted by the spend path — the graph runs in the
+   * engine and the fast path enforces only the published ceiling.
+   */
+  facts?: () => ReadonlyMap<string, RememberedFacts>
 }
 
 /** Hash the request, never store the request. Receipts carry the hash. */

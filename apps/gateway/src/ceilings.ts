@@ -16,8 +16,8 @@
 import { readTopic, reassembleChunks, type MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
 import {
-  ceilingHistoryFromMessages, weightsFromMessages,
-  type PublishedCeiling, type PublishedWeight,
+  ceilingHistoryFromMessages, factsFromMessages, weightsFromMessages,
+  type PublishedCeiling, type PublishedWeight, type RememberedFacts,
 } from '@tab/ledger'
 
 /*
@@ -50,6 +50,18 @@ export interface CeilingReplay {
    * and the history behind it cannot disagree on screen.
    */
   history: Map<string, PublishedCeiling[]>
+  /**
+   * Published account provenance — creation time and funder.
+   *
+   * Served so the Counterparties view can show the EVIDENCE for a reason
+   * rather than only the reason. `COMMON_FUNDER` is decided by comparing two
+   * values — the tab's funder and the counterparty's — and until these were
+   * published the console rendered `—` for both, so the strongest claim in the
+   * demo was unfalsifiable on screen.
+   *
+   * These are the two values the rule actually compared, not a re-derivation.
+   */
+  facts: Map<string, RememberedFacts>
   read: number
 }
 
@@ -78,6 +90,7 @@ export async function replayCeilings(
    * its last element IS the latest, and deriving it here makes "the ceiling in
    * force" and "the last row of the chart" the same fact by construction.
    */
+  const facts = factsFromMessages(assembled).byAccount
   const history = ceilingHistoryFromMessages(assembled)
   const byTab = new Map<string, CeilingSnapshot>()
   for (const [tab, list] of history) {
@@ -85,7 +98,7 @@ export async function replayCeilings(
     if (latest) byTab.set(tab, latest)
   }
 
-  return { byTab, weights, history, read: assembled.length }
+  return { byTab, weights, history, facts, read: assembled.length }
 }
 
 /**

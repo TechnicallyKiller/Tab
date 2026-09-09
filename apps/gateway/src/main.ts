@@ -83,6 +83,17 @@ let latestWeights = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['
  */
 let latestCeilings = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['history'] extends Map<string, infer C> ? C : never>()
 
+/**
+ * Published account provenance, kept for the Counterparties evidence panel.
+ *
+ * The gateway does not USE these — the graph runs in the engine and the fast
+ * path enforces only the published ceiling. It serves them because `apps/web`
+ * may talk to nothing but the gateway, and without them the strongest claim in
+ * the demo (`COMMON_FUNDER`: one operator on both sides) rendered with `—`
+ * where its two supporting values should be.
+ */
+let latestFacts = new Map<string, Awaited<ReturnType<typeof replayCeilings>>['facts'] extends Map<string, infer F> ? F : never>()
+
 export function weightsSnapshot() {
   return latestWeights
 }
@@ -91,10 +102,15 @@ export function ceilingsSnapshot() {
   return latestCeilings
 }
 
+export function factsSnapshot() {
+  return latestFacts
+}
+
 async function syncCeilings(label: string): Promise<void> {
   const replay = await replayCeilings(mirror, env.ceilingTopic)
   latestWeights = replay.weights
   latestCeilings = replay.history
+  latestFacts = replay.facts
   for (const [t, snapshot] of replay.byTab) {
     const before = state.ceilingFor(t)
     if (before === snapshot.ceiling) continue
@@ -115,7 +131,10 @@ async function syncCeilings(label: string): Promise<void> {
      * `ceilings          settlements       settlements boot  5 window(s)`. A
      * boot line that renders as garbage is a boot line nobody reads.
      */
-    console.log(`${replay.byTab.size} tab(s) · ${replay.read} message(s) on the ceiling topic`)
+    console.log(
+      `${replay.byTab.size} tab(s) · ${replay.read} message(s) · ` +
+        `${replay.facts.size} account(s) of published provenance`,
+    )
   }
 }
 
@@ -239,6 +258,7 @@ const app = buildServer(
     weights: weightsSnapshot,
     ceilings: ceilingsSnapshot,
     settlements: settlementsSnapshot,
+    facts: factsSnapshot,
   },
   agentUpstream
     ? {

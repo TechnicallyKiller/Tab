@@ -151,6 +151,30 @@ export interface CounterpartyWeight {
   window: number
   at: string
   token?: string
+
+  /*
+   * ── the evidence, from the published graph facts ──
+   *
+   * All optional, and absent means NOT PUBLISHED — never defaulted. A
+   * counterparty whose provenance has not been observed is a different fact
+   * from one funded by nobody, and a caller must render the difference:
+   * inventing a funder here would fabricate the exact evidence these fields
+   * exist to expose.
+   */
+  /** Consensus timestamp of the counterparty's account creation. */
+  firstSeen?: string
+  /** The account that created this counterparty. */
+  funder?: string
+  /** Sequence number of the message that established `funder` — cite this. */
+  funderSeq?: number
+  /**
+   * The account that created the TAB.
+   *
+   * On every row so each is self-contained: `COMMON_FUNDER` is decided by
+   * comparing exactly this against `funder`, so a reader holding one row can
+   * check the rule without correlating two shapes.
+   */
+  tabFunder?: string
 }
 
 /* ── ceiling ─────────────────────────────────────────────────────────────── */
