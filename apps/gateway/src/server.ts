@@ -59,7 +59,20 @@ function wireCeiling(c: PublishedCeiling) {
 }
 
 export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance {
-  const app = Fastify({ logger: false })
+  /*
+   * `trustProxy` because the earn leg runs behind Render's TLS terminator.
+   *
+   * @x402/fastify builds the 402 challenge's `resource.url` from
+   * `request.protocol`, and Fastify reports `http` unless it is told to honour
+   * `X-Forwarded-Proto`. So a payer that fetched `https://…` was handed a
+   * challenge naming `http://…` — a different resource than the one it asked
+   * for, in the document it then signs over.
+   *
+   * It is only a hosting detail, and locally there is no proxy and nothing
+   * changes. It surfaced by curling the deployed service, not from any test,
+   * because no test runs behind a proxy.
+   */
+  const app = Fastify({ logger: false, trustProxy: true })
 
   /*
    * AMOUNT FIELDS IN JSON USE `toWire`, NEVER `format`.

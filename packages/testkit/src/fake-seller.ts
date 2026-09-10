@@ -122,6 +122,18 @@ const earn = createEarnServer({
 const app = express()
 
 /*
+ * Behind Render's TLS terminator, Express sees a plain `http` request.
+ *
+ * @x402/express builds the challenge's `resource.url` from `req.protocol`,
+ * which honours `X-Forwarded-Proto` only once the proxy is trusted — so
+ * without this a buyer fetching `https://…` is quoted for `http://…`, and the
+ * resource it agreed to pay for is not the one it requested.
+ *
+ * Harmless locally: with no proxy in front, `req.protocol` is unchanged.
+ */
+app.set('trust proxy', true)
+
+/*
  * Unpaid, and mounted BEFORE the payment middleware so it is never gated —
  * a host health-checking a 402 would restart a healthy seller forever.
  *
