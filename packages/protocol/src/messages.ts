@@ -362,6 +362,20 @@ export const registration = base.extend({
   perCall: amount,
   /** Starter tabs may only buy from an allowlist until they graduate. */
   allowlist: z.array(entityId).max(16),
+  /**
+   * The agent's HCS-14 Universal Agent Identifier.
+   *
+   * Derived rather than issued: six canonical fields, SHA-384, Base58. Any
+   * party computes the same id from the same inputs, which is what lets a
+   * credit record travel between systems that do not know each other — today a
+   * tab is keyed on a Hedera account, so a redeployment starts from zero.
+   *
+   * OPTIONAL, and on the message that already exists rather than a new one. A
+   * reader that does not care ignores it, every registration published before
+   * it still decodes, and no ceiling, weight or settlement changes. Adding an
+   * identity should not be able to move a credit decision.
+   */
+  uaid: z.string().min(8).max(256).optional(),
 })
 
 /* ── the union written to any topic ─────────────────────────────────────── */

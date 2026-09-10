@@ -25,7 +25,7 @@
  */
 import { submitMessage, type TabClient } from '@tab/hedera'
 import { type MicroUsdc, toWire } from '@tab/money'
-import { encode, registration } from '@tab/protocol'
+import { encode, hcs14Uaid, registration, tabAgent } from '@tab/protocol'
 
 export interface PublishRegistrationParams {
   hedera: TabClient
@@ -45,6 +45,8 @@ export interface PublishRegistrationParams {
    * the field is deliberately unused rather than forgotten.
    */
   allowlist?: readonly string[]
+  /** Network name for the HCS-14 nativeId, e.g. `testnet`. */
+  network?: string
 }
 
 export interface PublishedRegistration {
@@ -63,12 +65,28 @@ export async function publishRegistration(
 ): Promise<PublishedRegistration | undefined> {
   if (!params.root) return undefined
 
+  /*
+   * The agent's HCS-14 identifier, derived at publish time.
+   *
+   * Derived rather than stored, because it is a pure function of the six
+   * canonical fields — a cached copy could disagree with what those fields say
+   * today, and an identifier that disagrees with itself is worse than none.
+   *
+   * A failure here must NOT stop a registration: the claim on the funding root
+   * is what enforces one Starter Tab per operator, and losing that to a hashing
+   * problem would trade a security rule for a nice-to-have.
+   */
+  const uaid = await hcs14Uaid(tabAgent(params.tab, params.network ?? 'testnet')).catch(
+    () => undefined,
+  )
+
   const message = registration.parse({
     v: 1,
     t: 'register',
     tab: params.tab,
     w: params.window,
     root: params.root,
+    ...(uaid ? { uaid } : {}),
     ceil: toWire(params.starterCeiling),
     perCall: toWire(params.perCallCap),
     allowlist: [...(params.allowlist ?? [])],

@@ -21,6 +21,14 @@ export {
   windowIndex,
 } from './common.ts'
 export {
+  base58,
+  type Hcs14Agent,
+  hcs14Aid,
+  hcs14Canonical,
+  hcs14Uaid,
+  tabAgent,
+} from './hcs14.ts'
+export {
   type CeilingInputs,
   type CeilingUpdate,
   type CreditReceipt,

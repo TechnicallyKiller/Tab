@@ -302,6 +302,13 @@ export interface TabSummary {
   registeredRoot?: string
   registeredAt?: string
   registrationSeq?: number
+  /**
+   * The agent's HCS-14 Universal Agent Identifier.
+   *
+   * Derived from six canonical fields rather than issued, so anyone can
+   * recompute it. Absent on a registration published before it existed.
+   */
+  uaid?: string
 }
 
 /**

@@ -445,7 +445,23 @@ async function pass(): Promise<void> {
    * already holds it, and re-claiming would add a message per window forever to
    * say something the topic already says.
    */
-  if (root && grant.status === 'granted' && grant.seq === undefined) {
+  /*
+   * Publish when the root is UNCLAIMED, or when the claim we already hold
+   * predates the HCS-14 identifier.
+   *
+   * Without the second condition a tab that registered before HCS-14 existed
+   * would never carry an identity — its root is already claimed, so the first
+   * condition is false forever. Re-registering is safe by construction:
+   * `registrationsFromMessages` updates `byTab` but leaves `byRoot` with the
+   * FIRST claim, so an upgrade cannot steal a root from anyone.
+   *
+   * Self-terminating: once the published registration carries a `uaid`, the
+   * replay sees it and this stops firing. No republish loop.
+   */
+  const heldRegistration = registrations.byTab.get(tabAccount)
+  const needsIdentity = grant.status === 'granted' && heldRegistration?.uaid === undefined
+
+  if (root && grant.status === 'granted' && (grant.seq === undefined || needsIdentity)) {
     const claimed = await publishRegistration({
       hedera,
       topicId: ceilingTopic,
@@ -457,8 +473,9 @@ async function pass(): Promise<void> {
     })
     if (claimed) {
       console.log(
-        `  registration    claimed root ${claimed.root} · seq ${claimed.sequenceNumber} — ` +
-          'one Starter Tab per funding root',
+        `  registration    ${grant.seq === undefined ? 'claimed' : 'upgraded'} root ${claimed.root} · ` +
+          `seq ${claimed.sequenceNumber} — one Starter Tab per funding root` +
+          (needsIdentity ? ' · now carrying an HCS-14 identity' : ''),
       )
     }
   }

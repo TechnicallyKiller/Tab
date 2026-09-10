@@ -310,6 +310,8 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
                 registeredRoot: registrations.get(tab)!.root,
                 registeredAt: registrations.get(tab)!.at,
                 registrationSeq: registrations.get(tab)!.seq,
+                // The HCS-14 identifier, when one was published.
+                ...(registrations.get(tab)!.uaid ? { uaid: registrations.get(tab)!.uaid } : {}),
               }
             : {}),
           // Present only when the engine has published for this tab. A tier is

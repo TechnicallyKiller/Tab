@@ -351,6 +351,7 @@ export async function tabs(client: TabClient): Promise<TabList> {
         ...(r['registrationSeq'] !== undefined && r['registrationSeq'] !== null
           ? { registrationSeq: Number(r['registrationSeq']) }
           : {}),
+        ...(r['uaid'] ? { uaid: String(r['uaid']) } : {}),
       }
       return summary
     }),

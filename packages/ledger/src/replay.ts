@@ -481,6 +481,8 @@ export function factsFromMessages(messages: readonly TopicMessage[]): FactsRepla
 /** One tab's claim on a funding root — the Starter Tab grant. */
 export interface Registration {
   tab: string
+  /** The agent's HCS-14 identifier, when the registration carried one. */
+  uaid?: string
   /** The funding root this tab claimed. Absent on a rootless registration. */
   root?: string
   ceiling: MicroUsdc
@@ -536,6 +538,9 @@ export function registrationsFromMessages(messages: readonly TopicMessage[]): Re
 
     const registration: Registration = {
       tab: msg.tab,
+      // Absent stays absent: a registration published before HCS-14 existed
+      // has no identifier, which is different from having an empty one.
+      ...(msg.uaid ? { uaid: msg.uaid } : {}),
       ...(msg.root ? { root: msg.root } : {}),
       ceiling: usdc(msg.ceil),
       perCall: usdc(msg.perCall),

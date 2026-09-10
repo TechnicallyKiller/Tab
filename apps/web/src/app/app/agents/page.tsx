@@ -142,6 +142,7 @@ export default function AgentsView() {
                   Ceiling enforced
                 </th>
                 <th scope="col">Bound by</th>
+                <th scope="col">Identity (HCS-14)</th>
                 <th scope="col">Starter claim</th>
                 <th scope="col" className="n">
                   Entries
@@ -208,6 +209,19 @@ export default function AgentsView() {
                         · published {format(t.publishedCeiling)}, not yet enforced
                       </span>
                     ) : null}
+                  </td>
+                  <td className="t-mono" style={{ fontSize: 12, color: 'var(--ink-2)' }}>
+                    {t.uaid ? (
+                      /*
+                       * Truncated in the middle, not the end. The hash is the
+                       * distinctive part and the `nativeId` suffix is what a
+                       * reader recognises — cutting the tail would hide which
+                       * account it belongs to.
+                       */
+                      <span title={t.uaid}>{`${t.uaid.slice(0, 18)}…${t.uaid.slice(-16)}`}</span>
+                    ) : (
+                      <span style={{ color: 'var(--ink-3)' }}>none published</span>
+                    )}
                   </td>
                   <td style={{ color: 'var(--ink-2)' }}>
                     {t.registeredRoot ? (
