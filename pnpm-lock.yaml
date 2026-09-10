@@ -98,6 +98,28 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  apps/cli:
+    dependencies:
+      '@tab/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@tab/params':
+        specifier: workspace:*
+        version: link:../../packages/params
+      '@tab/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@tab/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   apps/engine:
     dependencies:
       '@hiero-ledger/sdk':
@@ -163,7 +185,7 @@ importers:
         version: link:../../packages/x402
       '@x402/fastify':
         specifier: 'catalog:'
-        version: 2.25.0(ethers@6.16.0)(fastify@5.12.3)(typescript@5.9.3)
+        version: 2.25.0(ethers@6.17.0)(fastify@5.12.3)(typescript@5.9.3)
       fastify:
         specifier: 'catalog:'
         version: 5.12.3
@@ -248,6 +270,31 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/agentkit-plugin:
+    dependencies:
+      '@hashgraph/hedera-agent-kit':
+        specifier: ^4.0.0
+        version: 4.1.0(@hiero-ledger/sdk@2.87.0(bn.js@5.2.3))
+      '@tab/money':
+        specifier: workspace:*
+        version: link:../money
+      '@tab/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@tab/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
@@ -439,7 +486,7 @@ importers:
         version: link:../x402
       '@x402/express':
         specifier: 'catalog:'
-        version: 2.25.0(ethers@6.16.0)(express@5.2.1)(typescript@5.9.3)
+        version: 2.25.0(ethers@6.17.0)(express@5.2.1)(typescript@5.9.3)
       express:
         specifier: ^5.1.0
         version: 5.2.1
@@ -526,7 +573,7 @@ importers:
         version: 2.25.0
       '@x402/express':
         specifier: 'catalog:'
-        version: 2.25.0(ethers@6.16.0)(express@5.2.1)(typescript@5.9.3)
+        version: 2.25.0(ethers@6.17.0)(express@5.2.1)(typescript@5.9.3)
       '@x402/fetch':
         specifier: 'catalog:'
         version: 2.25.0
@@ -1056,6 +1103,12 @@ packages:
     resolution: {integrity: sha512-tMXdRCfYVixjuFK+Hk0Q1s38gV9zDiDJfWL3h1rv4Qc39oILCu1TRTDt7+fGUI8K4G1Fj125Hx/ru3azECWTyQ==}
     engines: {node: '>=6'}
     hasBin: true
+
+  '@hashgraph/hedera-agent-kit@4.1.0':
+    resolution: {integrity: sha512-xUEG1PfzfO6YyM6U/ldgFXWh6EW1FGkU/msWqflEEpLSWnYC0LNiPHSMn44MNPWWtZQldH1R49okDJg2k8YcMw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@hiero-ledger/sdk': 2.87.0
 
   '@hiero-ledger/cryptography@1.21.0':
     resolution: {integrity: sha512-q3LR+OgJMDNRund2CTsvFRHab5EKypm81v+0yM/rGWRq0igPRbd/SGzs2X7Q6n/UvZYT+bKI8gnrXzafbN2TCA==}
@@ -1959,6 +2012,9 @@ packages:
   bignumber.js@11.1.2:
     resolution: {integrity: sha512-9idDyC15Vpk+53w4OfxEu2PqHSKFQUffrH1oTvnkJ9fduTJ032tpuI2sxS04oCzocklokWUZmWVEkTEQdLmUOQ==}
 
+  bignumber.js@9.3.1:
+    resolution: {integrity: sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ==}
+
   bn.js@5.2.3:
     resolution: {integrity: sha512-EAcmnPkxpntVL+DS7bO1zhcZNvCkxqtkd0ZY53h06GNQ3DEkkGZ/gKgmDv6DdZQGj9BgfSPKtJJ7Dp1GPP8f7w==}
 
@@ -2201,6 +2257,10 @@ packages:
 
   ethers@6.16.0:
     resolution: {integrity: sha512-U1wulmetNymijEhpSEQ7Ct/P/Jw9/e7R1j5XIbPRydgV2DjLVMsULDlNksq3RQnFgKoLlZf88ijYtWEXcPa07A==}
+    engines: {node: '>=14.0.0'}
+
+  ethers@6.17.0:
+    resolution: {integrity: sha512-BpyrpIPJ3ydEVow8zGaz1DuPS7YU8DcWxuBnY9a0UA/lvAPwrMr+EPXsfrul628SRaekPNeIM4UFh/91GWZang==}
     engines: {node: '>=14.0.0'}
 
   eventemitter3@5.0.1:
@@ -3765,6 +3825,18 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
+  '@hashgraph/hedera-agent-kit@4.1.0(@hiero-ledger/sdk@2.87.0(bn.js@5.2.3))':
+    dependencies:
+      '@hiero-ledger/sdk': 2.87.0(bn.js@5.2.3)
+      bignumber.js: 9.3.1
+      ethers: 6.17.0
+      long: 5.3.2
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@hiero-ledger/cryptography@1.21.0':
     dependencies:
       '@noble/ciphers': 2.2.0
@@ -4198,11 +4270,11 @@ snapshots:
       '@noble/hashes': 1.8.0
       apg-js: 4.4.0
 
-  '@signinwithethereum/siwe@4.2.1(ethers@6.16.0)(viem@2.56.3(typescript@5.9.3)(zod@3.25.76))':
+  '@signinwithethereum/siwe@4.2.1(ethers@6.17.0)(viem@2.56.3(typescript@5.9.3)(zod@3.25.76))':
     dependencies:
       '@signinwithethereum/siwe-parser': 4.2.1
     optionalDependencies:
-      ethers: 6.16.0
+      ethers: 6.17.0
       viem: 2.56.3(typescript@5.9.3)(zod@3.25.76)
 
   '@swc/helpers@0.5.23':
@@ -4421,10 +4493,10 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@x402/express@2.25.0(ethers@6.16.0)(express@5.2.1)(typescript@5.9.3)':
+  '@x402/express@2.25.0(ethers@6.17.0)(express@5.2.1)(typescript@5.9.3)':
     dependencies:
       '@x402/core': 2.25.0
-      '@x402/extensions': 2.25.0(ethers@6.16.0)(typescript@5.9.3)
+      '@x402/extensions': 2.25.0(ethers@6.17.0)(typescript@5.9.3)
       express: 5.2.1
     transitivePeerDependencies:
       - bufferutil
@@ -4432,11 +4504,11 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@x402/extensions@2.25.0(ethers@6.16.0)(typescript@5.9.3)':
+  '@x402/extensions@2.25.0(ethers@6.17.0)(typescript@5.9.3)':
     dependencies:
       '@noble/curves': 1.9.7
       '@scure/base': 1.2.6
-      '@signinwithethereum/siwe': 4.2.1(ethers@6.16.0)(viem@2.56.3(typescript@5.9.3)(zod@3.25.76))
+      '@signinwithethereum/siwe': 4.2.1(ethers@6.17.0)(viem@2.56.3(typescript@5.9.3)(zod@3.25.76))
       '@x402/core': 2.25.0
       ajv: 8.20.0
       jose: 5.10.0
@@ -4449,10 +4521,10 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@x402/fastify@2.25.0(ethers@6.16.0)(fastify@5.12.3)(typescript@5.9.3)':
+  '@x402/fastify@2.25.0(ethers@6.17.0)(fastify@5.12.3)(typescript@5.9.3)':
     dependencies:
       '@x402/core': 2.25.0
-      '@x402/extensions': 2.25.0(ethers@6.16.0)(typescript@5.9.3)
+      '@x402/extensions': 2.25.0(ethers@6.17.0)(typescript@5.9.3)
       fastify: 5.12.3
     transitivePeerDependencies:
       - bufferutil
@@ -4556,6 +4628,8 @@ snapshots:
       is-windows: 1.0.2
 
   bignumber.js@11.1.2: {}
+
+  bignumber.js@9.3.1: {}
 
   bn.js@5.2.3: {}
 
@@ -4806,6 +4880,19 @@ snapshots:
       aes-js: 4.0.0-beta.5
       tslib: 2.7.0
       ws: 8.17.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  ethers@6.17.0:
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.1
+      '@noble/curves': 1.2.0
+      '@noble/hashes': 1.3.2
+      '@types/node': 22.7.5
+      aes-js: 4.0.0-beta.5
+      tslib: 2.7.0
+      ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate

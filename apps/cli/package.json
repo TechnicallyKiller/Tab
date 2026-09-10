@@ -1,0 +1,24 @@
+{
+  "name": "@tab/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tab": "./src/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --experimental-strip-types --test src/*.test.ts",
+    "start": "node --experimental-strip-types --env-file-if-exists=../../.env src/main.ts"
+  },
+  "dependencies": {
+    "@tab/money": "workspace:*",
+    "@tab/params": "workspace:*",
+    "@tab/protocol": "workspace:*",
+    "@tab/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
+}

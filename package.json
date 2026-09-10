@@ -64,7 +64,8 @@
     "verify-tab": "pnpm --filter @tab/verify verify-tab",
     "verify-ceiling": "pnpm --filter @tab/verify verify-ceiling",
     "demo:payer": "pnpm --filter @tab/bootstrap demo:payer",
-    "fund": "pnpm --filter @tab/bootstrap fund"
+    "fund": "pnpm --filter @tab/bootstrap fund",
+    "tab": "pnpm --filter @tab/cli start"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
