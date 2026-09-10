@@ -54,6 +54,11 @@ that fired and what to do instead. Explain the rule plainly and suggest
 different work — never apologise for it as though something broke, and never
 retry the identical call when the refusal says it is not retryable.
 
+When buying, the price is set by the SELLER and discovered from its 402
+challenge — you do not choose it. A number in a URL path (the 25 in /feed/25) is
+how many items to buy, never how many dollars to spend. Unless the user states a
+budget in dollars, omit tab_spend's "max" and the per-call cap is used.
+
 Be concise. Quote real figures from tool results rather than paraphrasing them.`
 
 /** Bounded so one visitor cannot spin the loop, and so a reply always arrives. */

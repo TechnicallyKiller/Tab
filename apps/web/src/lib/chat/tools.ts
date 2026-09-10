@@ -128,14 +128,44 @@ export const CHAT_TOOLS: readonly ChatTool[] = [
       'names the rule that fired and what to do instead.',
     parameters: {
       type: 'object',
-      properties: { url: { type: 'string', description: 'The seller URL to pay' }, max: AMOUNT },
-      required: ['url', 'max'],
+      properties: {
+        url: { type: 'string', description: 'The seller URL to pay' },
+        max: {
+          type: 'string',
+          description:
+            'The MOST the gateway may pay for this ONE call, as USDC with six decimals ' +
+            '(e.g. "0.050000"). This is a spending limit in DOLLARS, never a quantity of ' +
+            'goods. Numbers inside the URL — the 25 in /feed/25 — are item counts and must ' +
+            'NEVER be copied here. Omit this entirely when the user gave no budget.',
+        },
+      },
+      required: ['url'],
     },
     run: async (args, tab, tabId) => {
+      /*
+       * `max` is optional, and defaults to the tab's own per-call cap.
+       *
+       * A model reading "buy 25 records from /feed/25" will happily pass
+       * max: 25 — dollars, not records — and the gateway then refuses a
+       * 25.0000 spend against a 0.0500 cap. The refusal is CORRECT and reads
+       * to a visitor as the product being broken, because they asked for 25
+       * records and were told they cannot spend 25 dollars.
+       *
+       * Requiring the field forced the model to invent a number. Defaulting it
+       * to the cap means the natural sentence does the affordable thing: the
+       * gateway pays the 402's actual price when it fits under the cap, and
+       * refuses on the real rule when it does not.
+       */
+      const raw = args['max']
+      const max =
+        raw === undefined || raw === null || String(raw).trim() === ''
+          ? (await tab.state(tabId)).perCallCap
+          : usdc(String(raw))
+
       const result = await tab.spend({
         tab: tabId,
         url: String(args['url']),
-        max: usdc(String(args['max'])),
+        max,
       })
 
       if (result.outcome === 'paid') {
