@@ -80,7 +80,7 @@ function amount(value: unknown, field: string): MicroUsdc {
 export async function spend(client: TabClient, request: SpendRequest): Promise<SpendResult> {
   if (!request.tab) throw new TabInvalidError('spend() needs a tab id')
   if (!request.url) throw new TabInvalidError('spend() needs a seller url')
-  if (request.max <= 0n) {
+  if (request.max !== undefined && request.max <= 0n) {
     // A zero or negative max is a programming error, not a refusal: there is no
     // spend to underwrite, so the rail has nothing to decide.
     throw new TabInvalidError(`spend() needs a positive max, got ${request.max}`)
@@ -103,7 +103,10 @@ export async function spend(client: TabClient, request: SpendRequest): Promise<S
   }>('POST', '/v1/spend', {
     tab: request.tab,
     url: request.url,
-    max: toWire(request.max),
+    // Absent means "accept the seller's quote"; the gateway reads it from the
+    // 402. Sending an explicit null would instead be a value the gateway must
+    // interpret, so the key is simply left off.
+    ...(request.max !== undefined ? { max: toWire(request.max) } : {}),
     idempotencyKey,
     ...(request.init ? { init: request.init } : {}),
   })

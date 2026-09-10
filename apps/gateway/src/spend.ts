@@ -47,8 +47,13 @@ import type { LedgerState } from './state.ts'
 export interface SpendRequest {
   tab: string
   url: string
-  /** Ceiling for this single call, atomic units. */
-  max: MicroUsdc
+  /**
+   * Ceiling for this single call, atomic units.
+   *
+   * Optional: when absent the seller's own quoted price is used, so a caller
+   * that has no opinion about budget does not have to invent one.
+   */
+  max?: MicroUsdc
   /** Replays return the original result rather than spending twice. */
   idempotencyKey?: string
 }
@@ -153,12 +158,19 @@ const ENTITY_ID = /^\d+\.\d+\.\d+$/
  * well-formed id — existing demo scripts keep working, and a malformed one
  * falls through to the challenge rather than poisoning the receipt.
  */
-async function resolveSeller(url: string): Promise<string> {
+interface Challenge {
+  /** The seller's Hedera account, or `'unknown'` when it could not be read. */
+  payTo: string
+  /** The seller's own price, when the challenge stated one. */
+  amount?: MicroUsdc
+}
+
+async function resolveSeller(url: string): Promise<Challenge> {
   try {
     const fromQuery = new URL(url).searchParams.get('payTo')
-    if (fromQuery && ENTITY_ID.test(fromQuery)) return fromQuery
+    if (fromQuery && ENTITY_ID.test(fromQuery)) return { payTo: fromQuery }
   } catch {
-    return 'unknown' // not a URL at all; the caller is told plainly below
+    return { payTo: 'unknown' } // not a URL at all; the caller is told plainly below
   }
 
   try {
@@ -169,14 +181,28 @@ async function resolveSeller(url: string): Promise<string> {
      */
     const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) })
     const header = res.headers.get('payment-required')
-    if (!header) return 'unknown'
+    if (!header) return { payTo: 'unknown' }
 
     const decoded: unknown = JSON.parse(Buffer.from(header, 'base64').toString('utf8'))
-    const accepts = (decoded as { accepts?: { payTo?: unknown }[] }).accepts
-    const payTo = accepts?.[0]?.payTo
-    return typeof payTo === 'string' && ENTITY_ID.test(payTo) ? payTo : 'unknown'
+    const accepts = (decoded as { accepts?: { payTo?: unknown; amount?: unknown }[] }).accepts
+    const first = accepts?.[0]
+    const payTo = first?.payTo
+    if (typeof payTo !== 'string' || !ENTITY_ID.test(payTo)) return { payTo: 'unknown' }
+
+    /*
+     * The price travels with the payee, because they are the same statement:
+     * "this account wants this much for this resource". Reading one and
+     * discarding the other would leave the caller to invent a number the
+     * seller had already named.
+     *
+     * Atomic units on the wire, so it is parsed as an integer and never
+     * through a float.
+     */
+    const raw = first?.amount
+    const quoted = typeof raw === 'string' && /^\d+$/.test(raw) ? micro(BigInt(raw)) : undefined
+    return quoted === undefined ? { payTo } : { payTo, amount: quoted }
   } catch {
-    return 'unknown'
+    return { payTo: 'unknown' }
   }
 }
 
@@ -184,7 +210,8 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   const { env, state, client, receipts } = deps
   const at = nowConsensus()
   const window = deps.window()
-  const seller = await resolveSeller(request.url)
+  const challenge = await resolveSeller(request.url)
+  const seller = challenge.payTo
 
   /*
    * An unresolved counterparty stops the spend HERE, before any state changes.
@@ -205,8 +232,37 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
     }
   }
 
+  /*
+   * What this call is worth, and therefore what gets underwritten.
+   *
+   * A caller-supplied `max` wins — that is an explicit budget. Otherwise it is
+   * the seller's own quoted price, which is the number the checks below should
+   * have been reading all along: the cap exists to bound what an agent PAYS,
+   * and the seller decides that.
+   *
+   * Defaulting to the per-call cap instead (which the chat tool briefly did)
+   * silently disarms the cap: every spend arrives exactly AT the limit, passes,
+   * and then fails at payment time against a seller wanting more. The refusal
+   * that should have fired never does, and an underwriting decision surfaces as
+   * a transport error.
+   *
+   * With no `max` and no quote there is nothing to underwrite, so the spend
+   * stops here rather than guessing.
+   */
+  const max = request.max ?? challenge.amount
+  if (max === undefined) {
+    return {
+      outcome: 'failed',
+      reason:
+        `no price for ${request.url} — the seller quoted no amount in its x402 challenge and ` +
+        'the caller named no max, so there was nothing to authorise',
+      holdId: request.idempotencyKey ?? 'none',
+    }
+  }
+  const priced: SpendRequest & { max: MicroUsdc } = { ...request, max }
+
   // ── the checks, cheapest and most-likely-to-refuse first ────────────────
-  const refusal = check(deps, request, at)
+  const refusal = check(deps, priced, at)
   if (refusal) {
     // A refusal is published, not logged. The Refusals view is the product
     // demonstrating that underwriting works.
@@ -218,7 +274,7 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
         w: window,
         tok: env.tokenId,
         cp: seller,
-        amt: toWire(request.max),
+        amt: toWire(max),
         rule: refusal.rule,
         ev: refusal.evidence,
       })
@@ -235,7 +291,7 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
     window,
     holdId,
     counterparty: seller,
-    amount: request.max,
+    amount: max,
     expiresAt,
   }
   state.push(request.tab, hold)
@@ -264,7 +320,7 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
       tok: env.tokenId,
       hold: holdId,
       cp: seller,
-      amt: toWire(request.max),
+      amt: toWire(max),
       exp: expiresAt,
       req: requestHash(request.url, at),
     })
@@ -326,10 +382,10 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
    * recorded rather than silently treated as equal — an unreported price means
    * the debit is an UPPER BOUND, and the reconciler will flag it.
    */
-  const charged = result.amountPaid !== undefined ? micro(result.amountPaid) : request.max
+  const charged = result.amountPaid !== undefined ? micro(result.amountPaid) : max
   if (result.amountPaid === undefined) {
     console.warn(
-      `[spend] x402 reported no price for ${holdId}; debiting the cap ${format(request.max)} as ` +
+      `[spend] x402 reported no price for ${holdId}; debiting the cap ${format(max)} as ` +
         'an upper bound. The reconciler will flag this against the on-chain transfer.',
     )
   }
@@ -377,7 +433,11 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
  * Fails closed: anything unexpected refuses. A refused spend costs the agent a
  * job; an allowed spend past a ceiling costs the house real money.
  */
-function check(deps: SpendDeps, request: SpendRequest, at: string): SpendRefused | null {
+function check(
+  deps: SpendDeps,
+  request: SpendRequest & { max: MicroUsdc },
+  at: string,
+): SpendRefused | null {
   const { env, state } = deps
   const price = request.max
 

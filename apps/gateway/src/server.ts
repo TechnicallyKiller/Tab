@@ -270,26 +270,40 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
       idempotencyKey?: string
     }
 
-    if (!body?.url || !body?.max || !body?.tab) {
+    if (!body?.url || !body?.tab) {
       return reply.status(400).send({
-        error: 'tab, url and max are required',
-        example: { tab: '0.0.8812188', url: 'https://seller/x?payTo=0.0.1', max: '0.040000' },
+        error: 'tab and url are required',
+        example: { tab: '0.0.8812188', url: 'https://seller/feed/25', max: '0.040000' },
       })
     }
 
-    let max: MicroUsdc
-    try {
-      max = usdc(body.max)
-    } catch {
-      return reply.status(400).send({
-        error: `max must be a decimal amount like "0.040000", received ${JSON.stringify(body.max)}`,
-      })
+    /*
+     * `max` is OPTIONAL, and omitting it is the normal case.
+     *
+     * The seller states its price in the x402 challenge, so a caller with no
+     * particular budget has nothing to add — and requiring the field forced
+     * exactly that invention. Supply it to spend LESS than the seller asks (the
+     * call is then refused rather than underpaid); omit it to accept the quote,
+     * subject to every underwriting check as usual.
+     */
+    let max: MicroUsdc | undefined
+    if (body.max !== undefined) {
+      try {
+        max = usdc(body.max)
+      } catch {
+        return reply.status(400).send({
+          error: `max must be a decimal amount like "0.040000", received ${JSON.stringify(body.max)}`,
+        })
+      }
     }
 
     const outcome = await spend(deps, {
       tab: body.tab,
       url: body.url,
-      max,
+      // Spread rather than assigned: `exactOptionalPropertyTypes` treats an
+      // explicit `undefined` as different from an absent key, and absent is
+      // what "no budget stated" means.
+      ...(max !== undefined ? { max } : {}),
       ...(body.idempotencyKey ? { idempotencyKey: body.idempotencyKey } : {}),
     })
 

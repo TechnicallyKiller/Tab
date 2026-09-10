@@ -143,29 +143,24 @@ export const CHAT_TOOLS: readonly ChatTool[] = [
     },
     run: async (args, tab, tabId) => {
       /*
-       * `max` is optional, and defaults to the tab's own per-call cap.
+       * `max` is omitted entirely when the user named no budget.
        *
-       * A model reading "buy 25 records from /feed/25" will happily pass
-       * max: 25 — dollars, not records — and the gateway then refuses a
-       * 25.0000 spend against a 0.0500 cap. The refusal is CORRECT and reads
-       * to a visitor as the product being broken, because they asked for 25
-       * records and were told they cannot spend 25 dollars.
+       * It briefly defaulted to the tab's per-call cap here, which looked
+       * sensible and quietly disarmed the cap: every spend then arrived exactly
+       * AT the limit, passed the check, and failed at payment time against a
+       * seller charging more. The refusal that is the whole point of the
+       * product never fired, and an underwriting decision surfaced as a 502.
        *
-       * Requiring the field forced the model to invent a number. Defaulting it
-       * to the cap means the natural sentence does the affordable thing: the
-       * gateway pays the 402's actual price when it fits under the cap, and
-       * refuses on the real rule when it does not.
+       * The gateway reads the seller's quoted price from the x402 challenge and
+       * underwrites THAT. A budget is the caller's to state or not.
        */
       const raw = args['max']
-      const max =
-        raw === undefined || raw === null || String(raw).trim() === ''
-          ? (await tab.state(tabId)).perCallCap
-          : usdc(String(raw))
+      const stated = raw === undefined || raw === null || String(raw).trim() === ''
 
       const result = await tab.spend({
         tab: tabId,
         url: String(args['url']),
-        max,
+        ...(stated ? {} : { max: usdc(String(raw)) }),
       })
 
       if (result.outcome === 'paid') {

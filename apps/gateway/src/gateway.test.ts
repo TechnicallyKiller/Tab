@@ -1237,3 +1237,74 @@ test('an explicit ?payTo= still wins, so existing demo scripts keep working', as
     globalThis.fetch = realFetch
   }
 })
+
+test('the per-call cap fires on the SELLER quote when no max is given', async () => {
+  /*
+   * The regression that made this test exist.
+   *
+   * When the chat tool defaulted `max` to the per-call cap, every spend arrived
+   * exactly AT the cap, passed the check, and then failed at payment time
+   * against a seller charging more. PER_CALL_CAP — the refusal the entire
+   * product is built to demonstrate — could no longer fire at all, and an
+   * underwriting decision surfaced to the user as a 502.
+   *
+   * A seller asking 0.200000 against a 0.050000 cap must be REFUSED, on the
+   * rule, at a 200, without a caller-supplied number anywhere in it.
+   */
+  const challenge = Buffer.from(
+    JSON.stringify({ accepts: [{ payTo: '0.0.10379572', amount: '200000' }] }),
+  ).toString('base64')
+
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response('{}', { status: 402, headers: { 'payment-required': challenge } })) as typeof fetch
+
+  try {
+    const { deps } = depsFor({})
+    const app = buildServer(deps)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/spend',
+      payload: { tab: '0.0.10390398', url: 'https://seller.example/feed/100' },
+    })
+
+    assert.equal(res.statusCode, 200, 'a refusal is a 200, never an error status')
+    const body = res.json()
+    assert.equal(body.refused.rule, 'PER_CALL_CAP')
+    // The evidence quotes the SELLER's price, not a number the caller invented.
+    assert.equal(body.refused.evidence.requested, '0.2000')
+    await app.close()
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('a quote WITHIN the cap is underwritten at the seller price, not at the cap', async () => {
+  /*
+   * The other half: accepting the quote must debit what the seller asked, not
+   * the ceiling it was checked against. Reserving the cap would overstate every
+   * hold and eat headroom the agent never spent.
+   */
+  const challenge = Buffer.from(
+    JSON.stringify({ accepts: [{ payTo: '0.0.10379572', amount: '2000' }] }),
+  ).toString('base64')
+
+  const receipts = fakeReceipts()
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response('{}', { status: 402, headers: { 'payment-required': challenge } })) as typeof fetch
+
+  try {
+    const { deps } = depsFor({
+      client: fakeClient({ amountPaid: 2_000n }).client,
+      receipts: receipts.writer,
+    })
+    await spend(deps, { tab: TAB, url: 'https://seller.example/feed/1' })
+
+    const hold = receipts.written.find((m) => m.t === 'hold')
+    assert.ok(hold, 'a hold was published')
+    assert.equal(hold.amt, '0.002000', 'reserved the quote, not the per-call cap')
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})

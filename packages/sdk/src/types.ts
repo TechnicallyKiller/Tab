@@ -33,7 +33,15 @@ export interface SpendRequest {
   /** The seller's URL, including whatever the seller needs to be paid. */
   url: string
   /** The most this call may cost. */
-  max: MicroUsdc
+  /**
+   * The most to pay for this one call.
+   *
+   * Optional: omit it to accept the seller's own quoted price from its x402
+   * challenge, which is the usual case — the seller sets the price, so a caller
+   * with no budget of its own has nothing to add. Supply it only to spend LESS
+   * than the seller asks, which refuses rather than underpays.
+   */
+  max?: MicroUsdc
   /**
    * Idempotency key.
    *
