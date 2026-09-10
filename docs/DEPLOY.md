@@ -174,7 +174,47 @@ would be the thing corrupting them.
 A failing run emails you. That notification *is* the product here. Read what it
 found, then run `pnpm reconcile --repair` yourself.
 
-## 4 · MCP, for a judge to drive it themselves
+## 4 · The chat agent — how a reviewer tests it without cloning
+
+`/app/chat` puts a language model behind Tab's verbs. A visitor types a
+sentence, the model decides to spend, the gateway pays a real seller, and a
+receipt lands on HCS. **No clone, no install, no wallet** — which is the honest
+answer to "how would we test this".
+
+Three environment variables on the console, server-side (NOT `NEXT_PUBLIC_*` —
+the key must never reach the browser):
+
+```
+LLM_API_KEY       from any OpenAI-compatible provider
+LLM_BASE_URL      https://api.groq.com/openai/v1   (default)
+LLM_MODEL         llama-3.3-70b-versatile          (default)
+TAB_GATEWAY_URL   https://<your-service>.onrender.com
+TAB_ACCOUNT_ID    0.0.<your tab>
+```
+
+**Free providers that support tool calling**, all OpenAI-compatible, so moving
+between them is one variable:
+
+| Provider | `LLM_BASE_URL` | Note |
+|---|---|---|
+| Groq | `https://api.groq.com/openai/v1` | Fastest; ~30 req/min free |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | Most reliable tool calling |
+| Cerebras | `https://api.cerebras.ai/v1` | Fast |
+
+Free tiers rate-limit. Being able to switch provider by changing one variable is
+the difference between a demo that survives judging and one that does not — the
+route reports a rate limit as a readable message rather than a stack trace.
+
+**Letting strangers spend is safe, and the reason is the product.** Per-call cap
+`0.050000`, ceiling `0.250000`, window cap `1.000000`. A visitor cannot take more
+than the rail allows, and when they hit the wall they get a refusal — which is
+the most interesting thing they could have triggered. It is faucet testnet USDC.
+
+One platform note: a real spend waits 25–39s on x402 settlement, so the route
+sets `maxDuration = 60`. On a host that caps function duration lower than that,
+the read tools still work and a spend may time out.
+
+## 5 · MCP, for a judge to drive it themselves
 
 Not deployed — it runs on the reviewer's machine and talks to the hosted
 gateway. Three lines in `claude_desktop_config.json`:

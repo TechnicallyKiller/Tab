@@ -15,6 +15,9 @@ import { useConsole } from './provider'
  * to a window. A reader who loses the window misreads every number on screen.
  */
 const NAV: [string, string, string][] = [
+  // First, because it is the only view a visitor can ACT on — every other one
+  // asks them to believe a number.
+  ['ASK THE AGENT', '/app/chat', ''],
   ['TAB', '/app/tab', ''],
   ['CEILING', '/app/ceiling', ''],
   ['COUNTERPARTIES', '/app/counterparties', '12'],
@@ -26,6 +29,7 @@ const NAV: [string, string, string][] = [
 ]
 
 const TITLES: Record<string, [string, string]> = {
+  '/app/chat': ['Ask the agent', 'it holds no key, and it spends for real'],
   '/app/tab': ['Tab', 'balance, ceiling, available, holds'],
   '/app/ceiling': ['Ceiling', 'inputs, tier, ramp, model version, verify'],
   '/app/counterparties': ['Counterparties', 'weights and the reason behind each'],

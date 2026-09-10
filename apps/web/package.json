@@ -15,6 +15,7 @@
     "@tab/params": "workspace:*",
     "@tab/sdk": "workspace:*",
     "next": "16.3.4",
+    "openai": "^7.12.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "three": "0.185.1"

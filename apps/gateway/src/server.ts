@@ -154,6 +154,24 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
     token: deps.env.tokenId,
     window: deps.window(),
     demoMode: deps.env.demoMode,
+    /*
+     * The topic ids, so a reader can go and check for themselves.
+     *
+     * Served at RUNTIME rather than baked into the console at build time, and
+     * the difference is not cosmetic: the console's HashScan links pointed at
+     * `0.0.4881203` — a MOCK topic id left over from the mock data — so anyone
+     * clicking "view on HashScan" landed on a topic that is not ours. On the one
+     * screen whose job is "do not trust me, go and look", that is worse than
+     * having no link at all.
+     *
+     * Coming from the same place the data comes from means they cannot drift
+     * apart again: if the gateway is reading a topic, that is the topic it names.
+     */
+    topics: {
+      receipts: deps.env.receiptTopic,
+      ceilings: deps.env.ceilingTopic,
+      settlements: deps.env.settlementTopic,
+    },
   }))
 
   /** The spend leg. The agent asks; the gateway decides, pays and records. */

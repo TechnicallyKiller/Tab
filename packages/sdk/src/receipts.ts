@@ -88,14 +88,36 @@ export async function health(client: TabClient): Promise<{
   token: string
   window: number
   demoMode: boolean
+  /**
+   * The HCS topics this gateway is actually reading.
+   *
+   * Served so a reader can go and check for themselves, and taken from the
+   * gateway rather than from the consumer's own config so the two cannot
+   * disagree — a "view on HashScan" link that points somewhere other than the
+   * data it sits beside is worse than no link.
+   *
+   * Absent from an older gateway that did not serve them, in which case a
+   * caller should show no link rather than guess at one.
+   */
+  topics?: { receipts: string; ceilings: string; settlements: string }
 }> {
   const body = await client.request<Record<string, unknown>>('GET', '/health')
+  const topics = body['topics'] as Record<string, unknown> | undefined
   return {
     ok: body['ok'] === true,
     network: String(body['network'] ?? 'unknown'),
     token: String(body['token'] ?? ''),
     window: Number(body['window'] ?? 0),
     demoMode: body['demoMode'] === true,
+    ...(topics?.['receipts'] && topics['ceilings'] && topics['settlements']
+      ? {
+          topics: {
+            receipts: String(topics['receipts']),
+            ceilings: String(topics['ceilings']),
+            settlements: String(topics['settlements']),
+          },
+        }
+      : {}),
   }
 }
 
