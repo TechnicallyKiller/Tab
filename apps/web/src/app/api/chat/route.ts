@@ -68,7 +68,16 @@ interface Step {
 export async function POST(request: Request) {
   const apiKey = process.env['LLM_API_KEY']
   const baseURL = process.env['LLM_BASE_URL'] ?? 'https://api.groq.com/openai/v1'
-  const model = process.env['LLM_MODEL'] ?? 'llama-3.3-70b-versatile'
+  /*
+   * The default WILL go stale. Groq retires models on its own schedule and
+   * `llama-3.3-70b-versatile` was already withdrawn once, which took the chat
+   * page down with a bare 404 that named no alternative.
+   *
+   * So the default is a current tool-calling model, and the 404 below is
+   * turned into the list of models the key can actually reach. A deprecation
+   * should cost one environment variable, not an afternoon of guessing names.
+   */
+  const model = process.env['LLM_MODEL'] ?? 'openai/gpt-oss-120b'
   const gatewayUrl = process.env['TAB_GATEWAY_URL'] ?? process.env['NEXT_PUBLIC_TAB_GATEWAY_URL']
   const tabId = process.env['TAB_ACCOUNT_ID'] ?? process.env['NEXT_PUBLIC_TAB_ACCOUNT_ID']
 
@@ -166,6 +175,37 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+
+    /*
+     * A retired model is the one failure worth spending a round trip on.
+     *
+     * The provider answers "does not exist or you do not have access to it",
+     * which is indistinguishable from a typo and names no replacement. Asking
+     * /models turns a dead end into the exact value to put in LLM_MODEL.
+     *
+     * Best-effort: if the listing also fails, the original error still goes
+     * back. Reporting a diagnostic failure INSTEAD of the fault it was
+     * diagnosing would be strictly worse than not trying.
+     */
+    if (/does not exist|model_not_found|404/i.test(message)) {
+      const available = await llm.models
+        .list()
+        .then((r) => r.data.map((m) => m.id).sort())
+        .catch(() => [])
+
+      return Response.json(
+        {
+          error: `The model "${model}" is not available on this provider.`,
+          hint: available.length
+            ? 'Set LLM_MODEL to one of the models below and redeploy.'
+            : 'Could not read the provider model list either — check LLM_API_KEY.',
+          available,
+          steps,
+        },
+        { status: 502 },
+      )
+    }
+
     return Response.json(
       {
         error: /rate|429|quota/i.test(message)

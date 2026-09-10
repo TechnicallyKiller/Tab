@@ -17,7 +17,11 @@
 import { PrivateKey } from '@hiero-ledger/sdk'
 import { configureGlobalHttp } from '@tab/mirror'
 import {
-  createBlocky402Facilitator, createEarnServer, createFacilitator, NETWORKS, tokenAsset,
+  createBlocky402Facilitator,
+  createEarnServer,
+  createFacilitator,
+  NETWORKS,
+  tokenAsset,
 } from '@tab/x402'
 import { paymentMiddleware } from '@x402/express'
 import express from 'express'
