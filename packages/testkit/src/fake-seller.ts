@@ -16,7 +16,9 @@
 
 import { PrivateKey } from '@hiero-ledger/sdk'
 import { configureGlobalHttp } from '@tab/mirror'
-import { createEarnServer, createFacilitator, NETWORKS, tokenAsset } from '@tab/x402'
+import {
+  createBlocky402Facilitator, createEarnServer, createFacilitator, NETWORKS, tokenAsset,
+} from '@tab/x402'
 import { paymentMiddleware } from '@x402/express'
 import express from 'express'
 
@@ -69,13 +71,35 @@ const FEED_TIERS = [1, 10, 25, 100] as const
 const asset = tokenAsset(env('USDC_TOKEN_ID'), 'TUSD')
 const payTo = env('X402_SELLER_ID')
 
-// The seller runs its own facilitator here only because this is a local demo.
-// A real seller uses whatever facilitator it likes — Tab never sees it.
-const facilitator = createFacilitator({
-  network: NETWORKS.testnet,
-  feePayerId: env('FAUCET_ACCOUNT_ID'),
-  feePayerKey: PrivateKey.fromStringDer(env('FAUCET_ACCOUNT_KEY').replace(/^0x/, '')),
-})
+/*
+ * Which facilitator settles THIS service's payments.
+ *
+ * `X402_FACILITATOR=blocky402` uses the hosted one; anything else keeps the
+ * self-hosted default. A real seller picks whatever facilitator it likes and
+ * Tab never sees the choice — which is the point being demonstrated, and why
+ * this switch lives on the seller independently of the gateway's own.
+ *
+ * With Blocky402 the fee payer is THEIRS, so `FAUCET_ACCOUNT_*` goes unused
+ * here and a deployment needs one less funded account. They are read lazily
+ * for exactly that reason: requiring a key the run will never use would make a
+ * hosted deployment fail for no reason.
+ */
+const useBlocky402 = (process.env['X402_FACILITATOR'] ?? '').toLowerCase() === 'blocky402'
+
+const facilitator = useBlocky402
+  ? createBlocky402Facilitator(NETWORKS.testnet, {
+      ...(process.env['X402_FACILITATOR_URL']
+        ? { baseUrl: process.env['X402_FACILITATOR_URL'] }
+        : {}),
+      ...(process.env['X402_FACILITATOR_API_KEY']
+        ? { apiKey: process.env['X402_FACILITATOR_API_KEY'] }
+        : {}),
+    })
+  : createFacilitator({
+      network: NETWORKS.testnet,
+      feePayerId: env('FAUCET_ACCOUNT_ID'),
+      feePayerKey: PrivateKey.fromStringDer(env('FAUCET_ACCOUNT_KEY').replace(/^0x/, '')),
+    })
 
 const earn = createEarnServer({
   network: NETWORKS.testnet,
@@ -126,6 +150,7 @@ for (const units of FEED_TIERS) {
 app.listen(PORT, () => {
   console.log(`\n  unmodified x402 seller on :${PORT}`)
   console.log(`  paying to   ${payTo}`)
+  console.log(`  facilitator ${useBlocky402 ? 'Blocky402 (hosted)' : 'self-hosted'}`)
   console.log(`  flat        0.0400 TUSD · /rank /summarise /classify`)
   console.log(
     `  metered     0.0020 TUSD per record · ` +
