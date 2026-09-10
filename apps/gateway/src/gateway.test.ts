@@ -1022,3 +1022,102 @@ function published(message: TabMessage, seconds: number, seq: number): TopicMess
     sequenceNumber: seq,
   }
 }
+
+/* ── CORS: the console is a browser on another origin ────────────────────── */
+
+test('a READ carries a wildcard CORS header, or the console cannot display it', async () => {
+  /*
+   * This whole family of bug is invisible to curl: the request succeeds, the
+   * status is 200, the body is correct, and the browser throws it away because
+   * the header is missing. The console showed "GATEWAY UNREACHABLE" against a
+   * gateway that was answering every request perfectly.
+   *
+   * Reads are `*` because they serve what is already public on an HCS topic.
+   */
+  const { deps } = depsFor({})
+  const app = buildServer(deps)
+  const res = await app.inject({
+    method: 'GET',
+    url: '/v1/tabs',
+    headers: { origin: 'https://tab.vercel.app' },
+  })
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['access-control-allow-origin'], '*')
+  await app.close()
+})
+
+test('a preflight is answered 204, not the 404 an unrouted OPTIONS would give', async () => {
+  /*
+   * Fastify has no OPTIONS route for these paths, so without the hook a
+   * preflight 404s — which fails CORS exactly as hard as a missing header, but
+   * reports itself in the browser as a routing problem.
+   */
+  const { deps } = depsFor({})
+  const app = buildServer(deps)
+  const res = await app.inject({
+    method: 'OPTIONS',
+    url: '/v1/tabs',
+    headers: { origin: 'https://tab.vercel.app', 'access-control-request-method': 'GET' },
+  })
+  assert.equal(res.statusCode, 204)
+  assert.equal(res.headers['access-control-allow-origin'], '*')
+  assert.match(String(res.headers['access-control-allow-methods']), /GET/)
+  await app.close()
+})
+
+test('SPEND is not wildcarded — an unlisted origin gets no allow header', async () => {
+  /*
+   * /v1/spend has no authentication. A wildcard would let any page on the
+   * internet make a visitor's browser spend against a tab.
+   *
+   * The request still SUCCEEDS server-side — CORS is a browser rule and inject
+   * is not a browser — so what is asserted is the absence of the header, which
+   * is the thing the browser actually reads.
+   */
+  const { deps } = depsFor({})
+  const app = buildServer(deps)
+  const res = await app.inject({
+    method: 'OPTIONS',
+    url: '/v1/spend',
+    headers: { origin: 'https://evil.example', 'access-control-request-method': 'POST' },
+  })
+  assert.equal(res.statusCode, 204)
+  assert.equal(res.headers['access-control-allow-origin'], undefined)
+  await app.close()
+})
+
+test('a LISTED origin may spend, and the response says it varies by origin', async () => {
+  const previous = process.env['CORS_ORIGINS']
+  process.env['CORS_ORIGINS'] = 'https://tab.vercel.app, http://localhost:3000'
+  try {
+    const { deps } = depsFor({})
+    const app = buildServer(deps)
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/v1/spend',
+      headers: { origin: 'http://localhost:3000', 'access-control-request-method': 'POST' },
+    })
+    // Echoed exactly, never `*` — and marked Vary so a cache cannot hand this
+    // response to a different origin.
+    assert.equal(res.headers['access-control-allow-origin'], 'http://localhost:3000')
+    assert.equal(res.headers['vary'], 'Origin')
+    await app.close()
+  } finally {
+    if (previous === undefined) delete process.env['CORS_ORIGINS']
+    else process.env['CORS_ORIGINS'] = previous
+  }
+})
+
+test('a non-browser client is untouched — no Origin, no CORS headers', async () => {
+  /*
+   * Agents and the CLI send no Origin. Emitting CORS headers at them would be
+   * noise, and asserting their absence pins that the hook returns early rather
+   * than treating a missing Origin as a disallowed one.
+   */
+  const { deps } = depsFor({})
+  const app = buildServer(deps)
+  const res = await app.inject({ method: 'GET', url: '/health' })
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['access-control-allow-origin'], undefined)
+  await app.close()
+})

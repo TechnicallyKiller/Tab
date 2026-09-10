@@ -75,6 +75,80 @@ export function buildServer(deps: SpendDeps, earn?: EarnConfig): FastifyInstance
   const app = Fastify({ logger: false, trustProxy: true })
 
   /*
+   * CORS, split by method on purpose.
+   *
+   * The console runs in a browser on a different origin (Vercel, or :3000 in
+   * development) and every request it makes is cross-origin. Without these
+   * headers the browser blocks the response and the console shows
+   * "GATEWAY UNREACHABLE" — while curl succeeds, because CORS is a browser
+   * rule and nothing else honours it. That is exactly how this was missed.
+   *
+   * READS are `*`. Every one of them serves what is already published on a
+   * public HCS topic; anyone can replay the same data from a mirror node, so
+   * there is nothing for an allow-list to protect.
+   *
+   * /v1/spend is NOT `*`, and is limited to origins named in `CORS_ORIGINS`.
+   * It has no authentication, so a wildcard would let any page on the internet
+   * make a visitor's browser spend against a tab. The allow-list does not fix
+   * the missing auth — a direct POST is unaffected, since CORS never protects
+   * a non-browser client — but a public endpoint should not additionally
+   * conscript passing browsers into calling it.
+   *
+   * `CORS_ORIGINS` is a comma-separated list of exact origins. Unset means no
+   * browser origin may spend, which is the safe default for a fresh deploy.
+   */
+  const spendOrigins = (process.env['CORS_ORIGINS'] ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin
+    if (!origin) return // same-origin or a non-browser client; CORS does not apply
+
+    // On a preflight the real method is in the header, not on the request.
+    const intended =
+      request.method === 'OPTIONS'
+        ? ((request.headers['access-control-request-method'] as string | undefined) ?? 'GET')
+        : request.method
+
+    const allow =
+      intended === 'GET' || intended === 'HEAD'
+        ? '*'
+        : spendOrigins.includes(origin)
+          ? origin
+          : null
+
+    if (allow !== null) {
+      reply.header('access-control-allow-origin', allow)
+      // Echoing a specific origin makes the response origin-dependent, so it
+      // must not be cached and served to a different one.
+      if (allow !== '*') reply.header('vary', 'Origin')
+    }
+
+    /*
+     * Preflights are answered HERE rather than by a route.
+     *
+     * Fastify has no OPTIONS handler for these paths, so a preflight would 404
+     * — and a 404 preflight fails the CORS check just as surely as a missing
+     * header, with a browser error that points at the wrong thing.
+     *
+     * A DISALLOWED origin is answered 204 without the allow header rather than
+     * with an error status: the browser must reject it, and it reads the
+     * absence of the header, not the status code. Sending 403 would put a
+     * misleading error in the console for what is a policy decision.
+     */
+    if (request.method === 'OPTIONS') {
+      if (allow !== null) {
+        reply.header('access-control-allow-methods', 'GET, POST, OPTIONS')
+        reply.header('access-control-allow-headers', 'content-type')
+        reply.header('access-control-max-age', '86400')
+      }
+      return reply.code(204).send()
+    }
+  })
+
+  /*
    * AMOUNT FIELDS IN JSON USE `toWire`, NEVER `format`.
    *
    * `format` is a DISPLAY function: it truncates to 4 decimals and uses a

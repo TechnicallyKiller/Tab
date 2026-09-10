@@ -123,6 +123,19 @@ services:
       - key: X402_FACILITATOR
         value: blocky402
 
+      # ── which browser origins may POST /v1/spend ──────────────────────────
+      # Comma-separated exact origins, e.g.
+      #   https://tab.vercel.app,http://localhost:3000
+      #
+      # Reads are wildcarded and need nothing here. Spending is not: the
+      # endpoint has no authentication, so a wildcard would let any page on the
+      # internet make a visitor's browser spend against a tab.
+      #
+      # Unset means no browser origin may spend — safe, and the right default
+      # until the console's real URL exists. Set it after the Vercel deploy.
+      - key: CORS_ORIGINS
+        sync: false
+
       # ── optional ──────────────────────────────────────────────────────────
       # Set to front the agent's own paid endpoint at /v1/earn. Leave unset and
       # the earn leg is simply off — the gateway says so at boot.
