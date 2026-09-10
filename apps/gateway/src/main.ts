@@ -8,7 +8,14 @@ import { clientFromEnv } from '@tab/hedera'
 import { configureGlobalHttp, MirrorClient } from '@tab/mirror'
 import { format } from '@tab/money'
 import { windowOf } from '@tab/params'
-import { createFacilitator, createSpendClient, NETWORKS, tokenAsset } from '@tab/x402'
+import {
+  blocky402FeePayer,
+  createBlocky402Facilitator,
+  createFacilitator,
+  createSpendClient,
+  NETWORKS,
+  tokenAsset,
+} from '@tab/x402'
 import { describeCeiling, replayCeilings } from './ceilings.ts'
 import { loadEnv } from './env.ts'
 import { ReceiptWriter } from './receipts.ts'
@@ -276,6 +283,55 @@ const currentWindow = () => windowOf(Math.floor(Date.now() / 1000), env.windowSe
 const asset = tokenAsset(env.tokenId, 'TUSD')
 const agentUpstream = process.env['AGENT_ENDPOINT_URL']
 
+/*
+ * Which facilitator settles the EARN leg.
+ *
+ * `X402_FACILITATOR` picks: `blocky402` for the hosted one, anything else (or
+ * unset) keeps the self-hosted default from ADR-0004.
+ *
+ * Both satisfy `TabFacilitator`, which is only verify/settle/getSupported — so
+ * the resource server cannot tell which it was handed, and this is a config
+ * choice rather than a code path. The trade is real either way: self-hosting
+ * removes a liveness dependency and keeps settlement in the same process that
+ * writes the attested receipt; Blocky402 removes a funded fee-payer account we
+ * have to keep topped up, and settles with THEIR account instead.
+ */
+const useBlocky402 = (process.env['X402_FACILITATOR'] ?? '').toLowerCase() === 'blocky402'
+
+const earnFacilitator = useBlocky402
+  ? createBlocky402Facilitator(NETWORKS.testnet, {
+      ...(process.env['X402_FACILITATOR_URL']
+        ? { baseUrl: process.env['X402_FACILITATOR_URL'] }
+        : {}),
+      ...(process.env['X402_FACILITATOR_API_KEY']
+        ? { apiKey: process.env['X402_FACILITATOR_API_KEY'] }
+        : {}),
+      /*
+       * Their fee payer, READ from /supported rather than configured.
+       *
+       * It is their operational detail and can change; a value copied into our
+       * env would be right until the day it silently was not, and the failure
+       * would surface as an unexplained settlement error. Resolved once at
+       * boot, and a failure here is not fatal — the id is only reported, never
+       * used to sign.
+       */
+      ...(agentUpstream
+        ? {
+            feePayerId:
+              (await blocky402FeePayer(NETWORKS.testnet, {
+                ...(process.env['X402_FACILITATOR_URL']
+                  ? { baseUrl: process.env['X402_FACILITATOR_URL'] }
+                  : {}),
+              }).catch(() => undefined)) ?? 'blocky402:unresolved',
+          }
+        : {}),
+    })
+  : createFacilitator({
+      network: NETWORKS.testnet,
+      feePayerId: env.feePayerId,
+      feePayerKey: PrivateKey.fromStringDer(env.feePayerKey.replace(/^0x/, '')),
+    })
+
 const app = buildServer(
   {
     env,
@@ -295,11 +351,7 @@ const app = buildServer(
     ? {
         network: NETWORKS.testnet,
         asset,
-        facilitator: createFacilitator({
-          network: NETWORKS.testnet,
-          feePayerId: env.feePayerId,
-          feePayerKey: PrivateKey.fromStringDer(env.feePayerKey.replace(/^0x/, '')),
-        }),
+        facilitator: earnFacilitator,
         endpoint: {
           tab: env.tabAccountId,
           upstream: agentUpstream,
@@ -313,6 +365,9 @@ const app = buildServer(
 await app.listen({ port: env.port, host: '0.0.0.0' })
 console.log(
   `  earn leg        ${agentUpstream ? `fronting ${agentUpstream} at /v1/earn` : 'off (set AGENT_ENDPOINT_URL)'}`,
+)
+console.log(
+  `  facilitator     ${useBlocky402 ? `Blocky402 (hosted) · fee payer ${earnFacilitator.feePayerId}` : `self-hosted · fee payer ${earnFacilitator.feePayerId}`}`,
 )
 console.log(`\n  listening       http://localhost:${env.port}`)
 console.log(`  window          ${currentWindow()} (${env.windowSeconds}s buckets)\n`)

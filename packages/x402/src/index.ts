@@ -25,6 +25,12 @@ export {
   tokenAsset,
 } from './assets.ts'
 export {
+  BLOCKY402_TESTNET,
+  type Blocky402Config,
+  blocky402FeePayer,
+  createBlocky402Facilitator,
+} from './blocky402.ts'
+export {
   createSpendClient,
   type SpendClient,
   type SpendClientConfig,
