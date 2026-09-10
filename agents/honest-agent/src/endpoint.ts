@@ -12,7 +12,15 @@
  */
 import { createServer } from 'node:http'
 
-const PORT = Number(process.env['AGENT_ENDPOINT_PORT'] ?? 4066)
+/*
+ * `PORT` is what a managed host actually sets.
+ *
+ * Render, Fly and Heroku inject it and health-check that address; a service
+ * listening anywhere else is marked dead with nothing in the logs, because from
+ * the process's point of view it started fine. `AGENT_ENDPOINT_PORT` still wins
+ * when set, so local demos are unchanged.
+ */
+const PORT = Number(process.env['AGENT_ENDPOINT_PORT'] ?? process.env['PORT'] ?? 4066)
 let served = 0
 
 const server = createServer((req, res) => {

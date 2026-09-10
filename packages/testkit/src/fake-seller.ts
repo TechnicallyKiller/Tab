@@ -28,7 +28,14 @@ const env = (k: string) => {
   return v
 }
 
-const PORT = Number(process.env['SELLER_PORT'] ?? 4055)
+/*
+ * `PORT` is what a managed host actually sets.
+ *
+ * Render and friends inject it and health-check that address; listening
+ * elsewhere marks the deploy dead with nothing in the logs. `SELLER_PORT` still
+ * wins when set, so the local demo is unchanged.
+ */
+const PORT = Number(process.env['SELLER_PORT'] ?? process.env['PORT'] ?? 4055)
 const PRICE = 40_000n // 0.04 of a 6dp token
 const asset = tokenAsset(env('USDC_TOKEN_ID'), 'TUSD')
 const payTo = env('X402_SELLER_ID')

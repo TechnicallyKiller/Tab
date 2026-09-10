@@ -9,9 +9,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "seller": "node --experimental-strip-types --env-file=../../.env src/run-seller.ts",
+    "seller": "node --experimental-strip-types --env-file-if-exists=../../.env src/run-seller.ts",
     "typecheck": "tsc --noEmit",
-    "payer": "node --experimental-strip-types --env-file=../../.env src/fake-payer.ts"
+    "payer": "node --experimental-strip-types --env-file-if-exists=../../.env src/fake-payer.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "catalog:",
