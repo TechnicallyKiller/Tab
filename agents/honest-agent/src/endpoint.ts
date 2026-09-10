@@ -24,6 +24,21 @@ const PORT = Number(process.env['AGENT_ENDPOINT_PORT'] ?? process.env['PORT'] ??
 let served = 0
 
 const server = createServer((req, res) => {
+  /*
+   * Unpaid, and deliberately BEFORE the 404 — a host that health-checks a path
+   * this server answers 404 to marks a perfectly healthy process as dead, and
+   * the logs say nothing because from its own point of view it started fine.
+   *
+   * It reports `served` so warming the service before a demo also tells you
+   * whether this instance has handled anything yet, which distinguishes a cold
+   * start from a restart that lost its count.
+   */
+  if (req.url === '/health') {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, served }))
+    return
+  }
+
   if (!req.url?.startsWith('/serve')) {
     res.writeHead(404, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ error: 'not found' }))

@@ -120,6 +120,20 @@ const earn = createEarnServer({
 })
 
 const app = express()
+
+/*
+ * Unpaid, and mounted BEFORE the payment middleware so it is never gated —
+ * a host health-checking a 402 would restart a healthy seller forever.
+ *
+ * It reports which facilitator is in force because that is the one piece of
+ * this service's configuration that cannot be observed from the outside: a
+ * 402 challenge looks identical either way, and the difference only shows up
+ * on-chain, after a payment.
+ */
+app.get('/health', (_q, r) =>
+  r.json({ ok: true, facilitator: useBlocky402 ? 'blocky402' : 'self-hosted', payTo }),
+)
+
 app.use(paymentMiddleware(earn.routes as never, earn.server as never))
 app.get('/rank', (_q, r) => r.json({ ranked: ['alpha', 'beta', 'gamma'], at: Date.now() }))
 app.get('/summarise', (_q, r) => r.json({ summary: 'three findings, one caveat', at: Date.now() }))

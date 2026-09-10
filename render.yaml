@@ -1,7 +1,14 @@
-# Render blueprint — the gateway, and only the gateway.
+# Render blueprint — the three long-running processes.
 #
-# Three of the four services do NOT belong here, and the reasons are in
-# docs/DEPLOY.md rather than buried in a comment nobody reads:
+#   tab-gateway         the credit rail itself
+#   tab-seller          the x402-gated service the demo BUYS from
+#   tab-agent-endpoint  the x402-gated service the demo SELLS through
+#
+# The seller was a local-only fixture until the Hedera track asked for a live
+# hosted x402-gated service settled through Blocky402. That is literally what
+# it is, so it is deployed rather than reimplemented as something grander.
+#
+# What does NOT belong here, and why:
 #
 #   apps/web         → Vercel. It is a Next.js app; Vercel is its native host
 #                      and the hobby tier is free.
@@ -11,6 +18,15 @@
 # Render cron jobs are a paid feature, and this project has no budget, so the
 # engine and the settlement worker run from a laptop or a GitHub Actions
 # schedule. See docs/DEPLOY.md.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# FREE-TIER WARNING, because it will bite during a demo:
+#
+# Render free web services sleep after ~15 minutes idle and take ~50s to wake.
+# Three services means three independent cold starts. Hit all three URLs a
+# minute before demoing, and do not let the first thing a judge clicks be a
+# sleeping process.
+# ─────────────────────────────────────────────────────────────────────────────
 
 services:
   - type: web
@@ -76,8 +92,99 @@ services:
       - key: TOPIC_SETTLEMENTS
         sync: false
 
+      # ── which facilitator settles the earn leg ────────────────────────────
+      # `blocky402` uses the hosted facilitator; anything else (or unset) keeps
+      # the self-hosted default from ADR-0004.
+      #
+      # This is SET here rather than left to the default because the Hedera
+      # track requires settlement through Blocky402, and the default is the
+      # path that does not qualify. A deployment that forgets this line boots
+      # fine, passes its health check, settles payments correctly, and fails
+      # the requirement silently — so it is not left to be remembered.
+      #
+      # Testnet needs no credential. `X402_FACILITATOR_API_KEY` is for mainnet.
+      - key: X402_FACILITATOR
+        value: blocky402
+
       # ── optional ──────────────────────────────────────────────────────────
       # Set to front the agent's own paid endpoint at /v1/earn. Leave unset and
       # the earn leg is simply off — the gateway says so at boot.
+      #
+      # Set this to tab-agent-endpoint's PUBLIC https:// URL, by hand, after
+      # that service's first deploy.
+      #
+      # `fromService` would be the obvious way to avoid the copy-paste, but its
+      # `host`/`hostport` properties resolve to the private-network address —
+      # which free-plan services do not have — and carry no scheme, while the
+      # gateway needs an absolute URL to fetch. A wired-up-looking value that
+      # silently resolves to nothing is worse than a blank the deploy asks for.
       - key: AGENT_ENDPOINT_URL
         sync: false
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # The x402-gated service the demo BUYS from.
+  #
+  # `/feed/{n}` is metered: 0.002 USDC per record, so /feed/1 costs 2000 micro
+  # and /feed/100 costs 200000 and is REFUSED by the per-call cap. Both halves
+  # matter — the refusal is the product working, not the demo failing.
+  # ───────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: tab-seller
+    runtime: node
+    plan: free
+    region: oregon
+    numInstances: 1
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @tab/testkit seller
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22.20.0"
+      - key: HEDERA_NETWORK
+        value: testnet
+
+      # THIS is the service the track's wording points at: the hosted
+      # x402-gated endpoint settled through Blocky402. The gateway's own switch
+      # is a separate decision, made separately on purpose — a real seller
+      # picks its own facilitator and Tab never sees the choice.
+      - key: X402_FACILITATOR
+        value: blocky402
+
+      # The account payments are made OUT to. Not a secret — it is printed in
+      # every 402 challenge — but it is deployment-specific, so it is prompted
+      # for rather than committed.
+      - key: X402_SELLER_ID
+        sync: false
+      - key: USDC_TOKEN_ID
+        sync: false
+
+      # Unused while X402_FACILITATOR=blocky402 — their account submits
+      # settlement. Kept declared so switching back to the self-hosted path is
+      # a one-value change and not a debugging session.
+      - key: FAUCET_ACCOUNT_ID
+        sync: false
+      - key: FAUCET_ACCOUNT_KEY
+        sync: false
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # The x402-gated service the demo SELLS through — the earn leg.
+  #
+  # It holds NO secrets and signs nothing. It serves a 402 challenge and the
+  # content behind it; the gateway in front of it does the verifying and the
+  # crediting. That separation is the whole reason an agent can earn without
+  # ever being handed a key.
+  # ───────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: tab-agent-endpoint
+    runtime: node
+    plan: free
+    region: oregon
+    numInstances: 1
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @tab/honest-agent endpoint
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22.20.0"
