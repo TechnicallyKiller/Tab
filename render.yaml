@@ -66,6 +66,23 @@ services:
       - key: HEDERA_NETWORK
         value: testnet
 
+      # ── window geometry: MUST match the engine and settlement workers ──────
+      # The gateway files receipts into windows; the engine computes ceilings
+      # over them. They agree only if both use the same WINDOW_SECONDS.
+      #
+      # These were previously unset here, which was a live bug: the gateway
+      # falls back to 600 (apps/gateway/src/env.ts) and the workflows fall back
+      # to 300, so the gateway would file receipts into windows the engine
+      # never computed. Nothing errors — the ceiling is just wrong, and only
+      # for the windows that straddle the disagreement.
+      #
+      # Change these and you MUST change the matching GitHub Actions variables
+      # in the same breath.
+      - key: WINDOW_SECONDS
+        value: "300"
+      - key: DEMO_MODE
+        value: "true"
+
       # ── secrets: set these in the Render dashboard, never in this file ─────
       # `sync: false` means "Render will prompt for it and will not read it from
       # the repo". The two KEY values are private keys; `pnpm guard:secrets`
