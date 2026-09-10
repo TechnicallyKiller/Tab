@@ -131,11 +131,50 @@ function requestHash(url: string, at: string): string {
   return createHash('sha256').update(`${url}|${at}`).digest('hex').slice(0, 12)
 }
 
-function sellerFromUrl(url: string): string {
-  // Until a seller registry exists, the demo passes the account id as a query
-  // parameter. A real deployment resolves it from the 402 challenge's payTo.
+/** Hedera entity id. The receipt schema rejects anything else. */
+const ENTITY_ID = /^\d+\.\d+\.\d+$/
+
+/**
+ * Who gets paid, resolved from the seller's own 402 challenge.
+ *
+ * This used to read a `?payTo=` query parameter and fall back to the literal
+ * string `'unknown'`. Every demo script appended that parameter, so it always
+ * worked locally — and the first time anyone pasted a PLAIN seller URL, the
+ * receipt schema rejected `'unknown'`, the hold could not publish, and the
+ * spend died as a 502 carrying a raw validation dump. The counterparty is not
+ * the caller's to supply, and asking for it made the rail look broken at the
+ * exact moment someone tried it for real.
+ *
+ * The challenge already carries the answer: x402 puts the payment
+ * requirements, `payTo` among them, in the `payment-required` header. So the
+ * unpaid GET that discovers the price also discovers who is charging it.
+ *
+ * The query parameter is still honoured FIRST, and only when it is a
+ * well-formed id — existing demo scripts keep working, and a malformed one
+ * falls through to the challenge rather than poisoning the receipt.
+ */
+async function resolveSeller(url: string): Promise<string> {
   try {
-    return new URL(url).searchParams.get('payTo') ?? 'unknown'
+    const fromQuery = new URL(url).searchParams.get('payTo')
+    if (fromQuery && ENTITY_ID.test(fromQuery)) return fromQuery
+  } catch {
+    return 'unknown' // not a URL at all; the caller is told plainly below
+  }
+
+  try {
+    /*
+     * A short timeout, because this runs BEFORE the hold: a seller that hangs
+     * here costs nothing but a failed spend, whereas the same hang after the
+     * hold would strand reserved credit until expiry.
+     */
+    const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) })
+    const header = res.headers.get('payment-required')
+    if (!header) return 'unknown'
+
+    const decoded: unknown = JSON.parse(Buffer.from(header, 'base64').toString('utf8'))
+    const accepts = (decoded as { accepts?: { payTo?: unknown }[] }).accepts
+    const payTo = accepts?.[0]?.payTo
+    return typeof payTo === 'string' && ENTITY_ID.test(payTo) ? payTo : 'unknown'
   } catch {
     return 'unknown'
   }
@@ -145,7 +184,26 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   const { env, state, client, receipts } = deps
   const at = nowConsensus()
   const window = deps.window()
-  const seller = sellerFromUrl(request.url)
+  const seller = await resolveSeller(request.url)
+
+  /*
+   * An unresolved counterparty stops the spend HERE, before any state changes.
+   *
+   * `'unknown'` is not a Hedera id, so every receipt written about this spend
+   * would be rejected by the schema. Continuing produced a 502 carrying a zod
+   * dump about a field the caller never supplied — true, and useless. This is
+   * infrastructure, not underwriting, so it is `failed` rather than a refusal:
+   * nothing about the tab's creditworthiness was in question.
+   */
+  if (!ENTITY_ID.test(seller)) {
+    return {
+      outcome: 'failed',
+      reason:
+        `could not work out who to pay at ${request.url} — the seller served no x402 ` +
+        'challenge naming a Hedera payTo account, so nothing was reserved or spent',
+      holdId: request.idempotencyKey ?? 'none',
+    }
+  }
 
   // ── the checks, cheapest and most-likely-to-refuse first ────────────────
   const refusal = check(deps, request, at)

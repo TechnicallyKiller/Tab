@@ -398,18 +398,33 @@ test('the request is HASHED, never stored', async () => {
   assert.match(hold.req, /^[0-9a-f]{12}$/)
 })
 
-test('the seller is read from the payTo parameter, and unknown when absent', async () => {
+test('an UNRESOLVABLE seller writes no receipt at all, rather than one saying "unknown"', async () => {
+  /*
+   * This test used to assert the opposite — that the hold was published with
+   * `cp: 'unknown'`. The reasoning was sound (an unattributed counterparty
+   * beats a guessed one, which would corrupt the independence graph) but the
+   * behaviour was not: `'unknown'` is not a Hedera id, so the receipt schema
+   * rejected it, the hold never reached the topic, and the spend surfaced as a
+   * 502 carrying a validation dump about a field the caller never supplied.
+   *
+   * Refusing to guess is still right. Doing it BEFORE any state changes is the
+   * correction.
+   */
   const receipts = fakeReceipts()
   const { deps } = depsFor({
     client: fakeClient({ amountPaid: 40_000n }).client,
     receipts: receipts.writer,
   })
-  await spend(deps, { tab: TAB, url: 'http://seller.test/serve', max: usdc('0.040000') })
-  const hold = receipts.written[0]!
-  assert.ok(hold.t === 'hold')
-  // `unknown` rather than a guess. A wrong counterparty would corrupt the
-  // independence graph, which is worse than an unattributed one.
-  assert.equal(hold.cp, 'unknown')
+  const result = await spend(deps, {
+    tab: TAB,
+    url: 'http://seller.test/serve',
+    max: usdc('0.040000'),
+  })
+
+  assert.equal(result.outcome, 'failed')
+  assert.match(result.reason, /could not work out who to pay/)
+  // Nothing on the topic: no hold, no refusal, no debit.
+  assert.equal(receipts.written.length, 0)
 })
 
 /* ── the hold TTL ────────────────────────────────────────────────────────── */
@@ -1120,4 +1135,105 @@ test('a non-browser client is untouched — no Origin, no CORS headers', async (
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['access-control-allow-origin'], undefined)
   await app.close()
+})
+
+/* ── resolving who to pay ────────────────────────────────────────────────── */
+
+test('a PLAIN seller url resolves the counterparty from the 402 challenge', async () => {
+  /*
+   * The demo's first sentence. `?payTo=` was a fixture convention every script
+   * appended, so this path was never exercised until someone pasted a real URL
+   * and got a 502 carrying a schema dump about a field they never supplied.
+   */
+  const challenge = Buffer.from(
+    JSON.stringify({ accepts: [{ payTo: '0.0.10379572', amount: '50000' }] }),
+  ).toString('base64')
+
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response('{}', {
+      status: 402,
+      headers: { 'payment-required': challenge },
+    })) as typeof fetch
+
+  try {
+    const { deps } = depsFor({})
+    const app = buildServer(deps)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/spend',
+      payload: {
+        tab: '0.0.10390398',
+        url: 'https://tab-seller.onrender.com/feed/25',
+        max: '0.050000',
+      },
+    })
+    // Whatever the outcome, it must NOT be the unresolved-counterparty failure:
+    // the challenge named an account, so the rail knows who it is paying.
+    assert.doesNotMatch(JSON.stringify(res.json()), /could not work out who to pay/)
+    await app.close()
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('a seller that serves NO challenge fails cleanly, without reserving anything', async () => {
+  /*
+   * The important half is "without reserving anything". The old code published
+   * a hold naming `'unknown'`, the schema rejected it, and the spend died as a
+   * 502 — after the hold had already been pushed into state, stranding credit.
+   */
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () => new Response('hello', { status: 200 })) as typeof fetch
+
+  try {
+    const { deps } = depsFor({})
+    const app = buildServer(deps)
+    const before = await app.inject({ method: 'GET', url: '/v1/tabs/0.0.10390398' })
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/spend',
+      payload: { tab: '0.0.10390398', url: 'https://example.com/free', max: '0.050000' },
+    })
+    // An infrastructure failure is a 502 carrying `error` — deliberately NOT
+    // the 200-with-a-refusal shape, so it can never pollute the Refusals view.
+    const body = res.json()
+    assert.equal(res.statusCode, 502)
+    assert.match(String(body.error), /could not work out who to pay/)
+
+    // No credit moved: holds are exactly what they were.
+    const after = await app.inject({ method: 'GET', url: '/v1/tabs/0.0.10390398' })
+    assert.equal(after.json().holds, before.json().holds)
+    await app.close()
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('an explicit ?payTo= still wins, so existing demo scripts keep working', async () => {
+  let fetched = false
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () => {
+    fetched = true
+    return new Response('{}', { status: 402 })
+  }) as typeof fetch
+
+  try {
+    const { deps } = depsFor({})
+    const app = buildServer(deps)
+    await app.inject({
+      method: 'POST',
+      url: '/v1/spend',
+      payload: {
+        tab: '0.0.10390398',
+        url: 'https://seller.example/rank?payTo=0.0.10379572',
+        max: '0.050000',
+      },
+    })
+    // A well-formed query id short-circuits the network entirely.
+    assert.equal(fetched, false, 'a valid ?payTo= must not trigger a challenge fetch')
+    await app.close()
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })
