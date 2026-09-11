@@ -97,12 +97,43 @@ jobs:
       # Best-effort: the earn leg depends on a third service being awake, and a
       # failure there should not fail a run that already produced spend
       # receipts.
+      # Move tokens back to the start of the loop when the payer runs low.
+      #
+      # `/v1/earn` pays TO the operator, so operator -> payer -> earn -> operator
+      # is a circuit and this returns the same tokens to the front of it. The
+      # token cannot be minted — testnet USDC is treasuried at 0.0.5176, not by
+      # us — so recycling is the only thing keeping this alive past a few hours.
+      #
+      # Threshold-guarded: above the floor it transfers nothing and costs a
+      # mirror read.
+      - name: Top up the demo payer
+        continue-on-error: true
+        run: pnpm topup 12.000000 4.000000
+        env:
+          HEDERA_NETWORK: testnet
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          DEMO_PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER_ACCOUNT_ID }}
+
       - name: Earn through the gateway
         continue-on-error: true
         run: pnpm demo:earn
         env:
           TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
-          EARN_CALLS: '2'
+          # 14 calls x 0.050000 = 0.700000 per run.
+          #
+          # Tier C needs revenue >= 0.100000 PER WINDOW, averaged over
+          # TRAILING_WINDOWS (6) windows of 300s — so 0.600000 across each 30
+          # minutes, which is exactly this schedule. 14 rather than 12 leaves
+          # margin so a single skipped run does not drop the tab back to
+          # Unrated.
+          #
+          # At 2 calls the tab earned 0.100000 per half hour: a sixth of what
+          # the lowest rated tier requires, which is why it had been Unrated
+          # since the day it was created, with the ceiling pinned to the starter
+          # floor and the ceiling chart a flat line.
+          EARN_CALLS: '14'
           HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
           HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
           USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}

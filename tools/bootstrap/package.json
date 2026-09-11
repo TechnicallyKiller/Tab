@@ -18,6 +18,7 @@
     "tab:create": "node --experimental-strip-types --env-file-if-exists=../../.env src/tab-create.ts",
     "token:check": "node --experimental-strip-types --env-file-if-exists=../../.env src/token.ts",
     "token:mint": "node --experimental-strip-types --env-file-if-exists=../../.env src/token.ts --mint",
+    "topup": "node --experimental-strip-types --env-file-if-exists=../../.env src/top-up.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
