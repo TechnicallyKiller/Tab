@@ -61,7 +61,28 @@ async function spend(path: string): Promise<SpendResponse> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ tab: TAB, url: `${SELLER}${path}` }),
   })
-  return (await res.json()) as SpendResponse
+
+  /*
+   * Read the body as TEXT first, and only then try to parse it.
+   *
+   * `res.json()` on a non-JSON body throws a SyntaxError whose message is the
+   * first line of whatever arrived — which, when a host's edge serves an error
+   * page while the instance is restarting, is `<!DOCTYPE html>`. That crashed
+   * the whole run on the first call, with a stack trace that says nothing about
+   * the gateway being briefly unavailable.
+   *
+   * A transient 502 is not a reason to abandon the remaining work, so it is
+   * reported as a failed call and the loop carries on. The status and the first
+   * line of the body are enough to tell "the gateway is down" from "the gateway
+   * said no".
+   */
+  const body = await res.text()
+  try {
+    return JSON.parse(body) as SpendResponse
+  } catch {
+    const first = body.trim().split('\n')[0]?.slice(0, 80) ?? ''
+    return { error: `HTTP ${res.status} — not JSON: ${first}` }
+  }
 }
 
 console.log(`\nhonest-agent · no key, no token, signs nothing\n`)
