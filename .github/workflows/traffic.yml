@@ -70,9 +70,21 @@ jobs:
       # BEFORE the run means the first spend is not racing a cold start, and a
       # service that never wakes fails here with a clear message rather than as
       # a mysterious timeout mid-purchase.
+      #
+      # ALL THREE, and the third one was missing. The agent endpoint is what
+      # the earn leg serves from, and while it slept every earn call came back
+      #
+      #   HTTP 502  {"served":null,"credited":{...,"attested":false}}
+      #
+      # The payment settled and the credit was written — but nothing was served,
+      # so the gateway could not attest it, and an unattested credit takes the
+      # 60% discount. The run reported "0 of 55 paid" (the payer counts 200s)
+      # while the balance climbed anyway, which is about as confusing as a log
+      # line can be.
       - name: Wake the services
         run: |
-          for url in "${{ vars.TAB_GATEWAY_URL }}" "${{ vars.SELLER_URL }}"; do
+          for url in "${{ vars.TAB_GATEWAY_URL }}" "${{ vars.SELLER_URL }}" \
+                     "${{ vars.AGENT_ENDPOINT_URL }}"; do
             echo "waking $url"
             curl -sS --max-time 90 --retry 3 --retry-all-errors "$url/health" || {
               echo "::error::$url did not answer /health"; exit 1; }
