@@ -1,12 +1,13 @@
 'use client'
 
-import { MODEL_ID as MODEL_VERSION } from '@tab/params'
+import { MODEL_ID as MODEL_VERSION, windowOf } from '@tab/params'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { mmss } from '@/lib/format'
-import { AGENT_ID, WINDOW_LABEL } from '@/lib/mock/tab'
+import { LIVE, TAB_ID } from '@/lib/live/client'
+import { AGENT_ID, WINDOW_LABEL, WINDOW_SECONDS } from '@/lib/mock/tab'
 import { useConsole } from './provider'
 
 /**
@@ -43,6 +44,31 @@ const TITLES: Record<string, [string, string]> = {
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { seconds, stale, toggleStale, live, error } = useConsole()
+
+  /*
+   * The chrome was reading the MOCK agent id and window label unconditionally,
+   * so a console connected to a real gateway displayed `0.0.4482091` and
+   * `window 0148` while flying a LIVE badge — invented identifiers presented as
+   * fact, which is the exact failure the LIVE/MOCK distinction exists to
+   * prevent, in the one place on screen that is never scrolled away.
+   *
+   * The agent id is a build-time constant either way, so it can be chosen
+   * during render. The window number cannot: it comes from the clock, and
+   * computing it during render makes the server's HTML disagree with the
+   * client's. So it starts unset and arrives after mount, and until then the
+   * label is omitted rather than guessed.
+   */
+  const agent = LIVE ? TAB_ID : AGENT_ID
+  const [windowLabel, setWindowLabel] = useState<string | undefined>(
+    LIVE ? undefined : WINDOW_LABEL,
+  )
+  useEffect(() => {
+    if (!LIVE) return
+    const tick = () => setWindowLabel(String(windowOf(Date.now() / 1000, WINDOW_SECONDS)))
+    tick()
+    const t = setInterval(tick, 1_000)
+    return () => clearInterval(t)
+  }, [])
   const [title, subtitle] = TITLES[pathname] ?? ['Tab', '']
 
   return (
@@ -92,11 +118,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <div className="agent-chip">
             <span className="t-label">agent</span>
             <span className="t-mono" style={{ fontSize: 12.5, fontWeight: 600 }}>
-              {AGENT_ID}
+              {agent}
             </span>
           </div>
           <div className="t-mono window-clock">
-            <span className="t-label">window {WINDOW_LABEL} closes in</span>
+            <span className="t-label">window {windowLabel ?? '·'} closes in</span>
             <span style={{ fontSize: 19, fontWeight: 600 }}>{mmss(seconds)}</span>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -120,12 +146,30 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               {live ? 'LIVE' : 'MOCK DATA'}
             </span>
             {error ? (
+              /*
+               * The REASON, on screen, not only in a tooltip.
+               *
+               * "GATEWAY UNREACHABLE" alone is the least useful true statement
+               * the console can make: a CORS rejection, a cold-start timeout
+               * and a wrong URL all look identical, and the one person who can
+               * fix it is usually looking at the screen rather than hovering
+               * it. It cost hours of guessing at exactly that.
+               *
+               * Truncated so a long message cannot push the toolbar around,
+               * with the full text still on the tooltip.
+               */
               <span
                 className="pill pill-caution"
                 title={error}
-                style={{ background: 'var(--caution)' }}
+                style={{
+                  background: 'var(--caution)',
+                  maxWidth: 460,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
               >
-                GATEWAY UNREACHABLE
+                GATEWAY UNREACHABLE · {error}
               </span>
             ) : null}
             {/* Stale is a real state to design, so it is togglable in the mock. */}
