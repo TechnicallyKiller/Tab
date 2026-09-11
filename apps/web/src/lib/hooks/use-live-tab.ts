@@ -3,8 +3,7 @@
 import { windowOf } from '@tab/params'
 import type { ReceiptRow } from '@tab/sdk'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LIVE, TAB_ID, tabClient } from '../live/client'
-import { WINDOW_SECONDS } from '../mock/tab'
+import { LIVE, TAB_ID, tabClient, WINDOW_SECONDS } from '../live/client'
 import type { Leg, Receipt } from '../mock/types'
 import { type MicroUsdc, micro } from '../money'
 

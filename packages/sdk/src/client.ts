@@ -136,8 +136,29 @@ export class TabClient {
      * The idempotency key is what makes a retry safe, so the caller is told to
      * reuse it rather than told not to worry.
      */
+    /*
+     * The CAUSE is named in the message, not only attached as `cause`.
+     *
+     * "Could not reach the gateway" is true of a CORS rejection, a DNS
+     * failure, a refused connection and a timeout alike — and those have
+     * completely different fixes. The distinguishing detail was being carried
+     * on a property nothing displays, so a console showing this error sent us
+     * hunting the wrong problem more than once.
+     *
+     * An AbortError here is always OUR timeout firing, so it is named as one:
+     * "aborted" reads like a cancelled request and hides the fact that a
+     * deadline was exceeded.
+     */
+    const because =
+      lastError instanceof Error
+        ? lastError.name === 'AbortError' || lastError.name === 'TimeoutError'
+          ? `timed out after ${this.timeoutMs}ms`
+          : `${lastError.name}: ${lastError.message}`
+        : String(lastError)
+
     throw new TabUnavailableError(
-      `Could not reach the Tab gateway at ${url} after ${this.maxRetries + 1} attempt(s). ` +
+      `Could not reach the Tab gateway at ${url} after ${this.maxRetries + 1} attempt(s) ` +
+        `(${because}). ` +
         'The outcome is UNKNOWN — a transport failure cannot distinguish "never arrived" from ' +
         '"succeeded and the response was lost". Retry with the SAME idempotencyKey: the gateway ' +
         'treats it as the hold id, so a repeat cannot double-spend. Do not retry with a new key.',

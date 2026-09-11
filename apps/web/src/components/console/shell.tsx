@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation'
 import { type ReactNode, useEffect, useState } from 'react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { mmss } from '@/lib/format'
-import { LIVE, TAB_ID } from '@/lib/live/client'
-import { AGENT_ID, WINDOW_LABEL, WINDOW_SECONDS } from '@/lib/mock/tab'
+import { LIVE, TAB_ID, WINDOW_SECONDS } from '@/lib/live/client'
+import { AGENT_ID, WINDOW_LABEL } from '@/lib/mock/tab'
 import { useConsole } from './provider'
 
 /**
