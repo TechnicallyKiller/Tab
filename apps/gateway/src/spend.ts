@@ -163,6 +163,8 @@ interface Challenge {
   payTo: string
   /** The seller's own price, when the challenge stated one. */
   amount?: MicroUsdc
+  /** The seller never answered at all, as opposed to answering unhelpfully. */
+  unreachable?: boolean
 }
 
 async function resolveSeller(url: string): Promise<Challenge> {
@@ -175,11 +177,20 @@ async function resolveSeller(url: string): Promise<Challenge> {
 
   try {
     /*
-     * A short timeout, because this runs BEFORE the hold: a seller that hangs
-     * here costs nothing but a failed spend, whereas the same hang after the
-     * hold would strand reserved credit until expiry.
+     * A GENEROUS timeout, and the earlier comment here had it backwards.
+     *
+     * It argued for a short one "because this runs before the hold". That is
+     * exactly why it can afford to be long: nothing is reserved yet, so waiting
+     * costs latency and nothing else, while giving up early costs the whole
+     * spend.
+     *
+     * Measured against a suspended free-tier seller: 72.9s to wake. At 10s
+     * every first purchase after an idle period failed — and failed claiming
+     * the seller "served no challenge", which is a different and wrong
+     * accusation. 60s covers a cold start while still bounding a seller that is
+     * genuinely hanging.
      */
-    const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) })
+    const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(60_000) })
     const header = res.headers.get('payment-required')
     if (!header) return { payTo: 'unknown' }
 
@@ -201,8 +212,14 @@ async function resolveSeller(url: string): Promise<Challenge> {
     const raw = first?.amount
     const quoted = typeof raw === 'string' && /^\d+$/.test(raw) ? micro(BigInt(raw)) : undefined
     return quoted === undefined ? { payTo } : { payTo, amount: quoted }
-  } catch {
-    return { payTo: 'unknown' }
+  } catch (error) {
+    /*
+     * "Did not answer" and "answered, without a challenge" are different
+     * problems with different fixes, and reporting the second for the first
+     * sent us looking at a perfectly well-behaved seller.
+     */
+    const timedOut = error instanceof Error && /timeout|abort/i.test(error.name)
+    return { payTo: 'unknown', ...(timedOut ? { unreachable: true } : {}) }
   }
 }
 
@@ -225,9 +242,12 @@ export async function spend(deps: SpendDeps, request: SpendRequest): Promise<Spe
   if (!ENTITY_ID.test(seller)) {
     return {
       outcome: 'failed',
-      reason:
-        `could not work out who to pay at ${request.url} — the seller served no x402 ` +
-        'challenge naming a Hedera payTo account, so nothing was reserved or spent',
+      reason: challenge.unreachable
+        ? `${request.url} did not respond in time, so it could not be asked who to pay. ` +
+          'Nothing was reserved or spent. A suspended host can take over a minute to wake — ' +
+          'retry once it is up.'
+        : `could not work out who to pay at ${request.url} — the seller answered but served no ` +
+          'x402 challenge naming a Hedera payTo account, so nothing was reserved or spent',
       holdId: request.idempotencyKey ?? 'none',
     }
   }

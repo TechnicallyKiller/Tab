@@ -18,9 +18,21 @@ name: traffic
 
 on:
   schedule:
-    # Every 20 minutes, offset off the hour so it never lands on the engine
-    # (:17) or the settle worker (:47) and contend for the same window.
-    - cron: '3,23,43 * * * *'
+    # Every 10 minutes, and the interval is load-bearing rather than a taste.
+    #
+    # The free tier suspends a service after 15 MINUTES idle, and waking one was
+    # measured at 72.9s. At a 20-minute cadence the services were guaranteed to
+    # be asleep by the next run, so the first purchase a visitor made always hit
+    # a cold start — and the demo's own documented refusal failed when tried
+    # against the live deployment.
+    #
+    # Ten minutes keeps every gap under the suspend threshold, so the services
+    # simply never sleep. Generating traffic and keeping the hosts warm turn out
+    # to be the same job.
+    #
+    # Offset off :00 so it never lands on the engine (:17) or the settle worker
+    # (:47) and contend for the same window.
+    - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
     inputs:
       calls:
