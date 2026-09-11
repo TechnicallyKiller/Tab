@@ -3,7 +3,14 @@ import { Callout, DocsH2, DocsP } from '@/components/docs/parts'
 import { SequenceDiagram } from '@/components/landing/diagrams'
 import { Card, CardHead, Chip, CodeBlock } from '@/components/ui'
 import { CopyButton } from '@/components/ui/copy-button'
-import { CALLOUTS, QUICKSTART, RECEIPT_SCHEMA, REFUSAL_CODES, SPEND_PARAMS } from '@/lib/mock/docs'
+import {
+  BUILD_ON_TAB,
+  CALLOUTS,
+  QUICKSTART,
+  RECEIPT_SCHEMA,
+  REFUSAL_CODES_DOC as REFUSAL_CODES,
+  SPEND_PARAMS,
+} from '@/lib/docs'
 import { TOPICS } from '@/lib/mock/tab'
 
 export default function DocsPage() {
@@ -176,6 +183,7 @@ export default function DocsPage() {
                 <th scope="col">Code</th>
                 <th scope="col">Fires when</th>
                 <th scope="col">Agent should</th>
+                <th scope="col">Retry?</th>
               </tr>
             </thead>
             <tbody>
@@ -194,6 +202,18 @@ export default function DocsPage() {
                     {c.when}
                   </td>
                   <td style={{ lineHeight: 1.6, fontFamily: 'var(--font-sans)' }}>{c.next}</td>
+                  {/*
+                   * Straight from `isRetryable` in @tab/protocol. Two of the six
+                   * can succeed later and four never can, and an agent that
+                   * retries the four burns its budget rediscovering that.
+                   */}
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {c.retryable ? (
+                      <Chip tone="pen">later</Chip>
+                    ) : (
+                      <span style={{ color: 'var(--ink-3)' }}>never</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { SEARCH_INDEX } from '@/lib/mock/docs'
+import { SEARCH_INDEX } from '@/lib/docs'
 
 /** ⌘K. The only animation in the docs, and it opens on `snap`. */
 export function SearchPalette() {
@@ -78,12 +78,28 @@ export function SearchPalette() {
                 </div>
               ) : (
                 results.map((r) => (
-                  <div key={r.title} className="palette-row">
+                  /*
+                   * An anchor, not a div.
+                   *
+                   * Every result used to be inert: the palette found things and
+                   * then could not take you to them, which is a worse
+                   * experience than having no search at all — it looks like the
+                   * page is broken rather than absent. Each entry now carries
+                   * the anchor it describes, and selecting one closes the
+                   * palette on the way.
+                   */
+                  <a
+                    key={r.href}
+                    href={r.href}
+                    className="palette-row"
+                    onClick={() => setOpen(false)}
+                    style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
+                  >
                     <span className="t-label" style={{ width: 110, flex: 'none' }}>
                       {r.section}
                     </span>
                     <span style={{ fontSize: 14 }}>{highlight(r.title, q)}</span>
-                  </div>
+                  </a>
                 ))
               )}
             </div>

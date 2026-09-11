@@ -236,6 +236,9 @@ importers:
       '@tab/params':
         specifier: workspace:*
         version: link:../../packages/params
+      '@tab/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@tab/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

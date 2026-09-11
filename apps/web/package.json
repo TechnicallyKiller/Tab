@@ -13,6 +13,7 @@
   "dependencies": {
     "@tab/money": "workspace:*",
     "@tab/params": "workspace:*",
+    "@tab/protocol": "workspace:*",
     "@tab/sdk": "workspace:*",
     "next": "16.3.4",
     "openai": "^7.12.1",
