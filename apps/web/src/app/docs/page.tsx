@@ -269,7 +269,7 @@ export default function DocsPage() {
       <DocsH2 id="schema">HCS receipt message</DocsH2>
       <div style={{ marginBottom: 56 }}>
         <CodeBlock
-          lang="json · schema v2"
+          lang="json · a message off the receipts topic"
           code={RECEIPT_SCHEMA}
           action={
             <span className="t-label" style={{ textTransform: 'none', letterSpacing: 0 }}>
@@ -283,6 +283,37 @@ export default function DocsPage() {
       <Card style={{ padding: 22, marginBottom: 40 }}>
         <SequenceDiagram />
       </Card>
+
+      <DocsH2 id="build">Build on Tab</DocsH2>
+      <DocsP>
+        Four surfaces over one gateway, and deliberately the same ten verbs: <code>@tab/sdk</code>{' '}
+        defines the interface, and the MCP server, the Agent Kit plugin and the CLI all bind to it.
+        Two of the ten act; the other eight only read what was published.
+      </DocsP>
+      <DocsP>
+        The packages are not on npm yet, so the SDK and MCP paths want the repo cloned. The HTTP API
+        needs nothing at all — which is why the quickstart above is curl.
+      </DocsP>
+
+      <div style={{ display: 'grid', gap: 16, marginBottom: 56 }}>
+        {BUILD_ON_TAB.map((b) => (
+          <div key={b.id} id={b.id}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{b.title}</h3>
+            <p
+              style={{
+                margin: '0 0 12px',
+                color: 'var(--ink-2)',
+                fontSize: 13.5,
+                lineHeight: 1.65,
+                maxWidth: 680,
+              }}
+            >
+              {b.body}
+            </p>
+            <CodeBlock lang={b.lang} code={b.code} />
+          </div>
+        ))}
+      </div>
     </>
   )
 }
