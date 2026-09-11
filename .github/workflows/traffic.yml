@@ -164,7 +164,7 @@ jobs:
       # never once succeeded while wearing that flag.
       - name: Earn — customer 1
         run: pnpm demo:earn
-        env: &earn
+        env:
           TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
           EARN_CALLS: '55'
           TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
@@ -177,14 +177,24 @@ jobs:
       - name: Earn — customer 2
         run: pnpm demo:earn
         env:
-          <<: *earn
+          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
+          EARN_CALLS: '55'
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
           PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER2_ACCOUNT_ID }}
           PAYER_ACCOUNT_KEY: ${{ secrets.DEMO_PAYER2_ACCOUNT_KEY }}
 
       - name: Earn — customer 3
         run: pnpm demo:earn
         env:
-          <<: *earn
+          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
+          EARN_CALLS: '55'
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
           PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER3_ACCOUNT_ID }}
           PAYER_ACCOUNT_KEY: ${{ secrets.DEMO_PAYER3_ACCOUNT_KEY }}
 
