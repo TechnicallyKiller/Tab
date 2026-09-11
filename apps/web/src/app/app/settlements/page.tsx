@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Card, CardHead, Chip } from '@/components/ui'
 import { seq as fmtSeq } from '@/lib/format'
 import { useSettlements } from '@/lib/hooks/use-settlements'
+import { txUrl } from '@/lib/hooks/use-topics'
 import { SETTLEMENTS } from '@/lib/mock/settlements'
 import type { Outcome, Settlement } from '@/lib/mock/types'
 import type { MicroUsdc } from '@/lib/money'
@@ -350,7 +351,7 @@ function Netting({ s }: { s: Row }) {
             <span style={{ color: 'var(--ink-3)' }}>none — window missed, nothing moved</span>
           ) : (
             <a
-              href={`https://hashscan.io/testnet/transaction/${s.transferId}`}
+              href={txUrl(s.transferId)}
               target="_blank"
               rel="noreferrer"
               style={{ color: 'var(--pen)' }}

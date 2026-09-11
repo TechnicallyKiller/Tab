@@ -37,3 +37,25 @@ export function useTopics(): Polled<Topics> {
 export function topicUrl(id: string | undefined): string | undefined {
   return id ? `https://hashscan.io/testnet/topic/${id}` : undefined
 }
+
+/**
+ * A HashScan transaction URL, in the form HashScan actually accepts.
+ *
+ * Hedera renders a transaction id as `0.0.8812188@1788696539.081352959`, and
+ * that is what the gateway returns and what belongs on screen. HashScan's route
+ * wants `0.0.8812188-1788696539-081352959` — the `@` and the nanosecond `.`
+ * both become dashes.
+ *
+ * The console was linking the display form straight through, so every
+ * settlement link resolved to nothing. Splitting on `@` rather than
+ * find-and-replacing means an id in an unexpected shape returns `undefined` and
+ * the caller renders plain text, instead of producing a confidently wrong URL.
+ */
+export function txUrl(transactionId: string | undefined): string | undefined {
+  if (!transactionId) return undefined
+  const [account, stamp] = transactionId.split('@')
+  if (!account || !stamp) return undefined
+  const [seconds, nanos] = stamp.split('.')
+  if (!seconds || !nanos) return undefined
+  return `https://hashscan.io/testnet/transaction/${account}-${seconds}-${nanos}`
+}

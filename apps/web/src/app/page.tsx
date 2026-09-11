@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { TopicId } from '@/components/console/topic-link'
 import { Attack } from '@/components/landing/attack'
 import { CeilingPlayground } from '@/components/landing/ceiling-playground'
 import { ProblemDiagram } from '@/components/landing/diagrams'
@@ -17,7 +18,6 @@ import {
   SLOW_PATH_STAGES,
   VERBS,
 } from '@/lib/mock/landing'
-import { TOPICS } from '@/lib/mock/tab'
 
 const NAV = [
   ['Problem', '#problem'],
@@ -553,9 +553,20 @@ export default function LandingPage() {
           >
             repo
           </a>
-          <span>receipt topic {TOPICS.receipts}</span>
-          <span>ceiling topic {TOPICS.ceilings}</span>
-          <span>float account {TOPICS.float}</span>
+          {/*
+           * Read from the gateway, not from the mock module these came from.
+           * The landing page was printing three topic ids that hold no
+           * messages, directly under a claim that everything is auditable.
+           */}
+          <span>
+            receipt topic <TopicId kind="receipts" />
+          </span>
+          <span>
+            ceiling topic <TopicId kind="ceilings" />
+          </span>
+          <span>
+            settlement topic <TopicId kind="settlements" />
+          </span>
           <span style={{ marginLeft: 'auto' }}>
             Built for ETHOnline 2026 · Hedera Testnet · No Solidity was deployed at any point.
           </span>

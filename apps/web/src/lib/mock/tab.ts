@@ -6,12 +6,6 @@ export const WINDOW_LABEL = '0148'
 export const WINDOW_SECONDS = 600
 export const MAX_SNAPSHOT_AGE_S = 15
 
-export const TOPICS = {
-  receipts: '0.0.4881203',
-  ceilings: '0.0.4881204',
-  float: '0.0.4881190',
-}
-
 export const CEILING = usdc('1.0000')
 export const PER_CALL_CAP = usdc('0.0500')
 export const OPENING_BALANCE = usdc('-0.4821')

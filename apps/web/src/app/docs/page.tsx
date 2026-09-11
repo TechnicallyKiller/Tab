@@ -1,4 +1,5 @@
 import { MODEL_ID as MODEL_VERSION } from '@tab/params'
+import { TopicId } from '@/components/console/topic-link'
 import { Callout, DocsH2, DocsP } from '@/components/docs/parts'
 import { SequenceDiagram } from '@/components/landing/diagrams'
 import { Card, CardHead, Chip, CodeBlock } from '@/components/ui'
@@ -11,7 +12,6 @@ import {
   REFUSAL_CODES_DOC as REFUSAL_CODES,
   SPEND_PARAMS,
 } from '@/lib/docs'
-import { TOPICS } from '@/lib/mock/tab'
 
 export default function DocsPage() {
   return (
@@ -273,7 +273,7 @@ export default function DocsPage() {
           code={RECEIPT_SCHEMA}
           action={
             <span className="t-label" style={{ textTransform: 'none', letterSpacing: 0 }}>
-              topic {TOPICS.receipts}
+              topic <TopicId kind="receipts" />
             </span>
           }
         />

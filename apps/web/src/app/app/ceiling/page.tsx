@@ -2,11 +2,11 @@
 
 import { caps, MODEL_ID as MODEL_VERSION, params } from '@tab/params'
 import type { PublishedCeilingView } from '@tab/sdk'
+import { TopicLink } from '@/components/console/topic-link'
 import { Card, CardHead, Chip } from '@/components/ui'
 import { CopyButton } from '@/components/ui/copy-button'
 import { seq as fmtSeq, shortConsensus } from '@/lib/format'
 import { useCeiling } from '@/lib/hooks/use-ceiling'
-import { TOPICS } from '@/lib/mock/tab'
 import { bp, format, formatBpMultiple, formatBpPercent, micro } from '@/lib/money'
 
 /**
@@ -480,14 +480,14 @@ export default function CeilingView() {
             }}
           >
             <span>HCS sequence</span>
-            <a
-              href={`https://hashscan.io/testnet/topic/${TOPICS.ceilings}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'var(--pen)' }}
-            >
+            {/*
+             * The ceilings topic, read from the gateway. This linked to
+             * `TOPICS.ceilings` — a mock id holding no messages — on the one
+             * screen whose whole argument is "go and check this yourself".
+             */}
+            <TopicLink kind="ceilings" style={{ color: 'var(--pen)' }}>
               {current?.seq !== undefined ? fmtSeq(current.seq) : '—'} ↗
-            </a>
+            </TopicLink>
           </div>
 
           {/*

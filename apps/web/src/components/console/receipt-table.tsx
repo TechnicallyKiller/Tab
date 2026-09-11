@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui'
 import { seq as fmtSeq } from '@/lib/format'
 import type { Receipt } from '@/lib/mock/types'
 import { format } from '@/lib/money'
+import { TopicLink } from './topic-link'
 
 const COLS: [string, boolean][] = [
   ['Consensus', false],
@@ -59,12 +60,15 @@ export function ReceiptTable({ rows }: { rows: Receipt[] }) {
                 </td>
                 <td style={{ color: 'var(--ink-3)' }}>{r.requestHash ?? '—'}</td>
                 <td className="n">
-                  <a
-                    href={`https://hashscan.io/testnet/topic/0.0.4881203`}
-                    style={{ color: 'var(--pen)' }}
-                  >
+                  {/*
+                   * The receipts topic, read from the gateway rather than
+                   * hardcoded. This said `0.0.4881203` — a mock id that holds
+                   * no messages — so every sequence number on the busiest
+                   * table in the console linked to an empty topic.
+                   */}
+                  <TopicLink kind="receipts" style={{ color: 'var(--pen)' }}>
                     {r.seq === undefined ? 'pending' : fmtSeq(r.seq)}
-                  </a>
+                  </TopicLink>
                 </td>
               </tr>
             )
