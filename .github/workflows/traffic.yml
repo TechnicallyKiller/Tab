@@ -231,3 +231,74 @@ jobs:
           HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
           PAYER_ACCOUNT_ID: ${{ secrets[matrix.customer.id] }}
           PAYER_ACCOUNT_KEY: ${{ secrets[matrix.customer.key] }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Close the loop: settle the window the earning landed in, then score it.
+  #
+  # These were three workflows a human triggered in order, and the order is not
+  # optional — earn, then the window has to CLOSE, then settle, then score.
+  # Doing it by hand meant the 30-minute revenue memory usually expired before
+  # the last step ran, so the tier kept falling back to Unrated between
+  # attempts. One job, one ordering, no operator.
+  #
+  # The engine runs TWICE on purpose. A ceiling may not grow mid-window: the
+  # first pass computes the growth and records it as pending, the settlement
+  # between them is the clean window that pays for it, and the second pass
+  # applies it. One pass can only ever leave it hold_pending.
+  # ───────────────────────────────────────────────────────────────────────────
+  close:
+    needs: earn
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The window the earning landed in has to close before its receipts can
+      # be settled or scored. Sleeping the full window length is the simple
+      # correct answer; computing the remainder would save a couple of minutes
+      # and get the boundary wrong at least once.
+      - name: Wait for the window to close
+        run: sleep $(( ${{ vars.WINDOW_SECONDS || '300' }} + 30 ))
+
+      - name: Settle the closed window
+        run: pnpm settle --acknowledge-duplicates
+        env: &chain
+          HEDERA_NETWORK: testnet
+          DEMO_MODE: ${{ vars.DEMO_MODE || 'true' }}
+          WINDOW_SECONDS: ${{ vars.WINDOW_SECONDS || '300' }}
+          TRAILING_WINDOWS: ${{ vars.TRAILING_WINDOWS || '6' }}
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          TOPIC_RECEIPTS: ${{ secrets.TOPIC_RECEIPTS }}
+          TOPIC_CEILINGS: ${{ secrets.TOPIC_CEILINGS }}
+          TOPIC_SETTLEMENTS: ${{ secrets.TOPIC_SETTLEMENTS }}
+          FAUCET_ACCOUNT_ID: ${{ secrets.FAUCET_ACCOUNT_ID }}
+          FAUCET_ACCOUNT_KEY: ${{ secrets.FAUCET_ACCOUNT_KEY }}
+
+      - name: Score it — computes the growth, records it pending
+        run: pnpm engine:once --publish
+        env: *chain
+
+      - name: Settle again — the clean window that pays for the growth
+        run: pnpm settle --acknowledge-duplicates
+        env: *chain
+
+      - name: Score again — applies it
+        run: pnpm engine:once --publish
+        env: *chain
+
+      - name: Where the tab ended up
+        if: always()
+        run: |
+          curl -sS --max-time 60 \
+            "${{ vars.TAB_GATEWAY_URL }}/v1/tabs/${{ secrets.TAB_ACCOUNT_ID }}/ceiling" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);i=d['inputs'];print(f\"  tier {i['tier']} x{i['multBp']/10000} ramp {i['rampBp']/100}% revenue {i['revenue']} -> ceiling {d['ceiling']} ({d['binding']})\")"

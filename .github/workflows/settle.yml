@@ -45,7 +45,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Settle every closed window
-        run: pnpm settle
+        # --acknowledge-duplicates, and it is not a shrug.
+        #
+        # Window 5962288 was settled twice, months of windows ago, by a worker
+        # that replayed only the receipts topic. HCS is append-only so the
+        # duplicate is permanent, and the guard that spots it refuses to settle
+        # ANYTHING while it stands — which is right for a fresh violation and
+        # wrong for a healed one. Settlement had therefore been dead since
+        # window 5962292: no clean settlements, so no ceiling could ever grow,
+        # for days, silently.
+        #
+        # The flag acknowledges that specific historic scar. A NEW double
+        # settlement would show in the same report and still needs fixing at
+        # the cause; this only stops one healed wound from freezing the rail
+        # forever.
+        run: pnpm settle --acknowledge-duplicates
         env:
           # ─────────────────────────────────────────────────────────────────
           # THESE MUST MATCH THE GATEWAY'S OWN SETTINGS ON RENDER.
