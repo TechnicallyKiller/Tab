@@ -74,6 +74,16 @@ const before = await state()
 console.log(`\n  before    balance ${before['balance']} · outstanding ${before['outstanding']}\n`)
 
 let paid = 0
+/*
+ * Counted separately from `paid`, because they are different failures.
+ *
+ * A credit the gateway could not ATTEST carries the 60% unattested discount —
+ * so a run can settle every payment, report every one as paid, and still be
+ * worth 40% of what it was sized for. Attestation comes from the upstream
+ * actually serving what it was paid for, so a sleeping agent endpoint produces
+ * exactly this: money moves, revenue barely does.
+ */
+let attested = 0
 for (let i = 0; i < CALLS; i++) {
   const started = Date.now()
   try {
@@ -94,6 +104,7 @@ for (let i = 0; i < CALLS; i++) {
     if (result.status === 200) {
       paid++
       const body = result.body as { served?: unknown; credited?: Record<string, unknown> }
+      if (body.credited?.['attested'] === true) attested++
       console.log(
         `  ${i + 1}. PAID · credited ${body.credited?.['amount']} · attested ` +
           `${body.credited?.['attested']} · seq ${body.credited?.['receiptSeq']} · ` +
@@ -118,7 +129,41 @@ for (let i = 0; i < CALLS; i++) {
 
 const after = await state()
 console.log(`\n  after     balance ${after['balance']} · outstanding ${after['outstanding']}`)
-console.log(`  result    ${paid} of ${CALLS} paid`)
+console.log(`  result    ${paid} of ${CALLS} paid · ${attested} attested`)
+
+/*
+ * A run that earns nothing FAILS, and one that earns only unattested credit
+ * says so loudly.
+ *
+ * This used to print its tally and exit zero regardless. A scheduled run then
+ * reported success with `0 of 55 paid` while the tab's balance climbed 2.750000
+ * in the same log — the payer counts HTTP 200s and the gateway was returning
+ * 502s it had nonetheless honoured. Green tick, broken pipeline, and four hours
+ * before anyone noticed the tier had stopped moving.
+ *
+ * The distinction matters because the two have different causes. Nothing paid
+ * means the earn leg is unreachable or unfunded. Paid but unattested means the
+ * upstream is down: the money moved and the credit is worth 40% of face value,
+ * which moves a tier far less than the call count suggests.
+ */
+if (paid === 0) {
+  console.error(`\n  FAILED — 0 of ${CALLS} calls were paid. Nothing was earned.\n`)
+  process.exit(1)
+}
+
+if (attested === 0) {
+  console.error(
+    `\n  FAILED — ${paid} calls paid but NONE attested. The agent endpoint served` +
+      `\n  nothing, so every credit carries the unattested discount. Check that` +
+      `\n  AGENT_ENDPOINT_URL is set on the gateway and that the service is awake.\n`,
+  )
+  process.exit(1)
+}
+
+if (attested < paid) {
+  console.warn(`\n  WARNING — ${paid - attested} of ${paid} credits were UNATTESTED.\n`)
+}
+
 console.log(`\n  The agent earned without holding a key. The tab moved toward positive.`)
 console.log(`  Payment landed in house float, not in the agent's hands.\n`)
 void format
