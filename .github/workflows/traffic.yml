@@ -54,8 +54,9 @@ jobs:
     runs-on: ubuntu-latest
     # Free-tier services sleep; a cold start plus four x402 settlements at
     # ~5s each needs room, but not unbounded room.
-    # Three customers x 55 x402 settlements at ~4s each, plus cold starts.
-    timeout-minutes: 35
+    # Wake (up to ~75s a service), four spends, one top-up. The earn leg is a
+    # separate parallel job now and carries its own timeout.
+    timeout-minutes: 12
 
     steps:
       - uses: actions/checkout@v4
@@ -174,44 +175,59 @@ jobs:
       #
       # NOT continue-on-error — see the note that was here before. This step had
       # never once succeeded while wearing that flag.
-      - name: Earn — customer 1
-        run: pnpm demo:earn
-        env:
-          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
-          EARN_CALLS: '55'
-          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
-          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
-          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
-          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
-          PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER_ACCOUNT_ID }}
-          PAYER_ACCOUNT_KEY: ${{ secrets.DEMO_PAYER_ACCOUNT_KEY }}
-
-      - name: Earn — customer 2
-        run: pnpm demo:earn
-        env:
-          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
-          EARN_CALLS: '55'
-          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
-          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
-          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
-          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
-          PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER2_ACCOUNT_ID }}
-          PAYER_ACCOUNT_KEY: ${{ secrets.DEMO_PAYER2_ACCOUNT_KEY }}
-
-      - name: Earn — customer 3
-        run: pnpm demo:earn
-        env:
-          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
-          EARN_CALLS: '55'
-          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
-          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
-          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
-          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
-          PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER3_ACCOUNT_ID }}
-          PAYER_ACCOUNT_KEY: ${{ secrets.DEMO_PAYER3_ACCOUNT_KEY }}
-
       - name: What the topic looks like now
         if: always()
         run: |
           curl -sS --max-time 60 "${{ vars.TAB_GATEWAY_URL }}/v1/tabs/${{ secrets.TAB_ACCOUNT_ID }}" \
             | python3 -m json.tool || true
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Earning, three customers at once.
+  #
+  # These ran as three sequential steps: 165 x402 settlements at ~4s each, about
+  # eleven minutes of a runner waiting on consensus one call at a time. They have
+  # no reason to be ordered — each customer pays from its own account, and the
+  # gateway credits the same tab either way — so the wall clock drops to roughly
+  # a third.
+  #
+  # `fail-fast: false` because one customer running out of float is not a reason
+  # to abandon revenue the other two are still earning.
+  # ───────────────────────────────────────────────────────────────────────────
+  earn:
+    needs: spend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        customer:
+          - { n: '1', id: DEMO_PAYER_ACCOUNT_ID,  key: DEMO_PAYER_ACCOUNT_KEY }
+          - { n: '2', id: DEMO_PAYER2_ACCOUNT_ID, key: DEMO_PAYER2_ACCOUNT_KEY }
+          - { n: '3', id: DEMO_PAYER3_ACCOUNT_ID, key: DEMO_PAYER3_ACCOUNT_KEY }
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Earn — customer ${{ matrix.customer.n }}
+        run: pnpm demo:earn
+        env:
+          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
+          # 55 x 0.050000 each, 165 gross across the three.
+          #
+          # Sized against ATTESTED revenue: the counterparties weigh 42% once no
+          # one of them holds more than the 40% share cap, so 8.250000 gross is
+          # about 3.465000 attested, 0.577500 per window over TRAILING_WINDOWS.
+          # Tier C needs 0.100000 and beating the starter floor needs 0.357143.
+          EARN_CALLS: '55'
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          PAYER_ACCOUNT_ID: ${{ secrets[matrix.customer.id] }}
+          PAYER_ACCOUNT_KEY: ${{ secrets[matrix.customer.key] }}
