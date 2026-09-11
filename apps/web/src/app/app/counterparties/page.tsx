@@ -397,9 +397,10 @@ function Evidence({ party }: { party: Row }) {
             color: 'var(--ink-2)',
           }}
         >
-          No provenance has been published for this account, so the funding rules could not be
-          evaluated against it and it is counted as independent — <strong>which fails open.</strong>{' '}
-          Run <code>pnpm engine --publish</code>; a fact observed once is on the topic permanently.
+          No provenance has been published for this account yet, so the funding rules have not been
+          evaluated against it and it is counted as independent. The engine publishes provenance the
+          first time it observes an account, and a fact observed once stays on the topic
+          permanently.
         </p>
       ) : null}
     </div>

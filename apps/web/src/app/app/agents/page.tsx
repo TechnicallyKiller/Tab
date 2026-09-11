@@ -91,7 +91,7 @@ export default function AgentsView() {
           ) : (
             <>
               This gateway reports that one Starter Tab per funding root is not enforced, so minting
-              many agents from one wallet is not prevented. Run <code>pnpm engine --publish</code>.
+              many agents from one wallet is not prevented.
             </>
           )}
         </p>
@@ -154,10 +154,10 @@ export default function AgentsView() {
                 <tr>
                   <td colSpan={8} style={{ padding: '18px 14px', color: 'var(--ink-3)' }}>
                     {!live
-                      ? 'No gateway configured. There is no mock here on purpose — an invented list of agents on this screen would read as a registry that does not exist.'
+                      ? 'No gateway configured.'
                       : loading
                         ? 'Reading the receipt topic…'
-                        : 'No tab has transacted yet. Run pnpm demo:honest.'}
+                        : 'No tab has transacted yet. Tabs appear here the first time they spend or earn.'}
                   </td>
                 </tr>
               ) : null}
@@ -261,13 +261,11 @@ export default function AgentsView() {
               fontSize: 12.5,
             }}
           >
-            <strong>none recorded</strong> under Starter claim means the engine has not registered
-            that tab yet — <em>not</em> that it was denied. The gateway cannot tell those apart:
-            resolving a funding root needs the graph, which it may not import.{' '}
-            <strong>not published</strong> is likewise not the same as <strong>Unrated</strong>. A
-            tab the engine has never run for has no tier; <code>Unrated</code> is the tier that
-            carries a ×0 multiple and therefore no credit. Guessing one from the balance would put a
-            rating on screen that no topic carries.
+            <strong>none recorded</strong> means no Starter claim has been registered for that tab
+            yet. <strong>not published</strong> means the engine has not scored it — different from{' '}
+            <strong>Unrated</strong>, which is a tier the engine assigned and which carries a ×0
+            multiple, and so no credit. Every value on this screen comes from a published message;
+            nothing is inferred.
           </p>
         ) : null}
       </Card>

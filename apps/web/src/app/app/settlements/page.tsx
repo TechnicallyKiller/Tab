@@ -144,10 +144,9 @@ export default function SettlementsView() {
         </Chip>
         {!clean ? (
           <span style={{ color: 'var(--ink-2)', fontSize: 12.5, maxWidth: 460 }}>
-            A window settled twice, by a worker that replayed only the receipts topic and so
-            believed a settled window unsettled. HCS is append-only — the scar is permanent, and
-            printing CLEAN over it would be the more dishonest choice. <code>pnpm reconcile</code>{' '}
-            audits the money against Mirror Node.
+            A window settled twice, by a worker that replayed only the receipts topic and so read a
+            settled window as unsettled. HCS is append-only, so the record stands and this panel
+            reports it. The reconciler audits the money against Mirror Node.
           </span>
         ) : null}
         {live ? null : (
@@ -190,8 +189,8 @@ export default function SettlementsView() {
               {rows.length === 0 && !loading ? (
                 <tr>
                   <td colSpan={8} style={{ padding: '18px 14px', color: 'var(--ink-3)' }}>
-                    No window has settled yet. The worker runs on the window boundary — run{' '}
-                    <code>pnpm settle</code>, or wait for the next {params.window.seconds}s bucket.
+                    No window has settled yet. The worker runs on the window boundary — the next one
+                    closes within {params.window.seconds}s.
                   </td>
                 </tr>
               ) : null}
@@ -341,8 +340,8 @@ function Netting({ s }: { s: Row }) {
             {format(s.credits, { sign: 'always' })} {format(s.debits, { sign: 'always' })}{' '}
             {format(s.interest, { sign: 'always' })} ={' '}
             {format(micro(s.credits + s.debits + s.interest), { sign: 'always' })}, but the net on
-            the topic is {format(s.net, { sign: 'always' })}. Shown rather than reconciled — run{' '}
-            <code>pnpm reconcile</code>, which audits the money against Mirror Node.
+            the topic is {format(s.net, { sign: 'always' })}. Shown rather than reconciled: the
+            reconciler audits the money against Mirror Node on its own schedule.
           </div>
         ) : null}
         <div>

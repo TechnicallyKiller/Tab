@@ -188,8 +188,8 @@ export default function TabView() {
           </table>
           <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-2)', margin: '0 0 16px' }}>
             The starter ceiling is a floor, not a grant — it exists so a brand-new agent can make
-            its first calls at all. Nothing has been issued: no <code>register</code> message is
-            written, so this tab simply has no entries yet. Run <code>pnpm demo:honest</code>.
+            its first calls at all, and earned credit passes it after three or four. Nothing has
+            been issued to this tab yet, so it has no entries.
           </p>
         </Card>
       ) : null}

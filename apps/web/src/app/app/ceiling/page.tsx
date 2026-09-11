@@ -187,11 +187,9 @@ export default function CeilingView() {
           Ceiling
         </div>
         <p style={{ margin: 0, maxWidth: 560, lineHeight: 1.7, color: 'var(--ink-2)' }}>
-          <strong style={{ color: 'var(--caution)' }}>NOT CONFIGURED.</strong> This view shows only
-          what the engine published to the ceiling topic — there is no mock, because a fabricated
-          ceiling with a fabricated input hash beside it is the one screen in this console that
-          would be actively misleading. Set <code>NEXT_PUBLIC_TAB_ACCOUNT_ID</code> and run{' '}
-          <code>pnpm engine</code>.
+          <strong style={{ color: 'var(--caution)' }}>NOT CONFIGURED.</strong> This view shows what
+          the engine published to the ceiling topic. Set <code>NEXT_PUBLIC_TAB_ACCOUNT_ID</code> to
+          point it at a tab.
         </p>
       </Card>
     )
@@ -265,10 +263,10 @@ export default function CeilingView() {
                 'Reading the ceiling topic…'
               ) : (
                 <>
-                  No ceiling has been published for this tab yet, which is the normal state for its
-                  first minutes. The gateway is enforcing{' '}
-                  <strong className="t-mono">{format(value.enforced)}</strong> meanwhile — the
-                  starter ceiling. Run <code>pnpm engine</code>.
+                  No ceiling has been published for this tab yet — the normal state for its first
+                  minutes. The gateway is enforcing{' '}
+                  <strong className="t-mono">{format(value.enforced)}</strong> meanwhile: the
+                  starter ceiling.
                 </>
               )}
             </div>
@@ -520,11 +518,11 @@ export default function CeilingView() {
           </div>
 
           <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-2)', margin: 0 }}>
-            This panel is <strong>not</strong> the verifier. It shows the sequence number, the model
-            id and the input hash so you can find the message on HashScan and recompute it yourself.{' '}
-            <code>pnpm verify-ceiling</code> replays the topic, recomputes each ceiling from the
-            frozen parameter set it names, and reports a mismatch — it caught a real one once, when
-            a change to the formula shipped without a version bump.
+            The sequence number, model id and input hash above are everything needed to find this
+            message on HashScan and recompute it independently. <code>verify-ceiling</code> replays
+            the topic, recomputes each ceiling from the frozen parameter set the message names, and
+            reports any mismatch — no database and no credential of ours required. That is the whole
+            claim, and it is checkable.
           </p>
 
           {error ? (
