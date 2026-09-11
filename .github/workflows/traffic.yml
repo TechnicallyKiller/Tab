@@ -1,0 +1,101 @@
+# Keep the topic alive.
+#
+# The engine publishes ceilings and the settlement worker closes windows, but
+# neither creates RECEIPTS — those only exist when an agent actually spends or
+# earns. Without this, every receipt on the topic came from someone running a
+# script by hand, so the console showed "0 rows" to anyone who looked between
+# demos, and the ceiling sat at the starter floor because trailing revenue was
+# always zero.
+#
+# A credit rail with no traffic cannot demonstrate credit. This is the traffic.
+#
+# It runs the SAME path a visitor takes: a plain seller URL with no price and no
+# counterparty, because both belong to the seller. A generator that took a
+# private shortcut would keep passing while the real path was broken — which is
+# exactly what happened before.
+
+name: traffic
+
+on:
+  schedule:
+    # Every 20 minutes, offset off the hour so it never lands on the engine
+    # (:17) or the settle worker (:47) and contend for the same window.
+    - cron: '3,23,43 * * * *'
+  workflow_dispatch:
+    inputs:
+      calls:
+        description: 'Spend attempts this run'
+        required: false
+        default: '4'
+
+# One run at a time. Two concurrent generators would interleave holds against
+# the same ceiling and make the ledger harder to read for no extra evidence.
+concurrency:
+  group: traffic
+  cancel-in-progress: false
+
+jobs:
+  spend:
+    runs-on: ubuntu-latest
+    # Free-tier services sleep; a cold start plus four x402 settlements at
+    # ~5s each needs room, but not unbounded room.
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Render suspends idle services and takes ~50s to wake. Waking them
+      # BEFORE the run means the first spend is not racing a cold start, and a
+      # service that never wakes fails here with a clear message rather than as
+      # a mysterious timeout mid-purchase.
+      - name: Wake the services
+        run: |
+          for url in "${{ vars.TAB_GATEWAY_URL }}" "${{ vars.SELLER_URL }}"; do
+            echo "waking $url"
+            curl -sS --max-time 90 --retry 3 --retry-all-errors "$url/health" || {
+              echo "::error::$url did not answer /health"; exit 1; }
+            echo
+          done
+
+      - name: Spend against the seller
+        run: pnpm demo:honest
+        env:
+          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
+          SELLER_URL: ${{ vars.SELLER_URL }}
+          DEMO_CALLS: ${{ inputs.calls || '4' }}
+          # Which tab the receipts are filed against — the agent the console
+          # displays, not the operator account that happens to fund it.
+          TAB_ACCOUNT_ID: ${{ secrets.TAB_ACCOUNT_ID }}
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+
+      # Earning is the half that raises a ceiling: spending alone only ever
+      # walks the balance down, so a tab driven by purchases and nothing else
+      # stays Unrated forever and the model looks static.
+      #
+      # Best-effort: the earn leg depends on a third service being awake, and a
+      # failure there should not fail a run that already produced spend
+      # receipts.
+      - name: Earn through the gateway
+        continue-on-error: true
+        run: pnpm demo:earn
+        env:
+          TAB_GATEWAY_URL: ${{ vars.TAB_GATEWAY_URL }}
+          EARN_CALLS: '2'
+          HEDERA_OPERATOR_ID: ${{ secrets.HEDERA_OPERATOR_ID }}
+          HEDERA_OPERATOR_KEY: ${{ secrets.HEDERA_OPERATOR_KEY }}
+          USDC_TOKEN_ID: ${{ secrets.USDC_TOKEN_ID }}
+          DEMO_PAYER_ACCOUNT_ID: ${{ secrets.DEMO_PAYER_ACCOUNT_ID }}
+          DEMO_PAYER_ACCOUNT_KEY: ${{ secrets.DEMO_PAYER_ACCOUNT_KEY }}
+
+      - name: What the topic looks like now
+        if: always()
+        run: |
+          curl -sS --max-time 60 "${{ vars.TAB_GATEWAY_URL }}/v1/tabs/${{ secrets.TAB_ACCOUNT_ID }}" \
+            | python3 -m json.tool || true

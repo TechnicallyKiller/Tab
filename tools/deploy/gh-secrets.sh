@@ -31,7 +31,8 @@ echo "secrets"
 for k in HEDERA_OPERATOR_ID HEDERA_OPERATOR_KEY \
          USDC_TOKEN_ID TAB_ACCOUNT_ID \
          TOPIC_RECEIPTS TOPIC_CEILINGS TOPIC_SETTLEMENTS \
-         FAUCET_ACCOUNT_ID FAUCET_ACCOUNT_KEY; do
+         FAUCET_ACCOUNT_ID FAUCET_ACCOUNT_KEY \
+         DEMO_PAYER_ACCOUNT_ID DEMO_PAYER_ACCOUNT_KEY; do
   v="$(get "$k")"
   if [ -z "$v" ]; then printf '  SKIP  %-22s (empty in .env)\n' "$k"; continue; fi
   printf '%s' "$v" | gh secret set "$k" --repo "$REPO" >/dev/null
@@ -51,6 +52,21 @@ for pair in "DEMO_MODE=$(get DEMO_MODE)" \
             "TRAILING_WINDOWS=$(get TRAILING_WINDOWS)"; do
   k="${pair%%=*}"; v="${pair#*=}"
   if [ -z "$v" ]; then printf '  SKIP  %-22s (empty in .env)\n' "$k"; continue; fi
+  gh variable set "$k" --repo "$REPO" --body "$v" >/dev/null
+  printf '  set   %-22s = %s\n' "$k" "$v"
+done
+
+# The traffic workflow needs to know where the deployed services are. These are
+# public URLs, not secrets, so they are variables — visible in the Actions log,
+# which is where you want them when a run fails.
+echo
+echo "service urls"
+for pair in "TAB_GATEWAY_URL=${TAB_GATEWAY_URL:-}" "SELLER_URL=${SELLER_URL:-}"; do
+  k="${pair%%=*}"; v="${pair#*=}"
+  if [ -z "$v" ]; then
+    printf '  SKIP  %-22s (already set, or pass it: %s=https://... bash %s)\n' "$k" "$k" "$0"
+    continue
+  fi
   gh variable set "$k" --repo "$REPO" --body "$v" >/dev/null
   printf '  set   %-22s = %s\n' "$k" "$v"
 done
