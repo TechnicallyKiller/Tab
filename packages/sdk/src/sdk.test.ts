@@ -646,3 +646,54 @@ test('a gateway that omits `registrationEnforced` is read as NOT enforcing', asy
   assert.equal(list.registrationEnforced, false)
   assert.equal(list.rootsClaimed, 0)
 })
+
+/* ── the receiver `fetch` is called with ─────────────────────────────────── */
+
+test('the global fetch is called with a GLOBAL receiver, not with the client', async () => {
+  /*
+   * The browser-only bug that took the console down completely.
+   *
+   * `fetch` is a method on Window and the spec requires a Window receiver.
+   * Stored bare and invoked as `this.doFetch(...)`, the receiver became the
+   * client instance and every browser request died with
+   *
+   *   TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation
+   *
+   * Node's fetch does not care about its receiver, so this suite passed
+   * throughout and the console failed on every single request — reported as a
+   * transport error, which is indistinguishable from an unreachable gateway.
+   *
+   * So this asserts the RECEIVER rather than the outcome: what broke was never
+   * visible in the response, and a test that only checked the response could
+   * not have caught it. `createTab` is used without an injected fetch on
+   * purpose — injecting one bypasses the exact line under test.
+   */
+  const seen: unknown[] = []
+  const realFetch = globalThis.fetch
+
+  globalThis.fetch = function (this: unknown) {
+    seen.push(this)
+    return Promise.resolve(
+      new Response(JSON.stringify({ tab: '0.0.1', window: 1 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+  } as typeof fetch
+
+  try {
+    const tab = createTab({ baseUrl: 'http://gateway.test', maxRetries: 0 })
+    await tab.state('0.0.1').catch(() => undefined)
+
+    assert.equal(seen.length, 1, 'fetch was called exactly once')
+    // Bound: the receiver is the global object, never the client instance.
+    // A browser rejects anything else outright.
+    assert.ok(
+      seen[0] === globalThis || seen[0] === undefined,
+      `fetch was called with ${Object.prototype.toString.call(seen[0])} as its receiver — ` +
+        'a browser would throw Illegal invocation',
+    )
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})

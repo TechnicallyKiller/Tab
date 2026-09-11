@@ -58,7 +58,25 @@ export class TabClient {
     if (config.token) this.token = config.token
     this.timeoutMs = config.timeoutMs ?? DEFAULTS.timeoutMs
     this.maxRetries = config.maxRetries ?? DEFAULTS.maxRetries
-    this.doFetch = config.fetch ?? globalThis.fetch
+    /*
+     * BOUND to globalThis, and that bind is load-bearing in a browser.
+     *
+     * `fetch` is a method on Window, and the spec requires it to be called with
+     * a Window receiver. Stored bare and invoked as `this.doFetch(...)`, the
+     * receiver becomes this client instance and the browser throws
+     *
+     *   TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation
+     *
+     * before a single byte leaves the machine. Node's fetch has no such
+     * requirement, so every test here and every server-side caller passed while
+     * the console failed on EVERY request — and failed as a transport error,
+     * which reads exactly like an unreachable gateway. It cost hours of
+     * chasing CORS and cold starts that were never involved.
+     *
+     * An INJECTED fetch is used as given: it is the caller's function and
+     * binding it to globalThis would be us rewriting their receiver.
+     */
+    this.doFetch = config.fetch ?? globalThis.fetch.bind(globalThis)
   }
 
   /**
