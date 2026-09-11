@@ -38,9 +38,21 @@ configureGlobalHttp({ connectTimeoutMs: 60_000 })
 const tokenId = process.env['USDC_TOKEN_ID']
 if (!tokenId) throw new Error('USDC_TOKEN_ID missing')
 
-const payer = process.env['DEMO_PAYER_ACCOUNT_ID']
-if (!payer || payer.includes('xxxxx')) {
-  throw new Error('DEMO_PAYER_ACCOUNT_ID missing — run `pnpm demo:payer` once to create one')
+/*
+ * Every demo customer, not just the first.
+ *
+ * Revenue has to be SPREAD across them — a counterparty holding more than the
+ * 40% share cap is CONCENTRATED and has its weight multiplied by 0.80 — so a
+ * pool where one member is empty defeats the point of having a pool. They are
+ * all topped up, or the concentration the discount punishes is exactly what
+ * the funding produces.
+ */
+const payers = ['', '2', '3', '4', '5']
+  .map((n) => ({ name: `DEMO_PAYER${n}_ACCOUNT_ID`, id: process.env[`DEMO_PAYER${n}_ACCOUNT_ID`] }))
+  .filter((p): p is { name: string; id: string } => !!p.id && !p.id.includes('xxxxx'))
+
+if (payers.length === 0) {
+  throw new Error('No DEMO_PAYER*_ACCOUNT_ID set — run `pnpm demo:payer` to create one')
 }
 
 const target = usdc(process.argv[2] ?? '6.000000')
@@ -51,54 +63,60 @@ const mirror = new MirrorClient({ network: operator.network, timeoutMs: 45_000, 
 
 console.log(`\ntop-up · Hedera ${operator.network}\n`)
 console.log(`  operator    ${operator.operatorId.toString()}`)
-console.log(`  payer       ${payer}`)
+console.log(`  payers      ${payers.length}   (floor ${format(floor)}, target ${format(target)})\n`)
 
-const before = await getUsdcBalance(mirror, payer, tokenId)
-const held = await getUsdcBalance(mirror, operator.operatorId.toString(), tokenId)
-console.log(`  payer has   ${format(before)}   (floor ${format(floor)}, target ${format(target)})`)
-console.log(`  operator    ${format(held)}`)
+for (const p of payers) {
+  const before = await getUsdcBalance(mirror, p.id, tokenId)
+  const held = await getUsdcBalance(mirror, operator.operatorId.toString(), tokenId)
 
-if (before >= floor) {
-  console.log(`\n  Above the floor — nothing moved.\n`)
-  process.exit(0)
+  if (before >= floor) {
+    console.log(`  ${p.id.padEnd(16)} ${format(before)}   above the floor, nothing moved`)
+    continue
+  }
+
+  // Arithmetic on a branded bigint drops the brand; `micro` puts it back.
+  const wanted = micro(target - before)
+
+  /*
+   * Never transfer more than the operator holds.
+   *
+   * Asking for more than the balance fails on chain AFTER the fee is spent,
+   * and on a schedule that is a failure every tick until somebody looks.
+   * Sending what is there keeps the demo running on a thinning float and puts
+   * the shortfall in the log instead of a stack trace.
+   */
+  const amount = micro(wanted > held ? held : wanted)
+
+  if (amount <= 0n) {
+    console.log(`  ${p.id.padEnd(16)} ${format(before)}   operator is empty — float exhausted`)
+    continue
+  }
+
+  await transferToken(operator.client, {
+    tokenId,
+    from: operator.operatorId.toString(),
+    to: p.id,
+    amount,
+    /*
+     * Keyed by the hour, so a retry within the hour cannot double-send while a
+     * genuine top-up an hour later still goes through.
+     */
+    idempotencyKey: `topup:${p.id}:${Math.floor(Date.now() / 3_600_000)}`,
+  })
+
+  const short = amount < wanted ? `  (wanted ${format(wanted)})` : ''
+  console.log(`  ${p.id.padEnd(16)} ${format(before)} -> ${format(micro(before + amount))}${short}`)
 }
 
-// Arithmetic on a branded bigint drops the brand; `micro` puts it back.
-const wanted = micro(target - before)
+console.log()
 
 /*
- * Never transfer more than the operator holds.
+ * Close the client, or this never exits.
  *
- * A transfer of more than the balance fails on-chain after the fee is spent,
- * and on a schedule that is a failure every tick until someone notices. Sending
- * what is there keeps the demo running on a thinning float and makes the
- * shortfall visible in the log instead of as a stack trace.
+ * The SDK holds open gRPC channels to every node it has talked to, which keep
+ * the event loop alive after the last await resolves. Run by hand that looks
+ * like a hang; run in CI it is a step that sits there until the job timeout
+ * kills it — thirty-five minutes of a runner doing nothing, after the work had
+ * already succeeded.
  */
-const amount = micro(wanted > held ? held : wanted)
-
-if (amount <= 0n) {
-  console.log(`\n  Operator has nothing to send. The float is exhausted.`)
-  console.log(`  Earn payments credit ${operator.operatorId.toString()}, so this recovers on its`)
-  console.log(`  own once the earn leg runs — or fund it from a faucet.\n`)
-  process.exit(0)
-}
-
-if (amount < wanted) {
-  console.log(`\n  Only ${format(amount)} available of the ${format(wanted)} wanted.`)
-}
-
-await transferToken(operator.client, {
-  tokenId,
-  from: operator.operatorId.toString(),
-  to: payer,
-  amount,
-  /*
-   * Keyed by the hour, so a retry inside the same hour cannot double-send while
-   * a genuine top-up an hour later still goes through. The schedule is every 30
-   * minutes and the threshold check already suppresses most runs.
-   */
-  idempotencyKey: `topup:${payer}:${Math.floor(Date.now() / 3_600_000)}`,
-})
-
-console.log(`\n  Sent        ${format(amount)} to ${payer}`)
-console.log(`  payer now   ${format(micro(before + amount))}\n`)
+operator.client.close()

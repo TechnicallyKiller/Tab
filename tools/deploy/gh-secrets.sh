@@ -32,7 +32,9 @@ for k in HEDERA_OPERATOR_ID HEDERA_OPERATOR_KEY \
          USDC_TOKEN_ID TAB_ACCOUNT_ID \
          TOPIC_RECEIPTS TOPIC_CEILINGS TOPIC_SETTLEMENTS \
          FAUCET_ACCOUNT_ID FAUCET_ACCOUNT_KEY \
-         DEMO_PAYER_ACCOUNT_ID DEMO_PAYER_ACCOUNT_KEY; do
+         DEMO_PAYER_ACCOUNT_ID DEMO_PAYER_ACCOUNT_KEY \
+         DEMO_PAYER2_ACCOUNT_ID DEMO_PAYER2_ACCOUNT_KEY \
+         DEMO_PAYER3_ACCOUNT_ID DEMO_PAYER3_ACCOUNT_KEY; do
   v="$(get "$k")"
   if [ -z "$v" ]; then printf '  SKIP  %-22s (empty in .env)\n' "$k"; continue; fi
   printf '%s' "$v" | gh secret set "$k" --repo "$REPO" >/dev/null
@@ -47,9 +49,18 @@ done
 # only if both use the same number.
 echo
 echo "variables"
+# TRAILING_WINDOWS is deliberately NOT taken from .env.
+#
+# .env carries 1, which is right for a laptop: one 300s window of history, so a
+# change shows up immediately. The deployment wants 6, so revenue is averaged
+# over half an hour and the tier does not flicker to Unrated in every window the
+# traffic generator happens not to run in.
+#
+# This script previously copied .env's 1 over the 6 set in the dashboard, twice,
+# silently reverting a deliberate choice. Pass TRAILING_WINDOWS=n to set it.
 for pair in "DEMO_MODE=$(get DEMO_MODE)" \
             "WINDOW_SECONDS=$(get WINDOW_SECONDS)" \
-            "TRAILING_WINDOWS=$(get TRAILING_WINDOWS)"; do
+            "TRAILING_WINDOWS=${TRAILING_WINDOWS:-}"; do
   k="${pair%%=*}"; v="${pair#*=}"
   if [ -z "$v" ]; then printf '  SKIP  %-22s (empty in .env)\n' "$k"; continue; fi
   gh variable set "$k" --repo "$REPO" --body "$v" >/dev/null

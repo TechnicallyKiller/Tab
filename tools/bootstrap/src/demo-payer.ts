@@ -46,6 +46,26 @@ if (!tokenId) throw new Error('USDC_TOKEN_ID missing from .env')
 /** Enough for several calls at the demo's raised per-call price. */
 const funding = usdc(process.argv[2] ?? '4.000000')
 
+/*
+ * An optional suffix, so a SECOND and THIRD customer can exist.
+ *
+ *   pnpm demo:payer 4.000000      -> DEMO_PAYER_ACCOUNT_ID
+ *   pnpm demo:payer 4.000000 2    -> DEMO_PAYER2_ACCOUNT_ID
+ *
+ * Without it, running this twice appended a duplicate DEMO_PAYER_ACCOUNT_ID to
+ * .env, and every reader takes the first match — so the second customer would
+ * be created on chain, written to the file, and then silently ignored.
+ *
+ * More than one customer is not cosmetic. A sole counterparty is CONCENTRATED,
+ * which multiplies its weight by 0.80 on top of every other discount; spread
+ * the same revenue across three and no one of them holds more than the 40%
+ * share cap, so that multiplier stops applying.
+ */
+const suffix = process.argv[3] ?? ''
+if (suffix && !/^\d+$/.test(suffix)) {
+  throw new Error(`The customer index must be a number, received ${JSON.stringify(suffix)}`)
+}
+
 const operator = clientFromEnv()
 const mirror = new MirrorClient({ network: operator.network, timeoutMs: 45_000, maxRetries: 4 })
 
@@ -132,8 +152,8 @@ const line =
   `\n# Indirectly-related demo customer, created by pnpm demo:payer.\n` +
   `# Funded by ${intermediary.accountId}, NOT by the operator — so the graph\n` +
   `# discounts it rather than blocking it. See tools/bootstrap/src/demo-payer.ts.\n` +
-  `DEMO_PAYER_ACCOUNT_ID=${payer.accountId}\n` +
-  `DEMO_PAYER_ACCOUNT_KEY=${payer.privateKey.toStringDer()}\n`
+  `DEMO_PAYER${suffix}_ACCOUNT_ID=${payer.accountId}\n` +
+  `DEMO_PAYER${suffix}_ACCOUNT_KEY=${payer.privateKey.toStringDer()}\n`
 await appendFile(envPath, line, 'utf8')
 
 console.log(`
