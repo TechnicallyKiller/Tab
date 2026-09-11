@@ -18,21 +18,24 @@ name: traffic
 
 on:
   schedule:
-    # Every 10 minutes, and the interval is load-bearing rather than a taste.
+    # Every 30 minutes — and the previous value of every 10 was a mistake worth
+    # recording, because it failed in a way that looked like nothing.
     #
-    # The free tier suspends a service after 15 MINUTES idle, and waking one was
-    # measured at 72.9s. At a 20-minute cadence the services were guaranteed to
-    # be asleep by the next run, so the first purchase a visitor made always hit
-    # a cold start — and the demo's own documented refusal failed when tried
-    # against the live deployment.
+    # GitHub delays scheduled runs under load and drops high-frequency ones
+    # first. At 6 runs an hour this workflow never fired on schedule ONCE, and
+    # the repo's other schedules — engine and settle, which had been reliable —
+    # stopped with it: engine ran 25 minutes late, then not at all; settle 32
+    # minutes late, then not at all. Nothing was disabled and no quota was
+    # touched (152 of 3,000 minutes). The queue was simply being throttled.
     #
-    # Ten minutes keeps every gap under the suspend threshold, so the services
-    # simply never sleep. Generating traffic and keeping the hosts warm turn out
-    # to be the same job.
+    # So this is not a keep-warm mechanism and must not be treated as one. It
+    # exists to put receipts on the topic. Render suspends after 15 minutes
+    # idle, which no cadence GitHub will honour can stay ahead of — warmth needs
+    # something that actually runs on time, an external pinger or a hand on the
+    # keyboard before a demo.
     #
-    # Offset off :00 so it never lands on the engine (:17) or the settle worker
-    # (:47) and contend for the same window.
-    - cron: '3,13,23,33,43,53 * * * *'
+    # Offset off :00 so it never lands on the engine (:17) or settle (:47).
+    - cron: '3,33 * * * *'
   workflow_dispatch:
     inputs:
       calls:

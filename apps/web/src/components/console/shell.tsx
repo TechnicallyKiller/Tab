@@ -169,7 +169,26 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                GATEWAY UNREACHABLE · {error}
+                {/*
+                 * A TIMEOUT is reported as "no response yet", not as
+                 * unreachable.
+                 *
+                 * The gateway is hosted on a tier that suspends idle services;
+                 * waking one was measured at 71.9s. During that window every
+                 * poll times out and the console was announcing the gateway as
+                 * unreachable while it was merely asleep — the loudest
+                 * possible way to say something untrue, on first impression,
+                 * to someone who just opened the link.
+                 *
+                 * A timeout genuinely cannot distinguish "waking" from "dead",
+                 * so the label claims neither and says what is actually known:
+                 * nothing has answered yet, and here is how long that can
+                 * legitimately take. Any OTHER error is a real fault and still
+                 * reads as unreachable.
+                 */}
+                {/timed out/i.test(error)
+                  ? 'NO RESPONSE YET · a suspended free-tier service takes ~60s to wake'
+                  : `GATEWAY UNREACHABLE · ${error}`}
               </span>
             ) : null}
             {/* Stale is a real state to design, so it is togglable in the mock. */}
