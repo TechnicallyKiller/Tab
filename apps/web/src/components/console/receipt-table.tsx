@@ -53,10 +53,36 @@ export function ReceiptTable({ rows }: { rows: Receipt[] }) {
                 </td>
                 <td>{r.counterparty}</td>
                 <td className="n" style={{ fontWeight: 600, color: amountColour }}>
-                  {r.leg === 'REFUSED' ? format(r.amount) : format(r.amount, { sign: 'always' })}
+                  {/*
+                   * A signed amount means money MOVED. A hold has not moved
+                   * any: it is headroom set aside until the spend commits or
+                   * expires.
+                   *
+                   * Rendering it `+0.0400` in debit red said both things at
+                   * once and neither of them clearly — a positive sign on a
+                   * red row that is in fact a reservation. Holds and refusals
+                   * both show a bare magnitude; credits and debits keep their
+                   * sign, because for those the direction is the point.
+                   */}
+                  {r.leg === 'HOLD' || r.leg === 'REFUSED'
+                    ? format(r.amount)
+                    : format(r.amount, { sign: 'always' })}
                 </td>
                 <td style={{ color: 'var(--ink-2)' }}>
-                  {r.leg === 'REFUSED' ? '—' : r.attested ? 'yes' : 'no'}
+                  {/*
+                   * Only a CREDIT can be attested, so only a credit gets a
+                   * yes or a no.
+                   *
+                   * `att` lives on the credit message alone — it records that
+                   * the gateway served the request the payment was for. A HOLD
+                   * is a reservation against the ceiling and a DEBIT is money
+                   * already gone; neither has anything to attest. This read
+                   * `r.attested ? 'yes' : 'no'` for every leg but a refusal,
+                   * so every hold on the busiest table in the console
+                   * displayed a flat "no" — which reads as a failed check
+                   * rather than an inapplicable one.
+                   */}
+                  {r.leg === 'CREDIT' ? (r.attested ? 'yes' : 'no') : '—'}
                 </td>
                 <td style={{ color: 'var(--ink-3)' }}>{r.requestHash ?? '—'}</td>
                 <td className="n">
