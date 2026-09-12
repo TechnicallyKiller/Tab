@@ -288,6 +288,18 @@ jobs:
         run: pnpm engine:once --publish
         env: *chain
 
+      # A SECOND window has to close first, and leaving this out meant the
+      # growth never landed.
+      #
+      # The release needs a clean settlement that happens AFTER the pending
+      # increase is recorded. Settling twice in a row does not produce one:
+      # the first pass already settled every closed window, so the second had
+      # nothing to do and the engine kept reporting hold_pending — computed
+      # 0.2589, enforced 0.2500, cycle after cycle, with the arithmetic
+      # correct and the ceiling frozen.
+      - name: Wait for a second window to close
+        run: sleep $(( ${{ vars.WINDOW_SECONDS || '300' }} + 30 ))
+
       - name: Settle again — the clean window that pays for the growth
         run: pnpm settle --acknowledge-duplicates
         env: *chain
