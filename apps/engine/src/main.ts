@@ -77,7 +77,21 @@ const mirror = new MirrorClient({
   network: hedera.network,
   timeoutMs: 45_000,
   maxRetries: 4,
-  maxPages: 12,
+  /*
+   * 12 pages was 1,200 messages, and the receipts topic passed that.
+   *
+   * `readTopic` asks Mirror Node for `order=asc`, so a walk that stops early
+   * keeps the OLDEST messages and drops the newest. Once the topic crossed
+   * 1,200 the engine was scoring on ancient history: it saw 1,040 credits
+   * where the topic held 1,620, none of them recent, and reported
+   * `0 closed window(s) of revenue` while the gateway served those same
+   * credits from the same topic. The tier fell to Unrated and stayed there,
+   * with no error anywhere.
+   *
+   * The cap exists to bound a runaway read, so it stays — just far above
+   * anything this demo will reach.
+   */
+  maxPages: 500,
 })
 
 /*
@@ -102,6 +116,24 @@ let ceilingState: CeilingState | undefined
  */
 async function replayTopic(topicId: string) {
   const walk = await readTopic(mirror, { topicId })
+
+  /*
+   * A truncated walk must FAIL, not score.
+   *
+   * `walk()` reports `truncated` and nothing read it, so hitting the page cap
+   * produced a partial ledger that looked complete: every downstream number
+   * computed cleanly from the wrong half of the topic. Scoring credit on a
+   * ledger you know is incomplete is worse than not scoring at all, and the
+   * only honest response is to stop.
+   */
+  if (walk.truncated) {
+    throw new Error(
+      `Replay of topic ${topicId} hit the page cap after ${walk.pagesFetched} pages — ` +
+        'the newest messages were not read. Raise maxPages; scoring a partial ledger ' +
+        'would silently understate revenue.',
+    )
+  }
+
   const { assembled } = reassembleChunks(walk.items)
   return entriesFromMessages(assembled)
 }
