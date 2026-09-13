@@ -1,14 +1,17 @@
 {
   "name": "@tab/sdk",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.1",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --experimental-strip-types --test src/*.test.ts"
   },
@@ -20,5 +23,22 @@
   "devDependencies": {
     "@types/node": "^22.15.0",
     "typescript": "^5.9.0"
+  },
+  "description": "Client for the Tab gateway: agent credit on Hedera. Ten verbs, two of which spend.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xNerd100/Tab.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/0xNerd100/Tab#readme",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.map",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

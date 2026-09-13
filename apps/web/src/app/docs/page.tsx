@@ -7,10 +7,14 @@ import { CopyButton } from '@/components/ui/copy-button'
 import {
   BUILD_ON_TAB,
   CALLOUTS,
+  HCS14_DERIVATION,
+  PROTOCOL_MESSAGES,
   QUICKSTART,
   RECEIPT_SCHEMA,
   REFUSAL_CODES_DOC as REFUSAL_CODES,
+  SPEND_ORDER,
   SPEND_PARAMS,
+  WEIGHT_ALGEBRA,
 } from '@/lib/docs'
 
 export default function DocsPage() {
@@ -284,6 +288,151 @@ export default function DocsPage() {
         <SequenceDiagram />
       </Card>
 
+      <DocsH2 id="messages">The ten messages</DocsH2>
+      <DocsP>
+        This is the whole protocol. Everything the console shows, everything <code>verify-tab</code>{' '}
+        checks and everything a stranger can replay is one of these — there is no private
+        side-channel and no stored row that is not derived from a message on one of the three
+        topics. Field names are the wire names, kept short because HCS charges by the byte and a
+        receipt that needs chunking is one that can arrive in pieces.
+      </DocsP>
+      <Card style={{ overflow: 'hidden', marginBottom: 40 }}>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 760, fontSize: 13.5 }}>
+            <thead>
+              <tr>
+                <th scope="col">Type</th>
+                <th scope="col">Written by</th>
+                <th scope="col">Topic</th>
+                <th scope="col">Fields</th>
+                <th scope="col">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PROTOCOL_MESSAGES.map((m) => (
+                <tr key={m.t}>
+                  <td className="t-mono" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {m.t}
+                  </td>
+                  <td style={{ color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{m.by}</td>
+                  <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{m.topic}</td>
+                  <td className="t-mono" style={{ color: 'var(--ink-3)', fontSize: 12 }}>
+                    {m.fields}
+                  </td>
+                  <td style={{ lineHeight: 1.6, fontFamily: 'var(--font-sans)' }}>{m.when}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <DocsH2 id="write-ahead">The write-ahead order</DocsH2>
+      <DocsP>
+        <code>reserve → pay → commit</code>. The hold is published and <em>awaited to consensus</em>{' '}
+        before the seller is called. That costs two to four seconds and buys the one thing a
+        stranger cannot otherwise check: that every debit was authorised before the money moved.
+      </DocsP>
+      <div style={{ display: 'grid', gap: 12, marginBottom: 40 }}>
+        {SPEND_ORDER.map((s, i) => (
+          <div
+            key={s.step}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '26px 92px 1fr',
+              gap: 14,
+              alignItems: 'start',
+            }}
+          >
+            <span className="t-mono" style={{ color: 'var(--ink-3)', fontSize: 12, paddingTop: 3 }}>
+              {i + 1}
+            </span>
+            <span className="t-mono" style={{ fontWeight: 600, fontSize: 13 }}>
+              {s.step}
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5 }}>{s.what}</div>
+              <div style={{ color: 'var(--ink-2)', fontSize: 13, lineHeight: 1.6 }}>
+                {s.guarantee}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <DocsH2 id="weights">How revenue is weighted</DocsH2>
+      <DocsP>
+        A counterparty&rsquo;s revenue is not worth its face value. Three reasons zero it outright —
+        the revenue is not independent demand in any amount — and the rest multiply, truncating down
+        at each step in a fixed order, so the result never depends on evaluation order and never
+        rounds in the agent&rsquo;s favour.
+      </DocsP>
+      <div className="grid2" style={{ display: 'grid', gap: 16, marginBottom: 40 }}>
+        <Card style={{ overflow: 'hidden' }}>
+          <CardHead title="Blocking · weight becomes zero" />
+          <table className="tbl">
+            <tbody>
+              {WEIGHT_ALGEBRA.blocking.map((r) => (
+                <tr key={r.reason}>
+                  <td
+                    className="t-mono"
+                    style={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--debit)' }}
+                  >
+                    {r.reason}
+                  </td>
+                  <td
+                    style={{
+                      color: 'var(--ink-2)',
+                      lineHeight: 1.6,
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    {r.detail}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+        <Card style={{ overflow: 'hidden' }}>
+          <CardHead title="Discounting · these multiply" />
+          <table className="tbl">
+            <tbody>
+              {WEIGHT_ALGEBRA.discounts.map((r) => (
+                <tr key={r.reason}>
+                  <td className="t-mono" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {r.reason}
+                  </td>
+                  <td className="n" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {r.multiplier}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      <DocsH2 id="identity">HCS-14 identity</DocsH2>
+      <DocsP>
+        The agent is addressable as a UAID, not only as an account number — and the identifier is
+        derived from what the agent <em>is</em>, so two parties computing it from the same facts get
+        the same string and nobody has to be trusted to issue it.
+      </DocsP>
+      <div style={{ marginBottom: 16 }}>
+        <CodeBlock
+          lang="text · derivation"
+          code={
+            HCS14_DERIVATION.fields.join(' · ') +
+            '\n\n' +
+            HCS14_DERIVATION.steps.map((s, i) => `${i + 1}. ${s}`).join('\n') +
+            '\n\n' +
+            HCS14_DERIVATION.live
+          }
+        />
+      </div>
+      <DocsP>{HCS14_DERIVATION.note}</DocsP>
+
       <DocsH2 id="build">Build on Tab</DocsH2>
       <DocsP>
         Four surfaces over one gateway, and deliberately the same ten verbs: <code>@tab/sdk</code>{' '}
@@ -291,8 +440,8 @@ export default function DocsPage() {
         Two of the ten act; the other eight only read what was published.
       </DocsP>
       <DocsP>
-        The packages are not on npm yet, so the SDK and MCP paths want the repo cloned. The HTTP API
-        needs nothing at all — which is why the quickstart above is curl.
+        Published on npm as <code>@0xdivyanshh/tab-*</code>. The HTTP API needs no install at all —
+        which is why the quickstart above is curl.
       </DocsP>
 
       <div style={{ display: 'grid', gap: 16, marginBottom: 56 }}>

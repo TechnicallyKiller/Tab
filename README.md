@@ -21,6 +21,101 @@ Built for ETHOnline 2026 · Hedera Testnet · **Zero Solidity**
 | splitting the work | [docs/BUILD_ORDER.md](docs/BUILD_ORDER.md) |
 | sitting down to work, any day | **[HANDOFF.md](HANDOFF.md)** — the living log. Read it first, update it before you push |
 
+## How it fits together
+
+Four processes, three HCS topics, and one rule: nothing is stored that is not
+derived from a message a stranger can replay.
+
+```mermaid
+flowchart LR
+  agent["AI agent<br/><i>holds no key</i>"]
+  gw["gateway<br/><i>signs on its behalf</i>"]
+  seller["x402 seller<br/><i>never learns Tab exists</i>"]
+  payer["paying customer"]
+
+  subgraph hcs["Hedera Consensus Service"]
+    receipts[("receipts")]
+    ceilings[("ceilings")]
+    settlements[("settlements")]
+  end
+
+  engine["engine<br/><i>scores the ledger</i>"]
+  settle["settlement worker<br/><i>nets each window</i>"]
+
+  agent -->|"POST /v1/spend"| gw
+  gw -->|"x402 payment"| seller
+  payer -->|"x402 payment"| gw
+  gw -->|"hold · debit · credit · refused"| receipts
+  receipts --> engine
+  engine -->|"ceiling · weight · fact · register"| ceilings
+  ceilings --> gw
+  receipts --> settle
+  settle -->|"settlement · repair"| settlements
+
+  classDef topic fill:#1d6b4c22,stroke:#1d6b4c;
+  class receipts,ceilings,settlements topic;
+```
+
+### A spend, in order
+
+The hold is published and **awaited to consensus before the seller is called**.
+That costs 2–4 seconds and buys the one property a stranger cannot otherwise
+check: every debit traces to an authorisation that preceded it.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as agent
+  participant G as gateway
+  participant H as HCS receipts
+  participant S as seller
+
+  A->>G: spend(tab, url)
+  G->>G: check cheapest rule first
+  alt refused
+    G-->>H: refused (rule, evidence)
+    G-->>A: 200 { refused } — not an error
+  else allowed
+    G->>S: GET url (unpaid)
+    S-->>G: 402 + payment requirements
+    G->>H: hold (amount, expiry)
+    H-->>G: consensus
+    Note over G,H: fails CLOSED — a failed hold never calls the seller
+    G->>S: x402 payment (hold id as idempotency key)
+    S-->>G: 200 + content
+    G->>H: debit (names its hold, carries the tx)
+    G-->>A: 200 { paid, receiptSeq }
+  end
+```
+
+### Where a credit limit comes from
+
+The ceiling is never typed. It is computed from settled revenue, discounted by
+how independent that revenue is, and published with a hash of its own inputs so
+anyone can recompute it.
+
+```mermaid
+flowchart TD
+  r[("receipts topic<br/>credits · debits · refusals")]
+  w["weigh each counterparty<br/><i>discounts multiply, truncate down</i>"]
+  rev["attested revenue per window<br/><i>trailing N windows</i>"]
+  tier["tier<br/><i>needs revenue AND diversity AND history</i>"]
+  ramp["ramp<br/><i>+15% per clean settlement, −30% per miss</i>"]
+  c["ceiling = revenue × tier multiple × ramp"]
+  floor{"below the<br/>starter floor?"}
+  out[("ceilings topic<br/>+ hash of the inputs")]
+
+  r --> w --> rev --> tier --> c
+  ramp --> c
+  c --> floor
+  floor -->|yes| sf["starter floor holds<br/><i>so a new agent can trade at all</i>"] --> out
+  floor -->|no| grow{"growing?"}
+  grow -->|"shrink"| now["applied immediately<br/><i>a shrink is a safety action</i>"] --> out
+  grow -->|"grow"| held["HELD until a clean settlement<br/><i>rising has to be earned</i>"] --> out
+```
+
+---
+
 ## Layout
 
 ```

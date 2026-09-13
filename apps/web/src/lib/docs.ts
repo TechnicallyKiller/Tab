@@ -14,7 +14,13 @@
  */
 
 import { params } from '@tab/params'
-import { isRetryable, REFUSAL_CODES, REFUSAL_GUIDANCE } from '@tab/protocol'
+import {
+  BLOCKING_REASONS,
+  isRetryable,
+  REFUSAL_CODES,
+  REFUSAL_GUIDANCE,
+  WEIGHT_REASON_DETAIL,
+} from '@tab/protocol'
 
 /*
  * Straight from the frozen set, which stores them as decimal strings already.
@@ -197,9 +203,11 @@ export const RECEIPT_SCHEMA = `{
  * `@tab/sdk` defines the interface and the MCP server, the Agent Kit plugin and
  * the CLI all bind to it, which is what stops them drifting apart.
  *
- * Honest about installation: these packages are not on npm yet, so the SDK and
- * MCP paths need the repo cloned. The HTTP API needs nothing at all, which is
- * why the quickstart above leads with curl.
+ * Published to npm under `@0xdivyanshh/tab-*` rather than `@tab/*`: the `tab`
+ * org belongs to someone else, so the packages are renamed at publish time by
+ * tools/deploy/publish-npm.mjs and the workspace keeps its own names. The HTTP
+ * API still needs no install at all, which is why the quickstart leads with
+ * curl.
  */
 export const BUILD_ON_TAB = [
   {
@@ -214,11 +222,8 @@ export const BUILD_ON_TAB = [
     code: `{
   "mcpServers": {
     "tab": {
-      "command": "node",
-      "args": [
-        "--experimental-strip-types",
-        "/path/to/tab/packages/mcp/src/stdio.ts"
-      ],
+      "command": "npx",
+      "args": ["-y", "@0xdivyanshh/tab-mcp"],
       "env": {
         "TAB_GATEWAY_URL": "https://tab-gateway.onrender.com",
         "TAB_ACCOUNT_ID": "0.0.10390398"
@@ -235,7 +240,8 @@ export const BUILD_ON_TAB = [
       'recomputing it: the package cannot import the scoring or graph code, so it is ' +
       'structurally incapable of offering a second opinion about a ceiling.',
     lang: 'typescript',
-    code: `import { createTab } from '@tab/sdk'
+    code: `// npm i @0xdivyanshh/tab-sdk
+import { createTab } from '@0xdivyanshh/tab-sdk'
 
 const tab = createTab({ baseUrl: 'https://tab-gateway.onrender.com' })
 
@@ -314,6 +320,15 @@ export const SIDEBAR = [
     ],
   },
   {
+    group: 'Protocol',
+    items: [
+      { label: 'The ten messages', href: '#messages', active: true },
+      { label: 'The write-ahead order', href: '#write-ahead' },
+      { label: 'How revenue is weighted', href: '#weights' },
+      { label: 'HCS-14 identity', href: '#identity' },
+    ],
+  },
+  {
     group: 'Reference',
     items: [
       { label: 'POST /v1/spend', href: '#spend', active: true },
@@ -333,6 +348,10 @@ export const OUTLINE = [
   { label: 'The ceiling formula', href: '#ceiling-formula', indent: 0 },
   { label: 'HCS receipt message', href: '#schema', indent: 0 },
   { label: 'Spend, as a sequence', href: '#sequence', indent: 0 },
+  { label: 'The ten messages', href: '#messages', indent: 0 },
+  { label: 'The write-ahead order', href: '#write-ahead', indent: 0 },
+  { label: 'How revenue is weighted', href: '#weights', indent: 0 },
+  { label: 'HCS-14 identity', href: '#identity', indent: 0 },
   { label: 'Build on Tab', href: '#build', indent: 0 },
   { label: 'MCP server', href: '#build-mcp', indent: 1 },
   { label: 'TypeScript SDK', href: '#build-sdk', indent: 1 },
@@ -347,6 +366,10 @@ export const SEARCH_INDEX = [
   { section: 'Build on Tab', title: 'TypeScript SDK — createTab and spend', href: '#build-sdk' },
   { section: 'Build on Tab', title: 'CLI — a refusal exits zero', href: '#build-cli' },
   { section: 'Build on Tab', title: 'Verify a published ceiling', href: '#build-verify' },
+  { section: 'Protocol', title: 'The ten HCS message types', href: '#messages' },
+  { section: 'Protocol', title: 'Write-ahead order · reserve, pay, commit', href: '#write-ahead' },
+  { section: 'Protocol', title: 'Counterparty weighting and blocking reasons', href: '#weights' },
+  { section: 'Protocol', title: 'HCS-14 identity · UAID derivation', href: '#identity' },
   { section: 'Reference', title: 'POST /v1/spend', href: '#spend' },
   { section: 'Reference', title: 'Refusal codes', href: '#refusal-codes' },
   { section: 'Reference', title: 'Refusal code · PER_CALL_CAP', href: '#code-per-call-cap' },
@@ -354,3 +377,193 @@ export const SEARCH_INDEX = [
   { section: 'Reference', title: 'HCS receipt message schema', href: '#schema' },
   { section: 'Reference', title: 'The ceiling formula, term by term', href: '#ceiling-formula' },
 ]
+
+/**
+ * The ten messages, and which process writes each.
+ *
+ * The whole protocol is these. Everything the console shows, everything
+ * `verify-tab` checks and everything a stranger can replay is one of them —
+ * there is no private side-channel and no database row that is not derived
+ * from a message on one of the three topics.
+ *
+ * Field names are the wire names, kept short because HCS charges by the byte
+ * and a receipt that needs chunking is a receipt that can arrive in pieces.
+ */
+export const PROTOCOL_MESSAGES = [
+  {
+    t: 'hold',
+    by: 'gateway',
+    topic: 'receipts',
+    fields: 'hold · cp · amt · exp · req',
+    when: 'Credit is reserved, BEFORE the seller is called. Awaited to consensus.',
+  },
+  {
+    t: 'debit',
+    by: 'gateway',
+    topic: 'receipts',
+    fields: 'cp · amt · hold · req · tx',
+    when: 'The seller was paid. Carries the hold it commits and the settlement tx.',
+  },
+  {
+    t: 'credit',
+    by: 'gateway',
+    topic: 'receipts',
+    fields: 'cp · amt · att · req · tx',
+    when: 'The agent earned. `att` records whether the gateway served what was paid for.',
+  },
+  {
+    t: 'refused',
+    by: 'gateway',
+    topic: 'receipts',
+    fields: 'cp · amt · rule · ev',
+    when: 'A spend was refused. Published, not logged — the rule and its evidence.',
+  },
+  {
+    t: 'repair',
+    by: 'settlement',
+    topic: 'receipts',
+    fields: 'cp · amt · tx · why',
+    when: 'A correcting entry. Append-only means a mistake is fixed forward, never erased.',
+  },
+  {
+    t: 'weight',
+    by: 'engine',
+    topic: 'ceilings',
+    fields: 'cp · bp · why · block · rev · share · model',
+    when: 'What one counterparty’s revenue is worth, and every reason applied.',
+  },
+  {
+    t: 'fact',
+    by: 'engine',
+    topic: 'ceilings',
+    fields: 'acct · born · by',
+    when: 'Who created an account and when. Observed once, remembered permanently.',
+  },
+  {
+    t: 'ceiling',
+    by: 'engine',
+    topic: 'ceilings',
+    fields: 'ceil · computed · bind · inputs · model · hash · cause',
+    when: 'The limit, its inputs, and a hash of them. `computed` differs from `ceil` when growth is held.',
+  },
+  {
+    t: 'settlement',
+    by: 'settlement',
+    topic: 'settlements',
+    fields:
+      'credits · debits · interest · net · n · tx · outcome · rampFrom · rampTo · outstanding',
+    when: 'A window closed. One transfer for the net of everything in it.',
+  },
+  {
+    t: 'register',
+    by: 'engine',
+    topic: 'ceilings',
+    fields: 'root · ceil · perCall · allowlist · uaid',
+    when: 'A funding root claimed, once, permanently. First claim wins.',
+  },
+] as const
+
+/**
+ * How a counterparty's revenue is discounted.
+ *
+ * The reasons MULTIPLY and truncate down at each step, in a fixed order, so
+ * the result does not depend on evaluation order and never rounds in the
+ * agent's favour. Three of them do not discount at all — they zero the
+ * counterparty, because the revenue is not independent demand in any amount.
+ */
+export const WEIGHT_ALGEBRA = {
+  blocking: BLOCKING_REASONS.map((r) => ({ reason: r, detail: WEIGHT_REASON_DETAIL[r] })),
+  discounts: (
+    [
+      ['SHARED_FUNDING_ROOT', params.weights?.sharedRootBp],
+      ['YOUNG_ACCOUNT', params.weights?.youngBp],
+      ['CONCENTRATED', params.weights?.concentratedBp],
+      ['RECIPROCAL_FLOW', params.weights?.reciprocalBp],
+      ['UNVERIFIED_FUNDING', params.weights?.unverifiedBp],
+      ['UNATTESTED', params.unattestedDiscountBp],
+    ] as [string, number | undefined][]
+  ).flatMap(([reason, bp]) =>
+    // `weights` is the schema's one optional field, so a set that predates it
+    // simply has fewer rows here rather than rendering a multiplier of NaN.
+    bp === undefined
+      ? []
+      : [
+          {
+            reason,
+            // allow-float — display only; input is an integer bp, nothing reads this back.
+            multiplier: `×${(bp / 10_000).toFixed(2)}`,
+            detail: WEIGHT_REASON_DETAIL[reason as keyof typeof WEIGHT_REASON_DETAIL] ?? '',
+          },
+        ],
+  ),
+}
+
+/**
+ * The write-ahead order, and what each step guarantees.
+ *
+ * `reserve -> pay -> commit` is the safety property the whole rail rests on.
+ * The hold is published and AWAITED to consensus before the seller is called,
+ * which costs 2–4 seconds and buys the one thing a stranger cannot otherwise
+ * check: that every debit was authorised before the money moved. Publishing it
+ * after the payment, or not awaiting it, puts the two messages on the topic in
+ * an order that proves nothing.
+ */
+export const SPEND_ORDER = [
+  {
+    step: 'check',
+    what: 'Cheapest rule first, against cached state',
+    guarantee:
+      'A refusal costs no chain write on the decision path and never calls the seller. Published ' +
+      'afterwards so the refusal is auditable too.',
+  },
+  {
+    step: 'reserve',
+    what: 'hold published to the receipts topic, awaited to consensus',
+    guarantee:
+      'Headroom is committed before anything is spent. A failed hold FAILS CLOSED — the seller is ' +
+      'never called.',
+  },
+  {
+    step: 'pay',
+    what: 'x402 settlement to the seller, hold id as the idempotency key',
+    guarantee:
+      'A retry with the same hold cannot pay twice. The seller sees an ordinary x402 customer and ' +
+      'never learns Tab exists.',
+  },
+  {
+    step: 'commit',
+    what: 'debit published, carrying the hold it closes and the settlement tx',
+    guarantee:
+      'The debit names its hold, so `verify-tab` can assert `debit_within_hold` — every debit ' +
+      'traces to an authorisation that preceded it.',
+  },
+  {
+    step: 'expire',
+    what: 'An uncommitted hold lapses on its own at `exp`',
+    guarantee:
+      'A crash between pay and commit strands nothing permanently. Releasing early instead would ' +
+      'let the agent spend the same headroom twice.',
+  },
+] as const
+
+/**
+ * HCS-14 identity, derived rather than assigned.
+ *
+ * The agent is addressable as a UAID instead of only an account number, and
+ * the identifier is a function of what the agent IS — so two parties deriving
+ * it from the same facts get the same string, and nobody has to be trusted to
+ * issue it.
+ */
+export const HCS14_DERIVATION = {
+  fields: ['name', 'nativeId', 'protocol', 'registry', 'skills', 'version'],
+  steps: [
+    'Six fields, canonicalised — keys sorted, skills sorted numerically.',
+    'SHA-384 over the canonical bytes.',
+    'Base58 of the digest. That is the AID.',
+    'uaid:aid:{base58};uid=…,registry=…,proto=…,nativeId=…',
+  ],
+  note:
+    'Parameters are emitted in the documented order and an absent one is omitted rather than ' +
+    'left empty — a trailing `nativeId=` would be a claim about an identifier nobody has.',
+  live: 'uaid:aid:4ArPMKdhwEoLXJo7UaxCMD3H4PKKKrDRc4CTAQba4uZqzVDBM6Z4MqDhp1DqrEBwnV',
+} as const
